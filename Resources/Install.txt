@@ -1,0 +1,26 @@
+Vorsmate — 安装 / Installation
+
+macOS 14 或更新版本。通用程序，包含 Apple Silicon 与 Intel 两种架构。
+将 Vorsmate 拖入 Applications，然后从“应用程序”文件夹打开。
+
+当前预览版尚未经过 Apple 公证。若 macOS 阻止首次启动，请先核对下载来源，
+再到“系统设置 → 隐私与安全性 → 仍要打开”确认。
+不要关闭 Gatekeeper 或系统完整性保护。
+
+风扇调速需要从应用中启用助手，并完成 macOS 管理员授权。
+增强散热仅对已核验的 Mac16,10 开启；其他型号保持系统调速。
+更新已启用助手的版本前，请阅读仓库的风扇更新说明。
+
+Requires macOS 14 or later. Universal app for Apple Silicon and Intel.
+Drag Vorsmate into Applications, then open it from that folder.
+
+This preview has not been notarized by Apple. If macOS blocks the first launch,
+verify the download source, then use System Settings > Privacy & Security > Open Anyway.
+Do not disable Gatekeeper or System Integrity Protection.
+
+Fan control requires enabling the helper in the app and completing macOS authorization.
+Enhanced cooling is enabled only for the validated Mac16,10 model. Other models
+retain system cooling. Read the fan update instructions before replacing an enabled helper.
+
+Downloads / 下载: https://github.com/0xTotoroX/vorsmate/releases
+Fan updates / 风扇更新: https://github.com/0xTotoroX/vorsmate/blob/main/docs/fan-control.md

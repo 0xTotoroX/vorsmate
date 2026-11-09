@@ -1,0 +1,14 @@
+.build/
+.swiftpm/
+dist/
+.DS_Store
+*.xcuserstate
+xcuserdata/
+artifacts/
+Resources/AppIcon.iconset/
+.env
+.env.*
+*.p12
+*.p8
+*.mobileprovision
+*.provisionprofile

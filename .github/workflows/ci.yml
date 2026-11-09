@@ -1,0 +1,44 @@
+# [INPUT]: Swift 源码、测试、格式配置与本地打包脚本。
+# [OUTPUT]: macOS 构建与测试结果，不上传可分发应用或签名凭据。
+# [POS]: pull request / main 的只读验证入口。
+# [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: macos-26
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          xcrun swift --version
+      - name: Swift format
+        run: xcrun swift-format lint --strict --recursive --configuration .swift-format Package.swift Sources Tests scripts/make-icon.swift
+      - name: Tests
+        run: swift test
+      - name: Build universal app and helper
+        run: bash scripts/build.sh --universal
+      - name: Packaged licenses
+        run: |
+          cmp LICENSE dist/Vorsmate.app/Contents/Resources/License/LICENSE
+          cmp THIRD_PARTY_NOTICES.md dist/Vorsmate.app/Contents/Resources/License/THIRD_PARTY_NOTICES.md
+          cmp LICENSES/macos-fan-control-MIT.txt dist/Vorsmate.app/Contents/Resources/License/LICENSES/macos-fan-control-MIT.txt
+      - name: Package disk image
+        run: bash scripts/package.sh
