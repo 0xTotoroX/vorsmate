@@ -42,6 +42,47 @@ private final class FakeDriver: SourceDriver {
 @Suite("运行时控制")
 @MainActor
 struct ControllerTests {
+    @Test("接收器仍在线时依据发射器连接切换和回退，静音不增加切换")
+    func wirelessReadiness() {
+        let driver = FakeDriver()
+        driver.snapshot.availability["a"] = .waitingForTransmitter
+        var time: TimeInterval = 0
+        let controller = ChannelController(
+            channel: .audioInput, driver: driver, policy: driver.automatic, clock: { time })
+        defer { controller.stop() }
+        controller.start()
+        #expect(driver.selections.isEmpty)
+        driver.snapshot.availability["a"] = .ready
+        time = 2
+        controller.refresh()
+        controller.refresh()
+        #expect(driver.snapshot.selectedID == "a")
+        for _ in 0..<10 {
+            time += 1
+            controller.refresh()
+        }
+        #expect(driver.selections == ["a"])
+        driver.snapshot.availability["a"] = .waitingForTransmitter
+        controller.refresh()
+        controller.refresh()
+        #expect(driver.snapshot.selectedID == "b")
+        #expect(!controller.recovering)
+        // 未就绪设备仍可选择锁定；先用备用，连接后恢复原锁定。
+        controller.select("a")
+        #expect(controller.policy.lockedID == "a")
+        #expect(controller.waitingName == "A")
+        time += 2
+        driver.snapshot.availability["a"] = .ready
+        controller.refresh()
+        controller.refresh()
+        #expect(driver.snapshot.selectedID == "a")
+        #expect(controller.waitingName == nil)
+        #expect(driver.selections == ["a", "b", "a"])
+        controller.select("b")
+        controller.refresh()
+        #expect(driver.snapshot.selectedID == "b")
+        #expect(controller.policy.lockedID == "b")
+    }
     @Test("写入后回读真实结果，不重复切换")
     func readback() {
         let driver = FakeDriver()

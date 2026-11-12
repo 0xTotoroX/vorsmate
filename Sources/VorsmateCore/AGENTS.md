@@ -2,7 +2,8 @@
 
 > L2 | 父级: ../AGENTS.md
 
-- SelectionPolicy.swift：Channel、Source、Snapshot、SelectionPolicy；稳定身份、独立排序、锁定与离线回退。
+- SelectionPolicy.swift：Channel、Source、Snapshot、SelectionPolicy；运行时就绪状态独立于持久优先级，锁定与未就绪回退。
+- ReceiverStatus.swift：无线连接状态帧的流式校验、版本与记录识别、连接 / 断连确认和过期；不读取音量判断就绪。
 - Preferences.swift：Preferences 与 PreferencesStore；配置版本检查、保存前核对会话预期值、JSON 原子保存。
 - SwitchBudget.swift：切换间隔与竞争次数上限；由外部单调时钟驱动。
 - FanPolicy.swift：模式、读数、控制配置、温度与硬件范围校验；旧阈值仍作线性配置读取，保留字段和模式编码。

@@ -1,6 +1,6 @@
 import CAudioListeners
-// [INPUT]: CoreAudio HAL、CAudioListeners 原生监听句柄和稳定设备 UID。
-// [OUTPUT]: 输入或输出设备枚举、默认设备切换与变化通知。
+// [INPUT]: CoreAudio HAL、原生监听、ReceiverMonitor 与稳定设备 UID。
+// [OUTPUT]: 在线设备、无线麦就绪状态、默认设备切换与变化通知。
 // [POS]: SourceDriver 的音频实现；不打开音频流，不录音。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import CoreAudio
@@ -13,6 +13,8 @@ public final class AudioDeviceDriver: SourceDriver {
     private var listeners: [VMAudioListenerRef] = []
     private var generation = 0
     private var removalError: OSStatus = noErr
+    private var receiverMonitor: ReceiverMonitor?
+    private var receiverStates: [String: SourceAvailability] = [:]
     private let system = AudioObjectID(kAudioObjectSystemObject)
     public init(input: Bool) { self.input = input }
     private var scope: AudioObjectPropertyScope {
@@ -69,7 +71,13 @@ public final class AudioDeviceDriver: SourceDriver {
         }
     }
     public func read() throws -> Snapshot {
-        try Self.readSnapshot(devices: devices, selectedDevice: { try number(system, defaultSelector) })
+        var snapshot = try Self.readSnapshot(devices: devices, selectedDevice: { try number(system, defaultSelector) })
+        if input {
+            for source in snapshot.sources {
+                snapshot.availability[source.id] = ReceiverMonitor.availability(for: source.id, states: receiverStates)
+            }
+        }
+        return snapshot
     }
     static func readSnapshot(
         devices: () throws -> [(AudioDeviceID, Source)],
@@ -111,6 +119,17 @@ public final class AudioDeviceDriver: SourceDriver {
                 try check(status, "监听音频变化")
                 if let handle { listeners.append(handle) }
             }
+            if input {
+                let monitor = ReceiverMonitor { [weak self] states in
+                    Task { @MainActor in
+                        guard let self, self.generation == currentGeneration else { return }
+                        self.receiverStates = states
+                        onChange()
+                    }
+                }
+                receiverMonitor = monitor
+                monitor.start()
+            }
         } catch {
             stop()
             throw error
@@ -118,6 +137,9 @@ public final class AudioDeviceDriver: SourceDriver {
     }
     public func stop() {
         generation &+= 1
+        receiverMonitor?.stop()
+        receiverMonitor = nil
+        receiverStates = [:]
         removalError = noErr
         listeners = listeners.filter { handle in
             let status = VMUnregisterAudioListener(handle)
