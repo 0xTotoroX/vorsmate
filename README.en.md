@@ -26,9 +26,9 @@ Built with SwiftUI and AppKit, with native Liquid Glass on macOS 26+. No account
 
 Requires **macOS 14 or later**. The universal app includes Apple Silicon and Intel architectures.
 
-1. Download `Vorsmate-0.1.0-universal.dmg` from [GitHub Releases](https://github.com/0xTotoroX/vorsmate/releases).
+1. Download `Vorsmate-0.1.1-universal.dmg` from [GitHub Releases](https://github.com/0xTotoroX/vorsmate/releases).
 2. Open the disk image and drag **Vorsmate** into **Applications**.
-3. Launch it from Applications and click the sliders icon in the menu bar.
+3. Launch it from Applications and click the **V** icon in the menu bar.
 
 **This is a preview release, signed with an Apple development certificate and not notarized.** If macOS blocks the first launch, verify the download source, then use **System Settings → Privacy & Security → Open Anyway**. See [Apple’s instructions](https://support.apple.com/en-us/102445). Do not disable Gatekeeper or System Integrity Protection. A SHA-256 checksum file is included with the download.
 
@@ -39,6 +39,8 @@ Fan control requires enabling the helper in the app and completing macOS authori
 Click a feature row to expand its controls. The panel otherwise shows only the current state.
 
 Input sources and audio channels each offer **Off**, **Automatic**, and **Locked** modes. Clicking a device selects and locks it. Use the priority controls to reorder preferences. Management is off on first launch; enable it where needed. Audio apps with their own device selection should use the system default. Input source locking does not control an input method’s internal language mode.
+
+After a temporary switching failure, Vorsmate waits and rechecks automatically. Your lock or priority rules resume once the state recovers; a warning appears only if the problem persists.
 
 Fans default to system control. Enhanced cooling responds to sustained heat, slows gradually as temperatures drop, and returns control to macOS. Fixed mode maintains a chosen speed. Manual fan modes are not restored after restarting the app.
 
