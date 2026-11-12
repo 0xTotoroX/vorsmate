@@ -1,9 +1,10 @@
 // [INPUT]: SourceDriver、SelectionPolicy、SwitchBudget 与配置保存回调。
-// [OUTPUT]: 可观察的当前状态、手动锁定、自动优先级、暂停与有界系统切换。
-// [POS]: 单个管理通道的运行时；主线程串行处理，无通知时也有界回读和重试。
+// [OUTPUT]: 可观察的当前状态、手动锁定、自动优先级、冷却复查与持续异常反馈。
+// [POS]: 单个管理通道的运行时；主线程串行处理，切换异常退避重试，回读正常后自动恢复。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import Combine
 import Foundation
+import OSLog
 import VorsmateCore
 
 @MainActor
@@ -14,6 +15,7 @@ public final class ChannelController: ObservableObject, Identifiable {
     @Published public private(set) var snapshot = Snapshot()
     @Published public private(set) var error: String?
     @Published public private(set) var suspended = false
+    @Published public private(set) var recovering = false
     @Published public private(set) var pending = false
     private let driver: any SourceDriver
     private let persist: (SelectionPolicy) throws -> Void
@@ -26,6 +28,25 @@ public final class ChannelController: ObservableObject, Identifiable {
     private var observationGeneration = 0
     private var pendingPolicy: SelectionPolicy?
     private var persistenceError: String?
+    private let logger = Logger(subsystem: "app.vorsmate.mac", category: "Selection")
+    private var recovery: Recovery?
+
+    private struct Recovery {
+        static let warningDelay: TimeInterval = 30
+        let beganAt: TimeInterval
+        var retryAt: TimeInterval
+        private var delay: TimeInterval = 5
+
+        init(at time: TimeInterval) {
+            beganAt = time
+            retryAt = time + delay
+        }
+
+        mutating func deferAttempt(from time: TimeInterval) {
+            delay = min(delay * 2, 30)
+            retryAt = time + delay
+        }
+    }
 
     public init(
         channel: Channel, driver: any SourceDriver, policy: SelectionPolicy = .init(),
@@ -55,8 +76,7 @@ public final class ChannelController: ObservableObject, Identifiable {
         timer = nil
         debounceTask?.cancel()
         debounceTask = nil
-        verificationTask?.cancel()
-        verificationTask = nil
+        clearRecovery()
         pending = false
         driver.stop()
         watching = false
@@ -109,6 +129,7 @@ public final class ChannelController: ObservableObject, Identifiable {
         }
         budget = SwitchBudget()
         suspended = false
+        clearRecovery()
         error = nil
         updateWatching()
         refresh()
@@ -129,6 +150,7 @@ public final class ChannelController: ObservableObject, Identifiable {
             policy = next
             budget = SwitchBudget()
             suspended = false
+            clearRecovery()
             error = nil
             updateWatching()
             refresh()
@@ -176,55 +198,117 @@ public final class ChannelController: ObservableObject, Identifiable {
 
     private func scheduleVerification(after delay: Duration) {
         verificationTask?.cancel()
+        let generation = observationGeneration
         verificationTask = Task { [weak self] in
             do { try await Task.sleep(for: delay) } catch { return }
-            self?.refresh()
+            guard let self, self.observationGeneration == generation else { return }
+            self.refresh()
         }
     }
 
-    public func refresh(readOnly: Bool = false) {
+    private func clearRecovery() {
+        recovery = nil
+        recovering = false
+        verificationTask?.cancel()
+        verificationTask = nil
+    }
+
+    private func updateRecoveryMessage(at time: TimeInterval) {
+        if let persistenceError {
+            error = persistenceError
+        } else if let recovery, time - recovery.beganAt >= Recovery.warningDelay {
+            error = "\(channel.title)管理持续异常，正在自动重试。"
+        } else {
+            error = nil
+        }
+    }
+
+    private func waitForRecovery(at time: TimeInterval) {
+        if recovery == nil {
+            recovery = Recovery(at: time)
+            logger.notice("\(self.channel.rawValue, privacy: .public): cooling down before retrying")
+        }
+        recovering = true
+        pending = false
+        updateRecoveryMessage(at: time)
+        if let recovery {
+            scheduleVerification(after: .seconds(max(0, recovery.retryAt - time)))
+        }
+    }
+
+    private func selectTarget(_ target: String) {
+        pending = true
         do {
-            let actual = try driver.read()
-            if actual != snapshot { snapshot = actual }
-            if readOnly { return }
+            try driver.select(target)
+        } catch {
+            pending = false
+            logger.error("\(self.channel.rawValue, privacy: .public): selection failed: \(error.localizedDescription)")
+        }
+        updateRecoveryMessage(at: clock())
+        // 写入返回成功不等于已生效；无通知也回读，恢复期间每轮只尝试一次。
+        scheduleVerification(after: .milliseconds(300))
+    }
+
+    public func refresh(readOnly: Bool = false) {
+        let actual: Snapshot
+        do {
+            actual = try driver.read()
+        } catch {
+            pending = false
+            if readOnly || !policy.enabled || suspended {
+                self.error = persistenceError ?? error.localizedDescription
+            } else {
+                logger.error("\(self.channel.rawValue, privacy: .public): read failed: \(error.localizedDescription)")
+                let time = clock()
+                if var recovery, time >= recovery.retryAt {
+                    recovery.deferAttempt(from: time)
+                    self.recovery = recovery
+                }
+                waitForRecovery(at: time)
+            }
+            return
+        }
+        if actual != snapshot { snapshot = actual }
+        if readOnly { return }
+        do {
             var discovered = policy
             discovered.discover(actual)
             if discovered != policy {
                 try persist(discovered)
                 policy = discovered
             }
-            guard !suspended, let target = policy.target(in: actual) else {
-                verificationTask?.cancel()
-                verificationTask = nil
-                if !suspended { error = persistenceError }
-                pending = false
-                return
-            }
-            guard target != actual.selectedID else {
-                verificationTask?.cancel()
-                verificationTask = nil
-                pending = false
-                error = persistenceError
-                return
-            }
-            switch budget.request(at: clock()) {
-            case .wait:
-                // 回读可能早于限频窗口；主动续约，不能依赖下一次设备通知或三秒轮询。
-                scheduleVerification(after: .milliseconds(800))
-            case .suspend:
-                suspended = true
-                pending = false
-                error = "多次切换仍未生效，已暂停。请检查设备或其他管理工具后重试。"
-                stop()
-            case .allow:
-                pending = true
-                // 写入成功并不等于生效；失败也有界重试，界面始终展示回读的真实选择。
-                defer { scheduleVerification(after: .milliseconds(300)) }
-                try driver.select(target)
-            }
         } catch {
             pending = false
             self.error = persistenceError ?? error.localizedDescription
+            return
+        }
+        guard !suspended else { return }
+        guard let target = policy.target(in: actual), target != actual.selectedID else {
+            clearRecovery()
+            pending = false
+            error = persistenceError
+            return
+        }
+        let time = clock()
+        if var recovery {
+            guard time >= recovery.retryAt else {
+                waitForRecovery(at: time)
+                return
+            }
+            recovery.deferAttempt(from: time)
+            self.recovery = recovery
+            selectTarget(target)
+            return
+        }
+        switch budget.request(at: time) {
+        case .wait:
+            // 回读可能早于限频窗口；主动续约，不依赖下一次通知或三秒轮询。
+            scheduleVerification(after: .milliseconds(800))
+        case .suspend:
+            // 只暂停写入；继续监听和回读，当前选择正常后即可恢复原策略。
+            waitForRecovery(at: time)
+        case .allow:
+            selectTarget(target)
         }
     }
 }

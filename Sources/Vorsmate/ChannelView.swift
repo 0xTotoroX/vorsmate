@@ -1,5 +1,5 @@
 // [INPUT]: ChannelController、单项展开绑定与主线程内的 SwiftUI 模式提交。
-// [OUTPUT]: 输入法 / 音频选择、模式切换、优先级排序及离线 / 错误反馈。
+// [OUTPUT]: 输入法 / 音频选择、模式切换、优先级排序及恢复中 / 离线 / 错误反馈。
 // [POS]: 三种选择通道复用的界面；由 PanelView 装配，不承担面板生命周期。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import SwiftUI
@@ -13,6 +13,7 @@ struct ChannelView: View {
 
     private var status: String {
         if controller.suspended { return "已暂停" }
+        if controller.recovering { return "恢复中" }
         switch controller.mode {
         case "auto": return "自动"
         case "locked": return controller.waitingName == nil ? "已锁定" : "等待接入"
@@ -31,7 +32,9 @@ struct ChannelView: View {
             } label: {
                 PanelSummaryRow(
                     title: controller.channel.title, symbol: controller.channel.symbol,
-                    status: status, statusSymbol: controller.mode == "locked" ? "lock.fill" : nil,
+                    status: status,
+                    statusSymbol: controller.mode == "locked" && !controller.recovering && !controller.suspended
+                        ? "lock.fill" : nil,
                     value: currentName, expanded: expanded, pending: controller.pending)
             }
             .buttonStyle(.plain)
