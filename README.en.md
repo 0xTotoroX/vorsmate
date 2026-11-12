@@ -16,7 +16,7 @@ Actual app screenshots using sample data. The app interface is currently in Simp
 ## Features
 
 - **Input sources** — Switch quickly, lock a preferred input source, or select automatically by priority.
-- **Audio devices** — Manage microphone and playback preferences independently. Fall back when a device disconnects and restore it when it returns.
+- **Audio devices** — Manage microphone and playback preferences independently. Fall back when a device disconnects and restore it when it returns. Supported wireless receivers become eligible only when a transmitter connects.
 - **Fan control** — System automatic, enhanced cooling, and fixed speed. Balanced and strong cooling use different response curves, with temperature smoothing and gradual cooldown.
 - **Time comparison** — View local and US Pacific time side by side. Convert dates and times with daylight saving handled for both locations.
 
@@ -26,7 +26,7 @@ Built with SwiftUI and AppKit, with native Liquid Glass on macOS 26+. No account
 
 Requires **macOS 14 or later**. The universal app includes Apple Silicon and Intel architectures.
 
-1. Download `Vorsmate-0.1.1-universal.dmg` from [GitHub Releases](https://github.com/0xTotoroX/vorsmate/releases).
+1. Download `Vorsmate-0.1.2-universal.dmg` from [GitHub Releases](https://github.com/0xTotoroX/vorsmate/releases).
 2. Open the disk image and drag **Vorsmate** into **Applications**.
 3. Launch it from Applications and click the **V** icon in the menu bar.
 
@@ -39,6 +39,8 @@ Fan control requires enabling the helper in the app and completing macOS authori
 Click a feature row to expand its controls. The panel otherwise shows only the current state.
 
 Input sources and audio channels each offer **Off**, **Automatic**, and **Locked** modes. Clicking a device selects and locks it. Use the priority controls to reorder preferences. Management is off on first launch; enable it where needed. Audio apps with their own device selection should use the system default. Input source locking does not control an input method’s internal language mode.
+
+For supported wireless microphones, availability follows the transmitter connection. A receiver alone does not take over the input; connecting a transmitter restores priority selection, and disconnecting all transmitters triggers fallback. Muting, input level, and pauses in speech do not trigger switching. Locks are preserved while a backup is used until the transmitter reconnects. See [supported devices and limitations](docs/wireless-microphones.md).
 
 After a temporary switching failure, Vorsmate waits and rechecks automatically. Your lock or priority rules resume once the state recovers; a warning appears only if the problem persists.
 
