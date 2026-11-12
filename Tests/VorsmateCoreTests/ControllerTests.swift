@@ -1,5 +1,5 @@
 // [INPUT]: ChannelController 与可控的内存 SourceDriver。
-// [OUTPUT]: 切换回读、重试、竞争、暂停、保存失败的运行时行为验证。
+// [OUTPUT]: 切换回读、冷却退避、自动恢复、持续异常及保存失败的运行时行为验证。
 // [POS]: 驱动边界测试，不打开真实音频或输入法控制。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import Foundation
@@ -107,28 +107,48 @@ struct ControllerTests {
         #expect(controller.snapshot.selectedID == "a")
         #expect(controller.waitingName == nil)
     }
-    @Test("其他工具持续抢占时暂停，用户可重试")
-    func conflict() {
+    @Test("短暂异常先冷却，回读正常后自动恢复锁定", arguments: Channel.allCases)
+    func conflict(channel: Channel) {
         let driver = FakeDriver()
         driver.ignoresSelection = true
         var time: TimeInterval = 0
+        var policy = driver.automatic
+        policy.lock("a")
         let controller = ChannelController(
-            channel: .audioInput, driver: driver, policy: driver.automatic, clock: { time })
+            channel: channel, driver: driver, policy: policy, clock: { time })
         defer { controller.stop() }
+        controller.start()
         for second in 0...4 {
             time = Double(second)
             controller.refresh()
         }
-        #expect(controller.suspended)
+        #expect(controller.recovering)
+        #expect(!controller.suspended)
+        #expect(controller.error == nil)
         #expect(driver.selections.count == 4)
+        #expect(driver.stops == 0)
         #expect(controller.snapshot.selectedID == "b")
+        time = 8
+        controller.refresh()
+        #expect(driver.selections.count == 4)
+        driver.snapshot.selectedID = "a"
+        controller.refresh()
+        #expect(!controller.recovering)
+        #expect(controller.error == nil)
+        #expect(controller.policy.lockedID == "a")
+        #expect(controller.mode == "locked")
+        #expect(driver.selections.count == 4)
+        // 恢复后仍执行原锁定，而不是只把提示隐藏。
         driver.ignoresSelection = false
-        controller.retry()
+        driver.snapshot.selectedID = "b"
+        time = 10
+        controller.refresh()
         controller.refresh()
         #expect(!controller.suspended)
+        #expect(driver.selections.count == 5)
         #expect(controller.snapshot.selectedID == "a")
     }
-    @Test("没有设备通知时，未生效或失败的写入仍会有界重试并暂停", arguments: [false, true])
+    @Test("没有设备通知也会冷却后复查并恢复，不需要手动重试", arguments: [false, true])
     func retriesWithoutNotifications(failsSelection: Bool) async throws {
         let driver = FakeDriver()
         driver.ignoresSelection = true
@@ -137,14 +157,142 @@ struct ControllerTests {
         defer { controller.stop() }
         controller.start()
         for _ in 0..<60 {
-            if controller.suspended { break }
+            if controller.recovering { break }
             try await Task.sleep(for: .milliseconds(100))
         }
-        #expect(controller.suspended)
+        #expect(controller.recovering)
+        #expect(!controller.suspended)
         #expect(driver.selections.count == 4)
         #expect(controller.snapshot.selectedID == "b")
         #expect(!controller.pending)
+        #expect(controller.error == nil)
+        driver.ignoresSelection = false
+        driver.failsSelection = false
+        // 不调用 refresh、不发送通知，真实定时任务必须自行完成恢复。
+        for _ in 0..<65 {
+            if !controller.recovering { break }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        #expect(!controller.recovering)
+        #expect(controller.snapshot.selectedID == "a")
+        #expect(controller.error == nil)
+        #expect(driver.selections.count == 5)
+    }
+    @Test("持续异常才提示，后续单次重试间隔封顶三十秒")
+    func persistentConflict() {
+        let driver = FakeDriver()
+        driver.ignoresSelection = true
+        var time: TimeInterval = 0
+        let controller = ChannelController(
+            channel: .inputSource, driver: driver, policy: driver.automatic, clock: { time })
+        defer { controller.stop() }
+        for second in 0...4 {
+            time = Double(second)
+            controller.refresh()
+        }
+        for (second, count) in [(8.9, 4), (9.0, 5), (18.9, 5), (19.0, 6), (33.9, 6)] {
+            time = second
+            controller.refresh()
+            #expect(driver.selections.count == count)
+            #expect(controller.error == nil)
+        }
+        time = 34
+        controller.refresh()
+        #expect(controller.error?.contains("自动重试") == true)
+        #expect(!controller.suspended)
+        for (second, count) in [(39.0, 7), (39.1, 7), (68.9, 7), (69.0, 8), (98.9, 8), (99.0, 9)] {
+            time = second
+            // 重复通知不能缩短冷却或多次写入。
+            for _ in 0..<5 { controller.refresh() }
+            #expect(driver.selections.count == count)
+        }
+        driver.snapshot.selectedID = "a"
+        controller.refresh()
+        #expect(!controller.recovering)
+        #expect(controller.error == nil)
+    }
+    @Test("冷却期间手动重试或改选立即生效", arguments: [false, true])
+    func manualRecovery(selectDifferent: Bool) {
+        let driver = FakeDriver()
+        driver.ignoresSelection = true
+        var time: TimeInterval = 0
+        let controller = ChannelController(
+            channel: .inputSource, driver: driver, policy: driver.automatic, clock: { time })
+        defer { controller.stop() }
+        for second in 0...4 {
+            time = Double(second)
+            controller.refresh()
+        }
+        driver.ignoresSelection = false
+        if selectDifferent { controller.select("b") } else { controller.retry() }
+        controller.refresh()
+        #expect(!controller.recovering)
+        #expect(controller.error == nil)
+        #expect(controller.snapshot.selectedID == (selectDifferent ? "b" : "a"))
+        #expect(driver.selections.count == (selectDifferent ? 4 : 5))
+    }
+    @Test("关闭管理或退出取消冷却，迟到通知和复查不会重新切换", arguments: [false, true])
+    func stopDuringRecovery(stopEntirely: Bool) async throws {
+        let driver = FakeDriver()
+        driver.ignoresSelection = true
+        var time: TimeInterval = 0
+        let controller = ChannelController(
+            channel: .inputSource, driver: driver, policy: driver.automatic, clock: { time })
+        defer { controller.stop() }
+        controller.start()
+        for second in 0...4 {
+            time = Double(second)
+            controller.refresh()
+        }
+        if stopEntirely { controller.stop() } else { controller.setMode("off") }
+        let reads = driver.reads
+        time = 40
+        driver.callbacks.first?()
+        try await Task.sleep(for: .milliseconds(5300))
+        #expect(!controller.recovering)
+        #expect(controller.error == nil)
+        #expect(driver.reads == reads)
+        #expect(driver.selections.count == 4)
+    }
+    @Test("切换成功后反复被切走仍受限频保护")
+    func successfulButRepeatedSwitches() {
+        let driver = FakeDriver()
+        var time: TimeInterval = 0
+        let controller = ChannelController(
+            channel: .inputSource, driver: driver, policy: driver.automatic, clock: { time })
+        defer { controller.stop() }
+        for second in 0...4 {
+            time = Double(second)
+            driver.snapshot.selectedID = "b"
+            controller.refresh()
+            controller.refresh()
+        }
+        #expect(driver.selections.count == 4)
+        #expect(controller.recovering)
+        #expect(controller.error == nil)
+    }
+    @Test("读取暂时失败不立即报警，持续失败才提示且可自动恢复")
+    func recoverReadFailureWhileManaging() {
+        let driver = FakeDriver()
+        driver.failsRead = true
+        var time: TimeInterval = 0
+        let controller = ChannelController(
+            channel: .inputSource, driver: driver, policy: driver.automatic, clock: { time })
+        defer { controller.stop() }
+        controller.start()
+        #expect(controller.recovering)
+        #expect(controller.error == nil)
+        time = 30
+        controller.refresh()
         #expect(controller.error != nil)
+        #expect(driver.selections.isEmpty)
+        driver.failsRead = false
+        driver.snapshot.selectedID = "a"
+        controller.refresh(readOnly: true)
+        #expect(controller.recovering)
+        controller.refresh()
+        #expect(!controller.recovering)
+        #expect(controller.error == nil)
     }
     @Test("保存失败不执行用户要求的系统切换")
     func persistenceFailure() {
@@ -160,7 +308,7 @@ struct ControllerTests {
         #expect(!controller.policy.enabled)
         #expect(controller.error != nil)
     }
-    @Test("驱动拒绝切换时显示错误并保留真实选择")
+    @Test("单次切换失败不立即报警，并保留真实选择")
     func selectionFailure() {
         let driver = FakeDriver()
         driver.failsSelection = true
@@ -168,7 +316,7 @@ struct ControllerTests {
         defer { controller.stop() }
         controller.refresh()
         #expect(controller.snapshot.selectedID == "b")
-        #expect(controller.error != nil)
+        #expect(controller.error == nil)
         #expect(!controller.pending)
     }
     @Test("监听失败明确暂停，避免假装继续管理")
