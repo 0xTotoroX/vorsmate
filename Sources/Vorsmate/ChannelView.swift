@@ -1,5 +1,5 @@
 // [INPUT]: ChannelController、单项展开绑定与主线程内的 SwiftUI 模式提交。
-// [OUTPUT]: 输入法 / 音频选择、模式切换、优先级排序及恢复中 / 离线 / 错误反馈。
+// [OUTPUT]: 选择、模式、优先级与恢复 / 离线 / 发射器就绪反馈。
 // [POS]: 三种选择通道复用的界面；由 PanelView 装配，不承担面板生命周期。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import SwiftUI
@@ -21,6 +21,12 @@ struct ChannelView: View {
         }
     }
     private var currentName: String { controller.snapshot.selected?.name ?? "暂无可用项目" }
+    private func waitingMessage(_ name: String) -> String {
+        guard let id = controller.policy.lockedID, let availability = controller.snapshot.availability[id] else {
+            return "等待 \(name) 接入"
+        }
+        return availability == .waitingForTransmitter ? "等待 \(name) 发射器连接" : "等待 \(name) 确认连接"
+    }
     private var availableSources: [Source] {
         controller.policy.priority.filter { source in controller.snapshot.sources.contains { $0.id == source.id } }
     }
@@ -53,7 +59,7 @@ struct ChannelView: View {
                     Button("重试") { controller.retry() }.buttonStyle(.link)
                 }.padding(.horizontal, 20).padding(.bottom, 12)
             } else if let waiting = controller.waitingName {
-                Label("等待 \(waiting) 接入", systemImage: "clock").font(.callout).foregroundStyle(.secondary)
+                Label(waitingMessage(waiting), systemImage: "clock").font(.callout).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 20).padding(.bottom, 12)
             }
@@ -78,6 +84,9 @@ struct ChannelView: View {
                         HStack(spacing: 8) {
                             Text(source.name).lineLimit(2).multilineTextAlignment(.leading)
                             Spacer(minLength: 8)
+                            if let label = controller.snapshot.availability[source.id]?.label {
+                                Text(label).font(.callout).foregroundStyle(.secondary)
+                            }
                             if source.id == controller.snapshot.selectedID {
                                 Image(systemName: "checkmark").foregroundStyle(.tint)
                             }
@@ -86,7 +95,9 @@ struct ChannelView: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("选择\(controller.channel.title) \(source.name)")
-                    .accessibilityValue(source.id == controller.snapshot.selectedID ? "当前使用" : "")
+                    .accessibilityValue(
+                        controller.snapshot.availability[source.id]?.label
+                            ?? (source.id == controller.snapshot.selectedID ? "当前使用" : ""))
                 }
                 if availableSources.isEmpty { Text("暂无可用项目").foregroundStyle(.secondary).padding(.vertical, 6) }
             }
@@ -120,7 +131,11 @@ struct ChannelView: View {
             Text("\(index + 1)").monospacedDigit().foregroundStyle(.secondary).frame(width: 14)
             Text(source.name).lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
                 .foregroundStyle(online ? .primary : .secondary)
-            if !online { Text("离线").font(.caption).foregroundStyle(.secondary) }
+            if !online {
+                Text("离线").font(.caption).foregroundStyle(.secondary)
+            } else if let label = controller.snapshot.availability[source.id]?.label {
+                Text(label).font(.caption).foregroundStyle(.secondary)
+            }
             Button {
                 controller.move(source.id, by: -1)
             } label: {

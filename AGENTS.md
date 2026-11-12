@@ -6,6 +6,7 @@ Swift 6 + Swift Package Manager + SwiftUI / AppKit + TIS + CoreAudio + IOKit / S
 
 - 简体中文界面；输入法、麦克风、播放设备分别管理。默认关闭，手动选择即锁定，自动模式按顺序选择可用项。
 - 三个通道复用确定性的规则；不让新设备抢占既有顺序。锁定离线时回退，重连恢复；界面展示系统回读的真实状态。
+- 支持的无线麦接收器需确认发射器连接才参与选择；仅插接收器、连接未知或状态过期时使用下一可用项，原优先级 / 锁定不变。只读厂商连接状态，不以静音、音量或说话停顿判断就绪。
 - 短暂切换异常先冷却并保留监听；5 / 10 / 20 / 30 秒间隔单次复查重试，正常回读即恢复原锁定 / 优先级。进入恢复状态持续 30 秒才提示；用户关闭或退出立即取消复查，配置与监听失败仍明确报错。
 - 保持简洁。默认只显示总览：左侧功能与管理状态，右侧当前设备或实测值；点击整行展开操作，一次只展开一项。低频排序再折叠，错误与等待状态不随操作区隐藏；布局约定见 [DESIGN.md](DESIGN.md)。
 - 面板离开操作区域约半秒收起，拖动 / 键盘和原生菜单有交互保护；收起不停止后台管理。日常菜单只有登录时启动、关于、退出；助手停用仅供显式 `--maintenance` 安装维护入口。
@@ -25,6 +26,7 @@ Swift 6 + Swift Package Manager + SwiftUI / AppKit + TIS + CoreAudio + IOKit / S
 | [Sources/VorsmateCore](Sources/VorsmateCore/AGENTS.md) | 数据、优先级、锁定、配置、重试预算与时间换算 |
 | [Sources/VorsmateSystem](Sources/VorsmateSystem/AGENTS.md) | 系统适配、通知、切换与回读控制器 |
 | [Sources/CAudioListeners](Sources/CAudioListeners/AGENTS.md) | CoreAudio 原生监听句柄，配对注册与移除 |
+| [Sources/CReceiverStatus](Sources/CReceiverStatus/AGENTS.md) | 无线麦厂商 USB 接口的限时只读状态流 |
 | [Sources/VorsmateFan](Sources/VorsmateFan/AGENTS.md) | 风扇监控、控制规则执行、XPC 双向身份校验 |
 | [Sources/VorsmateFanHelper](Sources/VorsmateFanHelper/AGENTS.md) | 单一特权写入者、续期与恢复记录 |
 | [Sources/CSMC](Sources/CSMC/AGENTS.md) | MIT AppleSMC 桥、只读键枚举与独立 PMU 温度读取 |

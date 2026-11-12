@@ -13,7 +13,12 @@ let package = Package(
         .target(
             name: "CAudioListeners", exclude: ["AGENTS.md"], publicHeadersPath: "include",
             linkerSettings: [.linkedFramework("CoreAudio")]),
-        .target(name: "VorsmateSystem", dependencies: ["VorsmateCore", "CAudioListeners"], exclude: ["AGENTS.md"]),
+        .target(
+            name: "CReceiverStatus", exclude: ["AGENTS.md"], publicHeadersPath: "include",
+            linkerSettings: [.linkedFramework("IOKit"), .linkedFramework("CoreFoundation")]),
+        .target(
+            name: "VorsmateSystem", dependencies: ["VorsmateCore", "CAudioListeners", "CReceiverStatus"],
+            exclude: ["AGENTS.md"]),
         .target(
             name: "CSMC", exclude: ["AGENTS.md"], publicHeadersPath: "include",
             linkerSettings: [.linkedFramework("IOKit")]),

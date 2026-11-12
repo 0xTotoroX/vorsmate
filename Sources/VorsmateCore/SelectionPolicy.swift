@@ -1,4 +1,4 @@
-// [INPUT]: Foundation；系统提供的可用项目与当前选择。
+// [INPUT]: Foundation；系统提供的在线项目、运行时就绪状态与当前选择。
 // [OUTPUT]: Channel、Source、Snapshot、SelectionPolicy 与确定性的选择结果。
 // [POS]: 共享规则核心，不访问硬件；界面与系统适配共用。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
@@ -35,11 +35,18 @@ public struct Source: Codable, Equatable, Sendable, Identifiable {
 public struct Snapshot: Codable, Equatable, Sendable {
     public var sources: [Source]
     public var selectedID: String?
-    public init(sources: [Source] = [], selectedID: String? = nil) {
+    public var availability: [String: SourceAvailability]
+    public init(
+        sources: [Source] = [], selectedID: String? = nil, availability: [String: SourceAvailability] = [:]
+    ) {
         self.sources = sources
         self.selectedID = selectedID
+        self.availability = availability
     }
     public var selected: Source? { sources.first { $0.id == selectedID } }
+    public func isAvailable(_ id: String) -> Bool {
+        sources.contains { $0.id == id } && (availability[id] ?? .ready) == .ready
+    }
 }
 
 public struct SelectionPolicy: Codable, Equatable, Sendable {
@@ -87,12 +94,12 @@ public struct SelectionPolicy: Codable, Equatable, Sendable {
 
     public func target(in snapshot: Snapshot) -> String? {
         guard enabled else { return nil }
-        let available = Set(snapshot.sources.map(\.id))
+        let available = Set(snapshot.sources.filter { snapshot.isAvailable($0.id) }.map(\.id))
         if let lockedID, available.contains(lockedID) { return lockedID }
         return priority.first(where: { available.contains($0.id) })?.id
     }
 
     public func isWaiting(in snapshot: Snapshot) -> Bool {
-        enabled && lockedID != nil && !snapshot.sources.contains { $0.id == lockedID }
+        enabled && lockedID.map { !snapshot.isAvailable($0) } == true
     }
 }
