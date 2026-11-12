@@ -31,7 +31,7 @@ Swift 6 + Swift Package Manager + SwiftUI / AppKit + TIS + CoreAudio + IOKit / S
 | [Sources/Vorsmate](Sources/Vorsmate/AGENTS.md) | 应用生命周期、装配、原生界面与只读检查入口 |
 | [Tests/VorsmateCoreTests](Tests/VorsmateCoreTests/AGENTS.md) | 规则与控制器的无硬件测试 |
 | scripts/build.sh / scripts/package.sh | 构建本机或 Universal 签名应用，打包 DMG 与校验文件；不安装、不上传 |
-| scripts/make-icon.swift / Resources/AppIcon.* | 自绘应用图标、各尺寸生成源与打包资源 |
+| scripts/make-icon.swift / Resources/AppIcon* / Resources/StatusIcon.pdf | “折影”母版、应用图标各尺寸导出和菜单栏单色矢量标记 |
 | Resources/Info.plist / Resources/Install.txt | 应用身份、最低系统、版本与双语安装说明 |
 | Resources/LaunchDaemons/ | SMAppService 助手注册描述；注册不等于授权通过 |
 | THIRD_PARTY_NOTICES.md / LICENSES/ | 来源、修改边界与随应用分发的第三方许可 |

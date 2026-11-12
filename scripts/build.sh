@@ -28,6 +28,7 @@ if REVISION="$(git rev-parse HEAD 2>/dev/null)"; then
     /usr/libexec/PlistBuddy -c "Add :VorsmateSourceRevision string $REVISION" "$STAGED_APP/Contents/Info.plist"
 fi
 cp "$PROJECT_ROOT/Resources/AppIcon.icns" "$STAGED_APP/Contents/Resources/"
+cp "$PROJECT_ROOT/Resources/StatusIcon.pdf" "$STAGED_APP/Contents/Resources/"
 cp "$PROJECT_ROOT/Resources/LaunchDaemons/app.vorsmate.fan-helper.plist" "$STAGED_APP/Contents/Library/LaunchDaemons/"
 cp "$PROJECT_ROOT/LICENSE" "$PROJECT_ROOT/THIRD_PARTY_NOTICES.md" "$STAGED_APP/Contents/Resources/License/"
 cp "$PROJECT_ROOT/LICENSES/macos-fan-control-MIT.txt" "$STAGED_APP/Contents/Resources/License/LICENSES/"

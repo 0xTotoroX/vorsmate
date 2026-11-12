@@ -1,4 +1,4 @@
-// [INPUT]: AppKit 生命周期、PanelView、AppModel；--inspect / --preview 开发入口。
+// [INPUT]: AppKit 生命周期、PanelView、AppModel、BrandIcon；--inspect / --preview 开发入口。
 // [OUTPUT]: 原生菜单栏应用、随内容伸缩并离开自动收起的面板 / 预览、只读 JSON 检查。
 // [POS]: 可执行入口，.app 由 scripts/build.sh 打包。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
@@ -88,7 +88,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             return
         }
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item?.button?.image = NSImage(systemSymbolName: "slider.horizontal.3", accessibilityDescription: "Vorsmate")
+        item?.button?.image = BrandIcon.template
+        item?.button?.setAccessibilityLabel("Vorsmate")
         item?.button?.toolTip = "Vorsmate"
         item?.button?.target = self
         item?.button?.action = #selector(togglePanel)
