@@ -4,6 +4,7 @@
 
 - AppMain.swift：NSApplication、NSStatusItem / NSPopover、按内容伸缩、显隐通知与实例检查；`--inspect` / `--preview` / `--show` 入口。
 - PanelDismissal.swift：鼠标离开约半秒收起，原生菜单范围 / 拖动 / 键盘保护；仅面板可见时观察，不影响后台管理。
+- BrandIcon.swift：加载包内单色矢量 V，菜单栏和面板标题共用 18 点模板图像；开发裸程序无资源时回退到字母符号。
 - AppModel.swift：三通道装配、配置冲突保护与恢复、登录状态、面板可见性、无品牌演示设备与内存预览、显式 `--maintenance` 标记。
 - PanelView.swift：系统玻璃总览、单项展开装配与三项日常菜单；内容超过屏幕适配上限后滚动，登录授权入口仅在需要时出现。
 - ChannelView.swift：三个输入 / 音频通道共用的选择、模式、折叠优先级、恢复中 / 离线等待与持续异常反馈；恢复中不显示已锁定图标。

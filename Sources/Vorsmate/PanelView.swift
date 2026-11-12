@@ -1,4 +1,4 @@
-// [INPUT]: AppModel、各功能分区与主线程内的 SwiftUI 设置提交。
+// [INPUT]: AppModel、BrandIcon、各功能分区与主线程内的 SwiftUI 设置提交。
 // [OUTPUT]: 分区清晰的紧凑总览、单项展开、无分隔线的三项菜单与原生面板。
 // [POS]: 日常管理的唯一主界面；左侧管理状态、右侧当前值，低频设置收进菜单。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
@@ -42,7 +42,8 @@ struct PanelView: View {
     private var content: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                Image(systemName: "slider.horizontal.3").font(.title3).foregroundStyle(.tint)
+                Image(nsImage: BrandIcon.template).resizable().scaledToFit()
+                    .frame(width: 18, height: 18).accessibilityHidden(true)
                 Text("Vorsmate").font(.title3.weight(.semibold))
                 Spacer()
                 if model.preview { Text("预览").font(.caption).foregroundStyle(.secondary) }

@@ -1,66 +1,66 @@
-// [INPUT]: AppKit / CoreGraphics；可选输出目录（默认 Resources）。
-// [OUTPUT]: 自绘 AppIcon.png 和各尺寸 iconset，不依赖外部图像或字体。
-// [POS]: 应用图标可重复生成入口；iconutil 将 iconset 合成为 icns。
+// [INPUT]: AppKit / CoreGraphics、Resources/AppIcon-Source.png；可选输出目录（默认 Resources）。
+// [OUTPUT]: 保留透明边距的 AppIcon.png / iconset，以及单色矢量 StatusIcon.pdf。
+// [POS]: 已选“折影”图标的尺寸导出入口；应用保留折面，菜单栏采用清晰的 V 轮廓。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import AppKit
+import ImageIO
 
-let output = URL(filePath: CommandLine.arguments.dropFirst().first ?? "Resources", directoryHint: .isDirectory)
+let resources = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+    .appending(path: "Resources", directoryHint: .isDirectory)
+let output = CommandLine.arguments.dropFirst().first.map { URL(filePath: $0, directoryHint: .isDirectory) } ?? resources
 let iconset = output.appending(path: "AppIcon.iconset", directoryHint: .isDirectory)
 try FileManager.default.createDirectory(at: iconset, withIntermediateDirectories: true)
 
+guard let source = CGImageSourceCreateWithURL(resources.appending(path: "AppIcon-Source.png") as CFURL, nil),
+    let artwork = CGImageSourceCreateImageAtIndex(source, 0, nil), artwork.width == artwork.height
+else { fatalError("无法读取方形图标源文件 AppIcon-Source.png") }
+
 func render(size: Int) -> Data {
-    let space = CGColorSpaceCreateDeviceRGB()
     let context = CGContext(
         data: nil, width: size, height: size, bitsPerComponent: 8,
-        bytesPerRow: size * 4, space: space,
+        bytesPerRow: size * 4, space: CGColorSpaceCreateDeviceRGB(),
         bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
-    context.scaleBy(x: CGFloat(size) / 1024, y: CGFloat(size) / 1024)
-    let tile = CGPath(
-        roundedRect: CGRect(x: 96, y: 96, width: 832, height: 832),
-        cornerWidth: 182, cornerHeight: 182, transform: nil)
-    context.saveGState()
-    context.setShadow(
-        offset: CGSize(width: 0, height: -12), blur: 24,
-        color: NSColor.black.withAlphaComponent(0.2).cgColor)
-    context.addPath(tile)
-    context.setFillColor(NSColor.systemBlue.cgColor)
-    context.fillPath()
-    context.restoreGState()
-    context.saveGState()
-    context.addPath(tile)
-    context.clip()
-    let colors =
-        [
-            CGColor(red: 0.08, green: 0.27, blue: 0.62, alpha: 1),
-            CGColor(red: 0.22, green: 0.66, blue: 0.96, alpha: 1),
-        ] as CFArray
-    context.drawLinearGradient(
-        CGGradient(colorsSpace: space, colors: colors, locations: [0, 1])!,
-        start: CGPoint(x: 512, y: 96), end: CGPoint(x: 512, y: 928), options: [])
-    context.restoreGState()
-    context.addPath(tile)
-    context.setStrokeColor(CGColor(gray: 1, alpha: 0.32))
-    context.setLineWidth(3)
-    context.strokePath()
-
-    // 三条独立滑杆延续菜单栏“管理选择”的含义。
-    for (y, knobX) in [(664.0, 400.0), (512.0, 648.0), (360.0, 492.0)] {
-        context.saveGState()
-        context.setLineCap(.round)
-        context.setLineWidth(42)
-        context.setStrokeColor(CGColor(gray: 1, alpha: 0.78))
-        context.move(to: CGPoint(x: 270, y: y))
-        context.addLine(to: CGPoint(x: 754, y: y))
-        context.strokePath()
-        context.setShadow(
-            offset: CGSize(width: 0, height: -8), blur: 12,
-            color: CGColor(red: 0.01, green: 0.1, blue: 0.3, alpha: 0.32))
-        context.setFillColor(CGColor(gray: 1, alpha: 0.98))
-        context.fillEllipse(in: CGRect(x: knobX - 54, y: y - 54, width: 108, height: 108))
-        context.restoreGState()
-    }
+    context.interpolationQuality = .high
+    context.draw(artwork, in: CGRect(x: 0, y: 0, width: size, height: size))
     let image = NSBitmapImageRep(cgImage: context.makeImage()!)
     return image.representation(using: .png, properties: [:])!
+}
+
+func statusMark() -> CGPath {
+    // 沿用应用图标的不对称圆角 V；小尺寸去掉折面明暗，保留稳定的实心轮廓。
+    let path = CGMutablePath()
+    path.move(to: CGPoint(x: 53, y: 0))
+    path.addCurve(to: CGPoint(x: 160, y: 20), control1: CGPoint(x: 112, y: 0), control2: CGPoint(x: 138, y: 0))
+    path.addLine(to: CGPoint(x: 303, y: 295))
+    path.addLine(to: CGPoint(x: 378, y: 106))
+    path.addCurve(to: CGPoint(x: 535, y: 45), control1: CGPoint(x: 402, y: 59), control2: CGPoint(x: 462, y: 41))
+    path.addCurve(to: CGPoint(x: 603, y: 81), control1: CGPoint(x: 590, y: 44), control2: CGPoint(x: 622, y: 46))
+    path.addLine(to: CGPoint(x: 375, y: 441))
+    path.addCurve(to: CGPoint(x: 228, y: 456), control1: CGPoint(x: 342, y: 498), control2: CGPoint(x: 270, y: 513))
+    path.addLine(to: CGPoint(x: 8, y: 89))
+    path.addCurve(to: CGPoint(x: 53, y: 0), control1: CGPoint(x: -12, y: 53), control2: CGPoint(x: -1, y: 0))
+    path.closeSubpath()
+    return path
+}
+
+func writeStatusIcon() throws {
+    let data = NSMutableData()
+    var mediaBox = CGRect(x: 0, y: 0, width: 18, height: 18)
+    let consumer = CGDataConsumer(data: data as CFMutableData)!
+    let context = CGContext(consumer: consumer, mediaBox: &mediaBox, nil)!
+    context.beginPDFPage(nil)
+    let mark = statusMark()
+    let bounds = mark.boundingBoxOfPath
+    let scale = 16.5 / bounds.width
+    context.translateBy(x: (18 - bounds.width * scale) / 2, y: (18 + bounds.height * scale) / 2)
+    context.scaleBy(x: scale, y: -scale)
+    context.translateBy(x: -bounds.minX, y: -bounds.minY)
+    context.addPath(mark)
+    context.setFillColor(CGColor(gray: 0, alpha: 1))
+    context.fillPath()
+    context.endPDFPage()
+    context.closePDF()
+    try data.write(to: output.appending(path: "StatusIcon.pdf"))
 }
 
 for points in [16, 32, 128, 256, 512] {
@@ -70,3 +70,4 @@ for points in [16, 32, 128, 256, 512] {
     }
 }
 try render(size: 1024).write(to: output.appending(path: "AppIcon.png"))
+try writeStatusIcon()
