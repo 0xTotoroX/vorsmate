@@ -6,7 +6,7 @@
 - InputSourceDriver.swift：TIS 输入源枚举与切换；输入源和工作区通知。
 - AudioDeviceDriver.swift：CoreAudio 输入 / 输出枚举与写入、插拔期间有界复核；配对管理音频监听，并为输入通道附加无线就绪状态。
 - ReceiverMonitor.swift：后台串行读取厂商接口，按 USB 序列号匹配音频 UID；有界读取、断连重开、过期回退和停止清理，不写接收器设置。
-- ChannelController.swift：ObservableObject 运行时；监听就绪后切换、有界回读，短暂异常冷却后单次退避重试、回读正常自动恢复；持续异常才提示，保存失败仍立即显示；停用后取消复查并拒绝迟到通知，保留只读刷新与配置重载。
+- ChannelController.swift：ObservableObject 运行时；选择与拖动松手单次保存、监听切换与有界回读、冷却重试与持续异常反馈；保存失败保持原策略，停用取消复查并拒绝迟到通知，保留只读刷新与配置重载。
 
 适配器不录音、不监听按键；测试通过 SourceDriver 替身驱动控制器。
 

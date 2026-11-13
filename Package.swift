@@ -29,5 +29,8 @@ let package = Package(
         .testTarget(
             name: "VorsmateCoreTests", dependencies: ["VorsmateCore", "VorsmateSystem", "VorsmateFan"],
             exclude: ["AGENTS.md"]),
+        .testTarget(
+            name: "VorsmateUITests", dependencies: ["Vorsmate", "VorsmateCore", "VorsmateSystem"],
+            exclude: ["AGENTS.md"]),
     ]
 )
