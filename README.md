@@ -9,14 +9,21 @@
 [![CI](https://github.com/0xTotoroX/vorsmate/actions/workflows/ci.yml/badge.svg)](https://github.com/0xTotoroX/vorsmate/actions/workflows/ci.yml)
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-<img src="docs/images/overview.png" width="370" alt="Vorsmate 总览：当地与美西时间、输入法、音频设备和风扇状态"> <img src="docs/images/fan-control.png" width="370" alt="Vorsmate 展开的风扇控制：自动、增强散热、固定转速与均衡、强冷档位">
+<img src="docs/images/overview.png" width="370" alt="Vorsmate 总览：当地与美西时间、输入法、音频设备和风扇状态"> <img src="docs/images/device-priority.png" width="370" alt="Vorsmate 单列表：点击选择设备，直接拖动整行调整自动选择的优先级">
 
-实际应用界面，使用演示数据。
+实际应用界面，使用演示数据。同一列表，点击切换，拖动排序。
+
+<details>
+<summary>风扇控制界面</summary>
+
+<img src="docs/images/fan-control.png" width="370" alt="Vorsmate 展开的风扇控制：自动、增强散热、固定转速与均衡、强冷档位">
+
+</details>
 
 ## 功能
 
-- **输入法管理**：快速切换、锁定输入源，或按优先级自动选择。
-- **音频管理**：分别管理麦克风与播放设备。保留偏好的连接顺序，设备断开时回退，重连后恢复。支持的无线接收器在发射器连接后才参与选择。
+- **输入法管理**：快速切换、锁定输入源，或拖动排序后按优先级自动选择。
+- **音频管理**：麦克风与播放设备分别排序、分别锁定。设备断开时回退，重连后恢复。支持的无线接收器在发射器连接后才参与选择。
 - **风扇控制**：系统自动、增强散热和固定转速。均衡与强冷采用不同响应，配合温度平滑和缓降。
 - **时间对照**：并排查看当地与美西时间，点击即可换算日期与时刻，自动处理两地夏令时。
 
@@ -26,7 +33,7 @@
 
 需要 **macOS 14 或更新版本**。安装包包含 Apple Silicon 与 Intel 两种架构；应用界面目前为简体中文。
 
-1. 在 [GitHub Releases](https://github.com/0xTotoroX/vorsmate/releases) 下载 `Vorsmate-0.1.2-universal.dmg`。
+1. 在 [GitHub Releases](https://github.com/0xTotoroX/vorsmate/releases/tag/v0.2.0) 下载 `Vorsmate-0.2.0-universal.dmg`。
 2. 打开磁盘镜像，将 **Vorsmate** 拖入 **Applications**。
 3. 从“应用程序”中启动，点击菜单栏的 **V** 图标。
 
@@ -39,6 +46,8 @@
 点功能行展开操作，再次点击即可收起；平时只显示当前状态。
 
 输入法和音频各自有三种模式：**关闭**停止管理，**自动**按优先级选择，**锁定**保持指定项目。展开后的同一份列表中，点击项目切换并锁定，直接拖动整行调整优先级，无需长按，越靠上越优先；其他项目平滑让位，松手自动保存。首次启动默认关闭，按需开启。音频应用如单独指定了设备，需在该应用中选择“系统默认”。输入法锁定针对系统输入源，不改变输入法内部的中英文状态。
+
+拖动采用柔和吸附：项目轻微抬起，松手自然落位。拖出列表或按 Esc 取消排序，优先级和锁定目标保持原样；也支持键盘与辅助功能操作。
 
 支持的无线麦克风以发射器连接状态判断是否可用：只插接收器时使用备用麦，发射器连上后按优先级切换，全部断开时回退。静音、音量和说话停顿不触发切换；手动锁定的设备未就绪时先用备用，连接后恢复。当前支持范围与状态提示见[无线麦说明](docs/wireless-microphones.md)。
 
