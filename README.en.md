@@ -9,14 +9,21 @@ Input sources, audio devices, fan control, and time conversion in one compact Ma
 [![CI](https://github.com/0xTotoroX/vorsmate/actions/workflows/ci.yml/badge.svg)](https://github.com/0xTotoroX/vorsmate/actions/workflows/ci.yml)
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-<img src="docs/images/overview.png" width="370" alt="Vorsmate overview showing local and Pacific time, input source, audio devices, and fan status"> <img src="docs/images/fan-control.png" width="370" alt="Expanded fan controls with automatic, enhanced cooling, fixed speed, balanced, and strong cooling options">
+<img src="docs/images/overview.png" width="370" alt="Vorsmate overview showing local and Pacific time, input source, audio devices, and fan status"> <img src="docs/images/device-priority.png" width="370" alt="One device list for selecting an item and dragging rows to reorder automatic selection priorities">
 
-Actual app screenshots using sample data. The app interface is currently in Simplified Chinese.
+Actual app screenshots using sample data. Click to switch; drag to reorder in the same list. The app interface is currently in Simplified Chinese.
+
+<details>
+<summary>Fan controls</summary>
+
+<img src="docs/images/fan-control.png" width="370" alt="Expanded fan controls with automatic, enhanced cooling, fixed speed, balanced, and strong cooling options">
+
+</details>
 
 ## Features
 
-- **Input sources** — Switch quickly, lock a preferred input source, or select automatically by priority.
-- **Audio devices** — Manage microphone and playback preferences independently. Fall back when a device disconnects and restore it when it returns. Supported wireless receivers become eligible only when a transmitter connects.
+- **Input sources** — Switch quickly, lock a preferred input source, or drag to set priorities for automatic selection.
+- **Audio devices** — Reorder and lock microphone and playback devices independently. Fall back when a device disconnects and restore it when it returns. Supported wireless receivers become eligible only when a transmitter connects.
 - **Fan control** — System automatic, enhanced cooling, and fixed speed. Balanced and strong cooling use different response curves, with temperature smoothing and gradual cooldown.
 - **Time comparison** — View local and US Pacific time side by side. Convert dates and times with daylight saving handled for both locations.
 
@@ -26,7 +33,7 @@ Built with SwiftUI and AppKit, with native Liquid Glass on macOS 26+. No account
 
 Requires **macOS 14 or later**. The universal app includes Apple Silicon and Intel architectures.
 
-1. Download `Vorsmate-0.1.2-universal.dmg` from [GitHub Releases](https://github.com/0xTotoroX/vorsmate/releases).
+1. Download `Vorsmate-0.2.0-universal.dmg` from [GitHub Releases](https://github.com/0xTotoroX/vorsmate/releases/tag/v0.2.0).
 2. Open the disk image and drag **Vorsmate** into **Applications**.
 3. Launch it from Applications and click the **V** icon in the menu bar.
 
@@ -39,6 +46,8 @@ Fan control requires enabling the helper in the app and completing macOS authori
 Click a feature row to expand its controls. The panel otherwise shows only the current state.
 
 Input sources and audio channels each offer **Off**, **Automatic**, and **Locked** modes. In the same expanded list, click an item to select and lock it, or drag a row immediately to reorder priorities—no long press required. Other rows smoothly make room. Items higher in the list take priority; the order is saved when you drop. Management is off on first launch; enable it where needed. Audio apps with their own device selection should use the system default. Input source locking does not control an input method’s internal language mode.
+
+Rows lift slightly while dragging and settle with a soft spring. Drop outside the list or press Esc to cancel, keeping the original order and lock target. Keyboard and accessibility actions are also available.
 
 For supported wireless microphones, availability follows the transmitter connection. A receiver alone does not take over the input; connecting a transmitter restores priority selection, and disconnecting all transmitters triggers fallback. Muting, input level, and pauses in speech do not trigger switching. Locks are preserved while a backup is used until the transmitter reconnects. See [supported devices and limitations](docs/wireless-microphones.md).
 
