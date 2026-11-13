@@ -11,4 +11,6 @@
 - FanCurveController.swift：分档温度平滑、有限升温趋势提前量、原始 / 平滑目标双重确认、接管时系统转速下界、升降速限速与回差释放；只保留内存状态，不由热点强制全速。
 - TimeComparison.swift：当地 / 美西的公历时间、时差、跨日与 PST / PDT；默认跟随系统时区，支持注入，LocalDayTimeline 处理 23 / 25 小时当天滑杆。
 
+- GitHubUpdate.swift：语义版本比较、数字版本及官方 Universal DMG / appcast 发现，不访问网络、不降级。
+
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md

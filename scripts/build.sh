@@ -1,5 +1,5 @@
 #!/bin/bash
-# [INPUT]: Swift Package Manager、Resources 元数据、可选 --universal 与签名身份。
+# [INPUT]: Swift Package Manager、Sparkle 二进制框架、Resources 元数据、可选 --universal 与签名身份。
 # [OUTPUT]: 带源码修订、完整许可与签名的 dist/Vorsmate.app；不安装、不注册登录项。
 # [POS]: 先在临时目录装配并验证，再替换构建产物，不保留旧包残留。
 # [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
@@ -19,7 +19,7 @@ mkdir -p "$PROJECT_ROOT/dist"
 STAGING_ROOT="$(mktemp -d "$PROJECT_ROOT/dist/.vorsmate-build.XXXXXX")"
 trap 'rm -rf "$STAGING_ROOT"' EXIT
 STAGED_APP="$STAGING_ROOT/Vorsmate.app"
-mkdir -p "$STAGED_APP/Contents/MacOS" "$STAGED_APP/Contents/Resources/License/LICENSES" "$STAGED_APP/Contents/Library/LaunchDaemons"
+mkdir -p "$STAGED_APP/Contents/MacOS" "$STAGED_APP/Contents/Resources/License/LICENSES" "$STAGED_APP/Contents/Library/LaunchDaemons" "$STAGED_APP/Contents/Frameworks"
 cp "$BIN_PATH/Vorsmate" "$STAGED_APP/Contents/MacOS/Vorsmate"
 cp "$BIN_PATH/VorsmateFanHelper" "$STAGED_APP/Contents/MacOS/VorsmateFanHelper"
 cp "$PROJECT_ROOT/Resources/Info.plist" "$STAGED_APP/Contents/Info.plist"
@@ -32,13 +32,32 @@ cp "$PROJECT_ROOT/Resources/StatusIcon.pdf" "$STAGED_APP/Contents/Resources/"
 cp "$PROJECT_ROOT/Resources/LaunchDaemons/app.vorsmate.fan-helper.plist" "$STAGED_APP/Contents/Library/LaunchDaemons/"
 cp "$PROJECT_ROOT/LICENSE" "$PROJECT_ROOT/THIRD_PARTY_NOTICES.md" "$STAGED_APP/Contents/Resources/License/"
 cp "$PROJECT_ROOT/LICENSES/macos-fan-control-MIT.txt" "$STAGED_APP/Contents/Resources/License/LICENSES/"
+cp "$PROJECT_ROOT/LICENSES/Sparkle-LICENSE.txt" "$STAGED_APP/Contents/Resources/License/LICENSES/"
+SPARKLE="$STAGED_APP/Contents/Frameworks/Sparkle.framework"
+ditto "$PROJECT_ROOT/.build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework" "$SPARKLE"
+# SwiftPM 会写入本机 Framework 搜索路径，发行包只从自己的 Frameworks 目录加载。
+python3 - "$STAGED_APP/Contents/MacOS/Vorsmate" "$STAGED_APP/Contents/MacOS/VorsmateFanHelper" <<'PY'
+import re, subprocess, sys
+for binary in sys.argv[1:]:
+    output = subprocess.check_output(['otool', '-l', binary], text=True)
+    paths = set(re.findall(r'\bpath (/[^\n]+) \(offset \d+\)', output))
+    for path in paths:
+        if not path.startswith(('/usr/lib/', '/System/Library/')):
+            subprocess.run(['install_name_tool', '-delete_rpath', path, binary], check=True)
+PY
 VORSMATE_SIGN_IDENTITY="${VORSMATE_SIGN_IDENTITY:--}"
-SIGN_ARGS=(--force --options runtime --sign "$VORSMATE_SIGN_IDENTITY")
-if [[ "$VORSMATE_SIGN_IDENTITY" != "-" ]]; then SIGN_ARGS+=(--timestamp); fi
+SIGN_ARGS=(--force --sign "$VORSMATE_SIGN_IDENTITY")
+# 临时签名仅供本地开发；已签名发行包使用 hardened runtime，嵌套框架采用同一身份。
+if [[ "$VORSMATE_SIGN_IDENTITY" != "-" ]]; then SIGN_ARGS+=(--options runtime --timestamp); fi
+for SERVICE in "$SPARKLE"/Versions/B/XPCServices/*.xpc; do codesign "${SIGN_ARGS[@]}" "$SERVICE"; done
+codesign "${SIGN_ARGS[@]}" "$SPARKLE/Versions/B/Autoupdate"
+codesign "${SIGN_ARGS[@]}" "$SPARKLE/Versions/B/Updater.app"
+codesign "${SIGN_ARGS[@]}" "$SPARKLE"
 codesign "${SIGN_ARGS[@]}" --identifier app.vorsmate.fan-helper "$STAGED_APP/Contents/MacOS/VorsmateFanHelper"
 codesign "${SIGN_ARGS[@]}" "$STAGED_APP"
 codesign --verify --strict "$STAGED_APP/Contents/MacOS/VorsmateFanHelper"
 codesign --verify --strict "$STAGED_APP"
+codesign --verify --deep --strict "$STAGED_APP"
 rm -rf "$APP_PATH"
 mv "$STAGED_APP" "$APP_PATH"
 printf '%s\n' "$APP_PATH"

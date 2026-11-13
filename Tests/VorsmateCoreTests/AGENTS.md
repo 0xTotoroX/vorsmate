@@ -10,4 +10,6 @@
 - FanCurveTests.swift：两档持续中负载的实际差异、有限趋势提前量、小波动不变速、短脉冲不接管、系统目标下界、分档升降速、冷却释放及采样 / 时钟边界。
 - TimeComparisonTests.swift：可注入的当地时区、非整点 / 反向 / 零时差、独立夏令时、跨年以及 23 / 25 小时滑杆边界。
 
+- UpdateTests.swift：版本顺序、数字版本、草稿 / 外部资产过滤、防降级及旧发布无 feed 的兼容。
+
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md

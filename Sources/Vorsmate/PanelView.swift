@@ -1,5 +1,5 @@
 // [INPUT]: AppModel、BrandIcon、各功能分区与主线程内的 SwiftUI 设置提交。
-// [OUTPUT]: 分区清晰的紧凑总览、单项展开、无分隔线的三项菜单与原生面板。
+// [OUTPUT]: 分区清晰的紧凑总览、单项展开、含更新入口的无分隔线菜单与原生面板。
 // [POS]: 日常管理的唯一主界面；左侧管理状态、右侧当前值，低频设置收进菜单。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import ServiceManagement
@@ -50,6 +50,7 @@ struct PanelView: View {
                 Menu {
                     if !model.preview {
                         Toggle("登录时启动", isOn: Binding(get: { model.loginEnabled }, set: { model.setLogin($0) }))
+                        UpdateMenuItem(model: model.updates)
                     }
                     Button("关于 Vorsmate") {
                         NSApp.orderFrontStandardAboutPanel(options: [

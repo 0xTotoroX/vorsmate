@@ -8,6 +8,9 @@ let package = Package(
         .executable(name: "Vorsmate", targets: ["Vorsmate"]),
         .executable(name: "VorsmateFanHelper", targets: ["VorsmateFanHelper"]),
     ],
+    dependencies: [
+        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.1")
+    ],
     targets: [
         .target(name: "VorsmateCore", exclude: ["AGENTS.md"]),
         .target(
@@ -25,7 +28,12 @@ let package = Package(
         .target(name: "VorsmateFan", dependencies: ["VorsmateCore", "CSMC"], exclude: ["AGENTS.md"]),
         .executableTarget(name: "VorsmateFanHelper", dependencies: ["VorsmateFan"], exclude: ["AGENTS.md"]),
         .executableTarget(
-            name: "Vorsmate", dependencies: ["VorsmateCore", "VorsmateSystem", "VorsmateFan"], exclude: ["AGENTS.md"]),
+            name: "Vorsmate",
+            dependencies: [
+                "VorsmateCore", "VorsmateSystem", "VorsmateFan", .product(name: "Sparkle", package: "Sparkle"),
+            ],
+            exclude: ["AGENTS.md"],
+            linkerSettings: [.unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])]),
         .testTarget(
             name: "VorsmateCoreTests", dependencies: ["VorsmateCore", "VorsmateSystem", "VorsmateFan"],
             exclude: ["AGENTS.md"]),

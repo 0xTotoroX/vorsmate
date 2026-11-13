@@ -16,5 +16,12 @@
     <key>NSHighResolutionCapable</key><true/>
     <key>NSPrincipalClass</key><string>NSApplication</string>
     <key>NSHumanReadableCopyright</key><string>Copyright © 2026 Vorsmate contributors.</string>
+    <key>SUFeedURL</key><string>https://github.com/0xTotoroX/vorsmate/releases/latest/download/appcast.xml</string>
+    <key>SUPublicEDKey</key><string>qmJx5moR/Z2KbskoHcF+rGf1I8fGQ58BtrTe4S8Gt7Q=</string>
+    <key>SUEnableAutomaticChecks</key><false/>
+    <key>SUAutomaticallyUpdate</key><false/>
+    <key>SUAllowsAutomaticUpdates</key><false/>
+    <key>SUEnableSystemProfiling</key><false/>
+    <key>SUVerifyUpdateBeforeExtraction</key><true/>
 </dict>
 </plist>

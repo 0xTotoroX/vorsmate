@@ -1,5 +1,5 @@
-// [INPUT]: 系统驱动、PreferencesStore、SMAppService。
-// [OUTPUT]: 三通道应用模型、登录状态、面板可见性、隔离预览与显式维护入口标记。
+// [INPUT]: 系统驱动、PreferencesStore、SMAppService 与更新模型。
+// [OUTPUT]: 三通道应用模型、登录 / 更新状态、面板可见性、隔离预览与显式维护入口标记。
 // [POS]: 应用组合入口；原生界面仅通过此模型与 ChannelController 操作。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import AppKit
@@ -13,6 +13,7 @@ final class AppModel: ObservableObject {
     let preview: Bool
     let maintenance: Bool
     let fan: FanModel
+    let updates: UpdateModel
     @Published var configurationError: String?
     @Published var loginEnabled = false
     @Published var loginMessage: String?
@@ -26,6 +27,7 @@ final class AppModel: ObservableObject {
         self.preview = preview
         self.maintenance = !preview && CommandLine.arguments.contains("--maintenance")
         self.fan = FanModel(preview: preview)
+        self.updates = UpdateModel(enabled: !preview)
         if !preview {
             refreshLoginStatus()
             do { preferences = try store.load() } catch {
@@ -82,6 +84,7 @@ final class AppModel: ObservableObject {
         fan.refresh()
     }
     func stop() {
+        updates.stop()
         for controller in controllers { controller.stop() }
         fan.stop()
     }

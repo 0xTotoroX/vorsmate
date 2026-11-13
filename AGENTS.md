@@ -1,6 +1,6 @@
 # Vorsmate — 原生 Mac 选择管理
 
-Swift 6 + Swift Package Manager + SwiftUI / AppKit + TIS + CoreAudio + IOKit / SMC。最低 macOS 14。
+Swift 6 + Swift Package Manager + SwiftUI / AppKit + Sparkle + TIS + CoreAudio + IOKit / SMC。最低 macOS 14。
 
 ## 产品约定
 
@@ -9,7 +9,7 @@ Swift 6 + Swift Package Manager + SwiftUI / AppKit + TIS + CoreAudio + IOKit / S
 - 支持的无线麦接收器需确认发射器连接才参与选择；仅插接收器、连接未知或状态过期时使用下一可用项，原优先级 / 锁定不变。只读厂商连接状态，不以静音、音量或说话停顿判断就绪。
 - 短暂切换异常先冷却并保留监听；5 / 10 / 20 / 30 秒间隔单次复查重试，正常回读即恢复原锁定 / 优先级。进入恢复状态持续 30 秒才提示；用户关闭或退出立即取消复查，配置与监听失败仍明确报错。
 - 保持简洁。默认只显示总览：左侧功能与管理状态，右侧当前设备或实测值；点击整行展开，一次只展开一项。单份列表同时选择与拖动排序，不另设排序入口或移动图标，松手一次保存；错误与等待状态不随操作区隐藏，布局见 [DESIGN.md](DESIGN.md)。
-- 面板离开操作区域约半秒收起，拖动 / 键盘和原生菜单有交互保护；收起不停止后台管理。日常菜单只有登录时启动、关于、退出；助手停用仅供显式 `--maintenance` 安装维护入口。
+- 面板离开操作区域约半秒收起，拖动 / 键盘和原生菜单有交互保护；收起不停止后台管理。日常菜单只有登录时启动、检查更新、关于、退出；助手停用仅供显式 `--maintenance` 安装维护入口。
 - 产品文案只写本项目功能；实际引入的第三方源码保留必要的版权与许可通知。
 - 不修改其他已安装管理软件的配置，不隐式注册登录项，不自动发布或安装。
 - 风扇启动只读；调速通过用户授权的独立助手。默认自动（系统控制），固定 / 增强不跨重启保存。只恢复本助手接管的风扇，不自动开启全局诊断解锁。
@@ -18,6 +18,8 @@ Swift 6 + Swift Package Manager + SwiftUI / AppKit + TIS + CoreAudio + IOKit / S
 - 控制意图与硬件读数分别确认：助手未响应时显示待确认，不能用只读 SMC 的空配置伪装为系统模式；迟到的查询不覆盖用户新操作。
 - 时间对照使用系统当前时区与 America/Los_Angeles，按所选时刻分别处理夏令时；运行中跟随时区变化，当天滑杆按实际日长换算。顶部常显双时钟，点时钟展开滑杆与日期编辑；完成时保留换算，关闭面板回到当前时间，不改变系统时区。
 - macOS 26+ 使用系统弹出面板和原生 Liquid Glass；不叠加普通模糊底，减少透明度时保留可读底面，旧系统保留材质回退。
+
+- 更新在启动一分钟后及每 12 小时发现 GitHub Releases 并比较数字版本，由 Sparkle 验证 Ed25519 签名并安装；更新不修改 settings.json 或注销助手。安装前用户确认，所有反馈复用紧凑窗口。预览不启动网络更新，发布附 appcast.xml，见 docs/updates.md。
 
 ## 地图
 
@@ -34,6 +36,7 @@ Swift 6 + Swift Package Manager + SwiftUI / AppKit + TIS + CoreAudio + IOKit / S
 | [Tests/VorsmateCoreTests](Tests/VorsmateCoreTests/AGENTS.md) | 规则与控制器的无硬件测试 |
 | [Tests/VorsmateUITests](Tests/VorsmateUITests/AGENTS.md) | AppKit 合成事件的拖动与取消回归，不访问真实硬件 |
 | scripts/build.sh / scripts/package.sh | 构建本机或 Universal 签名应用，打包 DMG；不安装、不上传 |
+| scripts/appcast.sh / Package.resolved | 签名更新描述与 Sparkle 依赖锁定；私钥留在钥匙串 |
 | scripts/make-icon.swift / Resources/AppIcon* / Resources/StatusIcon.pdf | “折影”母版、应用图标各尺寸导出和菜单栏单色矢量标记 |
 | Resources/Info.plist / Resources/Install.txt | 应用身份、最低系统、版本与双语安装说明 |
 | Resources/LaunchDaemons/ | SMAppService 助手注册描述；注册不等于授权通过 |
