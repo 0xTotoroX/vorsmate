@@ -3,6 +3,7 @@
 // [POS]: AppKit 事件层验证；不启动应用管理、不访问真实设备或用户配置。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import AppKit
+import QuartzCore
 import Testing
 import VorsmateCore
 import VorsmateSystem
@@ -170,7 +171,7 @@ struct SourceListTests {
     }
 
     @Test("离线移除只在行静止时命中，落位动画中不误删")
-    func movingRemoveButton() {
+    func movingRemoveButton() throws {
         let parent = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 132))
         let row = SourceRow()
         parent.addSubview(row)
@@ -180,9 +181,16 @@ struct SourceListTests {
         let button = row.subviews.flatMap(\.subviews).compactMap { $0 as? NSButton }.first!
         func point() -> NSPoint { button.convert(NSPoint(x: button.bounds.midX, y: button.bounds.midY), to: parent) }
         #expect(row.hitTest(point()) === button)
-        row.move(to: 44, animated: true)
+        // 显式创建在途动画，不依赖测试机的减少动态效果偏好或离屏图层同步时机。
+        row.move(to: 44, animated: false)
+        let layer = try #require(row.layer)
+        let animation = CABasicAnimation(keyPath: "position.y")
+        animation.fromValue = layer.position.y - 44
+        animation.toValue = layer.position.y
+        animation.duration = 1
+        layer.add(animation, forKey: "test-reorder")
         #expect(row.hitTest(point()) == nil)
-        row.layer?.removeAllAnimations()
+        layer.removeAllAnimations()
         #expect(row.hitTest(point()) === button)
     }
 
