@@ -13,6 +13,29 @@ private let builtin = Source(id: "builtin", name: "内置麦克风")
 
 @Suite("选择规则")
 struct PolicyTests {
+    @Test("拖动支持向前、向后、末尾及多选，保留锁定与离线设备")
+    func dragOrder() {
+        var policy = SelectionPolicy(enabled: true, priority: [dji, builtin, airpods], lockedID: dji.id)
+        policy.move(fromOffsets: [0], toOffset: 3)
+        #expect(policy.priority == [builtin, airpods, dji])
+        policy.move(fromOffsets: [2], toOffset: 0)
+        #expect(policy.priority == [dji, builtin, airpods])
+        policy.move(fromOffsets: [0, 2], toOffset: 2)
+        #expect(policy.priority == [builtin, dji, airpods])
+        #expect(policy.lockedID == dji.id)
+        #expect(policy.enabled)
+        #expect(policy.target(in: Snapshot(sources: [builtin, airpods])) == builtin.id)
+        #expect(policy.target(in: Snapshot(sources: [dji, builtin, airpods])) == dji.id)
+    }
+    @Test("无效位置与原位置放下不改变顺序")
+    func invalidDrag() {
+        let original = SelectionPolicy(enabled: true, priority: [dji, builtin, airpods])
+        for (offsets, destination) in [(IndexSet(), 0), ([3], 0), ([0], -1), ([0], 4), ([1], 1), ([1], 2)] {
+            var policy = original
+            policy.move(fromOffsets: offsets, toOffset: destination)
+            #expect(policy == original)
+        }
+    }
     @Test("戴上 AirPods 后，DJI 优先级仍最高")
     func djiWins() {
         var policy = SelectionPolicy(enabled: true, priority: [dji, builtin])

@@ -38,7 +38,7 @@ Fan control requires enabling the helper in the app and completing macOS authori
 
 Click a feature row to expand its controls. The panel otherwise shows only the current state.
 
-Input sources and audio channels each offer **Off**, **Automatic**, and **Locked** modes. Clicking a device selects and locks it. Use the priority controls to reorder preferences. Management is off on first launch; enable it where needed. Audio apps with their own device selection should use the system default. Input source locking does not control an input method’s internal language mode.
+Input sources and audio channels each offer **Off**, **Automatic**, and **Locked** modes. In the same expanded list, click an item to select and lock it, or drag a row immediately to reorder priorities—no long press required. Other rows smoothly make room. Items higher in the list take priority; the order is saved when you drop. Management is off on first launch; enable it where needed. Audio apps with their own device selection should use the system default. Input source locking does not control an input method’s internal language mode.
 
 For supported wireless microphones, availability follows the transmitter connection. A receiver alone does not take over the input; connecting a transmitter restores priority selection, and disconnecting all transmitters triggers fallback. Muting, input level, and pauses in speech do not trigger switching. Locks are preserved while a backup is used until the transmitter reconnects. See [supported devices and limitations](docs/wireless-microphones.md).
 

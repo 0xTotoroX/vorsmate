@@ -42,6 +42,52 @@ private final class FakeDriver: SourceDriver {
 @Suite("运行时控制")
 @MainActor
 struct ControllerTests {
+    @Test("拖动保存失败先回到原顺序，重试成功再提交；锁定不被排序改写")
+    func dragPersistenceFailure() {
+        let driver = FakeDriver()
+        var failSave = true
+        var policy = driver.automatic
+        policy.lock("b")
+        let controller = ChannelController(
+            channel: .audioInput, driver: driver, policy: policy,
+            persist: { _ in if failSave { throw CocoaError(.fileWriteNoPermission) } })
+        defer { controller.stop() }
+        controller.move(fromOffsets: [0], toOffset: 2)
+        #expect(controller.policy == policy)
+        #expect(controller.error != nil)
+        #expect(driver.selections.isEmpty)
+        failSave = false
+        controller.retry()
+        #expect(controller.policy.priority.map(\.id) == ["b", "a"])
+        #expect(controller.policy.lockedID == "b")
+        #expect(controller.error == nil)
+        #expect(driver.selections.isEmpty)
+    }
+    @Test("拖动松手一次保存并按新优先级选择，各通道独立", arguments: Channel.allCases)
+    func dragPriority(channel: Channel) throws {
+        let driver = FakeDriver()
+        var saved: [SelectionPolicy] = []
+        let controller = ChannelController(
+            channel: channel, driver: driver, policy: driver.automatic, persist: { saved.append($0) })
+        defer { controller.stop() }
+        controller.move(fromOffsets: [0], toOffset: 2)
+        #expect(saved.count == 1)
+        #expect(saved[0].priority.map(\.id) == ["b", "a"])
+        #expect(controller.policy.lockedID == nil)
+        #expect(driver.selections.isEmpty)
+        controller.move(fromOffsets: [0], toOffset: 0)
+        #expect(saved.count == 1)
+        controller.move(fromOffsets: [0], toOffset: 2)
+        #expect(saved.count == 2)
+        #expect(driver.selections == ["a"])
+        var preferences = Preferences()
+        preferences[channel] = saved.last!
+        let decoded = try JSONDecoder().decode(Preferences.self, from: JSONEncoder().encode(preferences))
+        #expect(decoded[channel].priority.map(\.id) == ["a", "b"])
+        for other in Channel.allCases where other != channel {
+            #expect(decoded[other] == Preferences()[other])
+        }
+    }
     @Test("接收器仍在线时依据发射器连接切换和回退，静音不增加切换")
     func wirelessReadiness() {
         let driver = FakeDriver()

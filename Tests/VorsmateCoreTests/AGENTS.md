@@ -2,7 +2,7 @@
 
 > L2 | 父级: ../AGENTS.md
 
-- PolicyTests.swift：音频设备优先级、锁定重连、输入源、重试预算、配置往返与损坏保护。
+- PolicyTests.swift：优先级、拖动上下 / 批量 / 边界、锁定重连、输入源、重试预算及配置保护；ControllerTests 验证三通道拖动单次保存、生效、无效移动不保存及失败重试不改锁定。
 - ControllerTests.swift：FakeDriver 驱动的切换回读、冷却退避、无通知自动恢复、持续异常提示、成功后争抢限频、手动覆盖与取消复查；保留保存恢复、只读刷新、当前设备锁定与监听失败验证。
 - AudioSnapshotTests.swift：模拟读取期间的设备回连，验证有界复核与不一致快照拒绝。
 - ReceiverTests.swift：状态帧校验 / 分包 / 版本 / 同长度非状态包、静音无关、连接确认与过期、优先级 / 锁定回退及序列号匹配；ControllerTests 补充实际规则到驱动选择的回归。

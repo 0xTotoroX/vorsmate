@@ -118,6 +118,12 @@ public final class ChannelController: ObservableObject, Identifiable {
         change { $0.lock(id) }
     }
     public func move(_ id: String, by offset: Int) { change { $0.move(id, by: offset) } }
+    public func move(fromOffsets offsets: IndexSet, toOffset destination: Int) {
+        var next = policy
+        next.move(fromOffsets: offsets, toOffset: destination)
+        guard next != policy else { return }
+        change { $0 = next }
+    }
     public func forget(_ id: String) {
         guard !snapshot.sources.contains(where: { $0.id == id }), policy.lockedID != id else { return }
         change { $0.priority.removeAll { $0.id == id } }

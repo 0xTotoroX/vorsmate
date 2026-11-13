@@ -8,7 +8,7 @@ Swift 6 + Swift Package Manager + SwiftUI / AppKit + TIS + CoreAudio + IOKit / S
 - 三个通道复用确定性的规则；不让新设备抢占既有顺序。锁定离线时回退，重连恢复；界面展示系统回读的真实状态。
 - 支持的无线麦接收器需确认发射器连接才参与选择；仅插接收器、连接未知或状态过期时使用下一可用项，原优先级 / 锁定不变。只读厂商连接状态，不以静音、音量或说话停顿判断就绪。
 - 短暂切换异常先冷却并保留监听；5 / 10 / 20 / 30 秒间隔单次复查重试，正常回读即恢复原锁定 / 优先级。进入恢复状态持续 30 秒才提示；用户关闭或退出立即取消复查，配置与监听失败仍明确报错。
-- 保持简洁。默认只显示总览：左侧功能与管理状态，右侧当前设备或实测值；点击整行展开操作，一次只展开一项。低频排序再折叠，错误与等待状态不随操作区隐藏；布局约定见 [DESIGN.md](DESIGN.md)。
+- 保持简洁。默认只显示总览：左侧功能与管理状态，右侧当前设备或实测值；点击整行展开，一次只展开一项。单份列表同时选择与拖动排序，不另设排序入口或移动图标，松手一次保存；错误与等待状态不随操作区隐藏，布局见 [DESIGN.md](DESIGN.md)。
 - 面板离开操作区域约半秒收起，拖动 / 键盘和原生菜单有交互保护；收起不停止后台管理。日常菜单只有登录时启动、关于、退出；助手停用仅供显式 `--maintenance` 安装维护入口。
 - 产品文案只写本项目功能；实际引入的第三方源码保留必要的版权与许可通知。
 - 不修改其他已安装管理软件的配置，不隐式注册登录项，不自动发布或安装。
@@ -32,6 +32,7 @@ Swift 6 + Swift Package Manager + SwiftUI / AppKit + TIS + CoreAudio + IOKit / S
 | [Sources/CSMC](Sources/CSMC/AGENTS.md) | MIT AppleSMC 桥、只读键枚举与独立 PMU 温度读取 |
 | [Sources/Vorsmate](Sources/Vorsmate/AGENTS.md) | 应用生命周期、装配、原生界面与只读检查入口 |
 | [Tests/VorsmateCoreTests](Tests/VorsmateCoreTests/AGENTS.md) | 规则与控制器的无硬件测试 |
+| [Tests/VorsmateUITests](Tests/VorsmateUITests/AGENTS.md) | AppKit 合成事件的拖动与取消回归，不访问真实硬件 |
 | scripts/build.sh / scripts/package.sh | 构建本机或 Universal 签名应用，打包 DMG 与校验文件；不安装、不上传 |
 | scripts/make-icon.swift / Resources/AppIcon* / Resources/StatusIcon.pdf | “折影”母版、应用图标各尺寸导出和菜单栏单色矢量标记 |
 | Resources/Info.plist / Resources/Install.txt | 应用身份、最低系统、版本与双语安装说明 |

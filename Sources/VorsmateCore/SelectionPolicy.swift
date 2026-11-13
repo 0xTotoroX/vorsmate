@@ -92,6 +92,17 @@ public struct SelectionPolicy: Codable, Equatable, Sendable {
         priority.swapAt(index, destination)
     }
 
+    /// 使用列表插入位置；一次完成整段移动，不改变锁定、开关或离线项目。
+    public mutating func move(fromOffsets offsets: IndexSet, toOffset destination: Int) {
+        guard !offsets.isEmpty, offsets.allSatisfy(priority.indices.contains),
+            (0...priority.count).contains(destination)
+        else { return }
+        let moved = offsets.map { priority[$0] }
+        let insertion = destination - offsets.filter { $0 < destination }.count
+        priority = priority.enumerated().filter { !offsets.contains($0.offset) }.map(\.element)
+        priority.insert(contentsOf: moved, at: insertion)
+    }
+
     public func target(in snapshot: Snapshot) -> String? {
         guard enabled else { return nil }
         let available = Set(snapshot.sources.filter { snapshot.isAvailable($0.id) }.map(\.id))

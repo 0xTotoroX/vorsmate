@@ -108,11 +108,14 @@ final class AppModel: ObservableObject {
 private final class PreviewDriver: SourceDriver {
     private var snapshot: Snapshot
     init(channel: Channel) {
-        let names: [String]
+        var names: [String]
         switch channel {
         case .inputSource: names = ["简体拼音", "ABC"]
         case .audioInput: names = ["USB 麦克风", "蓝牙耳机", "内置麦克风"]
         case .audioOutput: names = ["蓝牙耳机", "内置扬声器"]
+        }
+        if CommandLine.arguments.contains("--preview-long-list") {
+            names += (1...6).map { "备用设备 \($0)" }
         }
         snapshot = Snapshot(
             sources: names.enumerated().map { Source(id: "preview-\($0.offset)", name: $0.element) },
