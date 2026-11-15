@@ -1,5 +1,5 @@
 // [INPUT]: SMAppService 的 MachService、已签名客户端、系统温度压力与恢复记录。
-// [OUTPUT]: root 下受限风扇服务；单调时钟驱动智能调速 / 租约，传递系统压力并恢复自己接管的风扇。
+// [OUTPUT]: root 下受限风扇服务；单调时钟调速 / 租约；固定关机 / 重启前释放风扇并回复确认。
 // [POS]: 唯一特权进程；启动与读状态不接管未记录的风扇。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import Foundation
@@ -70,8 +70,10 @@ private final class HelperService: NSObject, NSXPCListenerDelegate {
                 try self.runtime.configure(
                     fanID: id, profile: profile, at: ProcessInfo.processInfo.systemUptime,
                     thermalState: ProcessInfo.processInfo.thermalState)
-            case .release:
-                guard self.owner == nil || self.owner == token else { throw FanFailure.competingTool }
+            case .release, .shutdown, .restart:
+                guard command.action != .release || self.owner == nil || self.owner == token else {
+                    throw FanFailure.competingTool
+                }
                 self.runtime.releaseAll()
                 guard self.runtime.owned.isEmpty else { throw FanFailure.hardware("系统控制恢复尚未确认，助手继续重试。") }
                 self.owner = nil
@@ -103,8 +105,18 @@ private final class Endpoint: NSObject, FanHelperProtocol, @unchecked Sendable {
         Task { @MainActor in
             do {
                 let command = try JSONDecoder().decode(FanCommand.self, from: data)
+                try command.validate()
                 let snapshot = try action(command)
                 reply(try JSONEncoder().encode(snapshot), nil)
+                if command.action == .shutdown || command.action == .restart {
+                    // 回复已排队后才执行固定系统动作；不接受调用者的参数或路径。
+                    let process = Process()
+                    process.executableURL = URL(filePath: "/sbin/shutdown")
+                    process.arguments = [command.action == .shutdown ? "-h" : "-r", "now"]
+                    do { try process.run() } catch {
+                        FileHandle.standardError.write(Data("Vorsmate shutdown: \(error.localizedDescription)\n".utf8))
+                    }
+                }
             } catch { reply(nil, error.localizedDescription) }
         }
     }

@@ -1,0 +1,175 @@
+// [INPUT]: 纯内存风扇驱动和保存回调，不接触 SMC、系统授权或真实助手。
+// [OUTPUT]: 档位跨实例恢复、睡眠 / 唤醒、停用竞态、外部争抢与空闲轮询回归。
+// [POS]: FanModel 的真实生命周期测试；硬件规则另由 FanTests 覆盖。
+// [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+import Foundation
+import Testing
+import VorsmateCore
+import VorsmateFan
+
+@testable import Vorsmate
+
+@Suite("风扇模型恢复")
+@MainActor
+struct FanModelTests {
+    @Test(
+        "固定和两档增强保存，跨实例与唤醒自动恢复",
+        arguments: [
+            FanProfile(mode: .fixed, rpm: 2800), FanCurvePreset.balanced.profile, FanCurvePreset.cooling.profile,
+        ])
+    func restoration(profile: FanProfile) async {
+        var saved: [Int: FanProfile] = [:]
+        let driver = FanMock()
+        let first = FanModel(preview: true, driver: driver, persist: { saved = $0 })
+        first.activate()
+        await first.waitForOperations()
+        first.configure(id: 0, profile: profile)
+        await first.waitForOperations()
+        #expect(saved == [0: profile])
+        first.stop()
+        await first.waitForOperations()
+        #expect(driver.snapshot.profiles.isEmpty)
+        let second = FanModel(preview: true, savedProfiles: saved, driver: driver, persist: { saved = $0 })
+        second.activate()
+        await second.waitForOperations()
+        #expect(second.snapshot.profiles == [0: profile])
+        #expect(second.polling)
+        second.willSleep()
+        await second.waitForOperations()
+        #expect(driver.snapshot.profiles.isEmpty)
+        #expect(saved == [0: profile])
+        #expect(!second.polling)
+        second.didWake()
+        await second.waitForOperations()
+        #expect(driver.snapshot.profiles == [0: profile])
+        second.configure(id: 0, profile: FanProfile())
+        await second.waitForOperations()
+        #expect(saved.isEmpty)
+        #expect(!second.polling)
+        second.stop()
+        await second.waitForOperations()
+    }
+    @Test("自动隐藏停轮询，显示立即刷新，停用不受唤醒影响")
+    func idle() async {
+        let driver = FanMock()
+        let model = FanModel(preview: true, driver: driver)
+        model.activate()
+        await model.waitForOperations()
+        #expect(!model.polling)
+        let count = driver.actions.count
+        model.setPanelVisible(true)
+        await model.waitForOperations()
+        #expect(model.polling)
+        #expect(driver.actions.count > count)
+        model.setPanelVisible(false)
+        #expect(!model.polling)
+        model.stop()
+        await model.waitForOperations()
+        let stopped = driver.actions.count
+        model.didWake()
+        model.refresh()
+        await model.waitForOperations()
+        #expect(driver.actions.count == stopped)
+        model.activate()
+        await model.waitForOperations()
+        model.stop()
+        await model.waitForOperations()
+    }
+    @Test("未授权或有其他工具时不恢复调速", arguments: [true, false])
+    func unavailable(competitor: Bool) async {
+        let driver = FanMock()
+        driver.helperEnabled = competitor
+        driver.competingApp = competitor ? "Other Fan App" : nil
+        let model = FanModel(preview: false, savedProfiles: [0: FanProfile(mode: .fixed)], driver: driver)
+        model.activate()
+        await model.waitForOperations()
+        #expect(!driver.actions.contains(.configure))
+        #expect(model.savedProfiles.count == 1)
+        model.stop()
+        await model.waitForOperations()
+    }
+    @Test("配置在途时停用，迟到结果不覆盖状态，释放晚于配置；重新激活仍可恢复")
+    func lateConfiguration() async {
+        let driver = FanMock()
+        let model = FanModel(preview: true, driver: driver)
+        model.activate()
+        await model.waitForOperations()
+        driver.hold = true
+        model.configure(id: 0, profile: FanProfile(mode: .fixed))
+        for _ in 0..<30 { await Task.yield() }
+        model.stop()
+        model.activate()
+        driver.resume()
+        await model.waitForOperations()
+        #expect(driver.actions.suffix(4) == [.configure, .release, .configure, .status])
+        #expect(model.snapshot.profiles[0]?.mode == .fixed)
+        model.stop()
+        await model.waitForOperations()
+    }
+    @Test("一个已保存风扇失效不阻止其他风扇恢复，等待助手时显示待确认")
+    func multipleFans() async {
+        let driver = FanMock()
+        driver.rejectedID = 0
+        let saved = [0: FanProfile(mode: .fixed), 1: FanCurvePreset.balanced.profile]
+        let model = FanModel(preview: true, savedProfiles: saved, driver: driver)
+        model.activate()
+        #expect(!model.controlConfirmed)
+        await model.waitForOperations()
+        #expect(model.snapshot.profiles[1] == saved[1])
+        #expect(model.error != nil)
+        #expect(model.savedProfiles == saved)
+        model.stop()
+        await model.waitForOperations()
+    }
+    @Test("写盘失败不下发命令也不改变保存档位")
+    func persistenceFailure() async {
+        let driver = FanMock()
+        let model = FanModel(preview: true, driver: driver, persist: { _ in throw CocoaError(.fileWriteUnknown) })
+        model.activate()
+        await model.waitForOperations()
+        model.configure(id: 0, profile: FanProfile(mode: .fixed))
+        await model.waitForOperations()
+        #expect(!driver.actions.contains(.configure))
+        #expect(model.savedProfiles.isEmpty)
+        #expect(model.error != nil)
+        model.stop()
+        await model.waitForOperations()
+    }
+}
+
+@MainActor
+private final class FanMock: FanModelDriver {
+    var helperEnabled = true
+    var needsApproval = false
+    var competingApp: String?
+    var actions: [FanCommand.Action] = []
+    var snapshot = FanSnapshot()
+    var hold = false
+    var rejectedID: Int?
+    private var continuation: CheckedContinuation<Void, Never>?
+    func read() throws -> FanSnapshot { snapshot }
+    func request(_ command: FanCommand) async throws -> FanSnapshot {
+        actions.append(command.action)
+        if command.action == .configure, hold {
+            await withCheckedContinuation { continuation = $0 }
+        }
+        if command.action == .configure, let id = command.fanID, let profile = command.profile {
+            if rejectedID == id { throw FanFailure.unavailable }
+            if profile.mode == .system {
+                snapshot.profiles.removeValue(forKey: id)
+            } else {
+                snapshot.profiles[id] = profile
+            }
+        }
+        if command.action == .release { snapshot.profiles = [:] }
+        return snapshot
+    }
+    func resume() {
+        hold = false
+        continuation?.resume()
+        continuation = nil
+    }
+    func invalidate() {}
+    func install() throws {}
+    func uninstall() async throws {}
+}

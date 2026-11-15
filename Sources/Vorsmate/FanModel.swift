@@ -1,10 +1,9 @@
-// [INPUT]: 只读 SMC、签名受限 XPC、SMAppService、风扇规则与工作区事件。
-// [OUTPUT]: 风扇面板状态、命令失败后回读实际模式、菜单持续续期、助手启停与三种模式。
-// [POS]: 界面与助手的装配；启动只读，睡眠 / 退出时释放控制。
+// [INPUT]: 可替换风扇驱动、已存档位、保存回调与工作区睡眠 / 唤醒事件。
+// [OUTPUT]: 跨启动恢复、睡眠释放 / 唤醒恢复、空闲停轮询及控制确认状态。
+// [POS]: 界面与助手的装配；串行请求和代次检查阻止迟到回读与停用后接管。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import AppKit
 import Combine
-import ServiceManagement
 import VorsmateCore
 import VorsmateFan
 
@@ -16,236 +15,284 @@ final class FanModel: ObservableObject {
     @Published private(set) var helperEnabled = false
     @Published private(set) var needsApproval = false
     @Published private(set) var controlConfirmed = true
+    private(set) var savedProfiles: [Int: FanProfile]
     let preview: Bool
     let signed = FanServiceIdentity.teamID() != nil
-    private let hardware: any FanHardware
-    private let client = FanConnection()
-    private let service = SMAppService.daemon(plistName: FanServiceIdentity.plist)
-    private var previewRuntime: FanRuntime?
+    private let driver: any FanModelDriver
+    private let persist: ([Int: FanProfile]) throws -> Void
     private var timer: Timer?
-    private var sleepObserver: NSObjectProtocol?
-    private var requestInFlight = false
-    private var controlRevision = 0
+    private var observers: [NSObjectProtocol] = []
+    private var operation: Task<Void, Never>?
+    private var revision = 0
+    private var active = false
+    private var sleeping = false
+    private var panelVisible = false
+    var polling: Bool { timer != nil }
+    var competingApp: String? { driver.competingApp }
 
-    init(preview: Bool) {
+    init(
+        preview: Bool, savedProfiles: [Int: FanProfile] = [:],
+        driver: (any FanModelDriver)? = nil,
+        persist: @escaping ([Int: FanProfile]) throws -> Void = { _ in }
+    ) {
         self.preview = preview
-        let driver: any FanHardware = preview ? PreviewFanHardware() : SMCFanDriver()
-        hardware = driver
-        if preview {
-            previewRuntime = FanRuntime(hardware: driver)
-            helperEnabled = true
-        } else {
-            helperEnabled = service.status == .enabled
-            needsApproval = service.status == .requiresApproval
+        self.savedProfiles = savedProfiles.filter { $0.value.mode != .system }
+        self.persist = persist
+        self.driver = driver ?? (preview ? PreviewFanModelDriver() : SystemFanModelDriver())
+    }
+    func reloadSavedProfiles(_ profiles: [Int: FanProfile]) {
+        savedProfiles = profiles.filter { $0.value.mode != .system }
+    }
+    func activate() {
+        guard !active else { return }
+        active = true
+        sleeping = false
+        let center = NSWorkspace.shared.notificationCenter
+        for (name, sleep) in [(NSWorkspace.willSleepNotification, true), (NSWorkspace.didWakeNotification, false)] {
+            observers.append(
+                center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                    Task { @MainActor in
+                        if sleep { self?.willSleep() } else { self?.didWake() }
+                    }
+                })
         }
-        controlConfirmed = preview || !helperEnabled
-        refresh()
-        let refreshTimer = Timer(timeInterval: 3, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
-        }
-        RunLoop.main.add(refreshTimer, forMode: .common)
-        timer = refreshTimer
-        sleepObserver = NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.willSleepNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in self?.release() }
+        restoreSavedProfiles()
+    }
+    func setPanelVisible(_ visible: Bool) {
+        panelVisible = visible
+        updatePolling()
+        if visible { refresh() }
+    }
+    private func updatePolling() {
+        let needed = active && !sleeping && (panelVisible || !savedProfiles.isEmpty || !snapshot.profiles.isEmpty)
+        if !needed {
+            timer?.invalidate()
+            timer = nil
+        } else if timer == nil {
+            let value = Timer(timeInterval: 3, repeats: true) { [weak self] _ in
+                Task { @MainActor in self?.refresh() }
+            }
+            RunLoop.main.add(value, forMode: .common)
+            timer = value
         }
     }
-    var competingApp: String? {
-        guard !preview else { return nil }
-        let names = [
-            "com.crystalidea.macsfancontrol": "Macs Fan Control", "com.tunabellysoftware.TG-Pro": "TG Pro",
-            "com.eidac.smcFanControl2": "smcFanControl",
-        ]
-        return NSWorkspace.shared.runningApplications.compactMap { app in app.bundleIdentifier.flatMap { names[$0] } }
-            .first
+    private func authorization() {
+        helperEnabled = driver.helperEnabled
+        needsApproval = driver.needsApproval
+    }
+    // 所有请求串行：停止的 release 必须晚于在途 configure，新激活必须晚于 release。
+    private func enqueue(_ action: @escaping @MainActor () async -> Void) {
+        let previous = operation
+        operation = Task {
+            await previous?.value
+            await action()
+        }
     }
     func refresh() {
-        guard !busy, !requestInFlight else { return }
-        if !preview {
-            helperEnabled = service.status == .enabled
-            needsApproval = service.status == .requiresApproval
+        guard active, !sleeping, !busy else { return }
+        let wasEnabled = helperEnabled
+        authorization()
+        if !wasEnabled && helperEnabled {
+            restoreSavedProfiles()
+            return
         }
-        if let runtime = previewRuntime {
-            let now = ProcessInfo.processInfo.systemUptime
-            runtime.renew(at: now)
-            runtime.tick(at: now)
-            do { snapshot = try runtime.snapshot() } catch { self.error = error.localizedDescription }
-        } else if helperEnabled {
-            requestInFlight = true
-            let revision = controlRevision
-            Task {
-                defer { requestInFlight = false }
-                do {
-                    let reading = try await client.request(FanCommand(action: .status))
-                    // 旧的轮询结果不能覆盖用户刚提交的模式。
-                    guard revision == controlRevision else { return }
-                    snapshot = reading
-                    controlConfirmed = true
-                    if competingApp != nil, !snapshot.profiles.isEmpty {
-                        snapshot = try await client.request(FanCommand(action: .release))
-                        error = FanFailure.competingTool.localizedDescription
-                    } else {
-                        error = nil
-                    }
-                } catch {
-                    guard revision == controlRevision else { return }
-                    self.error = error.localizedDescription
-                    controlConfirmed = false
-                    readLocal()
+        busy = true
+        let token = revision
+        enqueue { [weak self] in
+            guard let self, self.active, !self.sleeping, self.revision == token else { return }
+            defer {
+                if self.revision == token {
+                    self.busy = false
+                    self.updatePolling()
                 }
             }
-        } else {
-            readLocal()
+            do {
+                if self.helperEnabled {
+                    let state = try await self.driver.request(FanCommand(action: .status))
+                    guard self.revision == token else { return }
+                    self.snapshot = state
+                    if self.competingApp != nil, !self.snapshot.profiles.isEmpty {
+                        let released = try await self.driver.request(FanCommand(action: .release))
+                        guard self.revision == token else { return }
+                        self.snapshot = released
+                        throw FanFailure.competingTool
+                    }
+                } else {
+                    self.snapshot = try self.driver.read()
+                }
+                self.controlConfirmed = true
+                self.error = nil
+            } catch {
+                guard self.revision == token else { return }
+                self.error = error.localizedDescription
+                self.controlConfirmed = !self.helperEnabled
+                self.readLocal()
+            }
         }
     }
     private func readLocal() {
         do {
-            var reading = try hardware.read()
+            var reading = try driver.read()
             if helperEnabled {
-                // 只读 SMC 无法知道助手的智能选择，不能把缺省配置伪装成系统模式。
                 reading.profiles = snapshot.profiles
                 reading.safetyPause = snapshot.safetyPause
-            } else {
-                controlConfirmed = true
             }
             snapshot = reading
         } catch { self.error = error.localizedDescription }
     }
-    func installHelper() {
-        guard !preview else { return }
-        guard signed else {
-            error = "此构建仅支持监控；请使用 Apple 开发签名构建后启用调速。"
-            return
-        }
-        guard Bundle.main.bundleURL.path.hasPrefix("/Applications/") else {
-            error = "请先把 Vorsmate 放入“应用程序”文件夹，再启用调速。"
-            return
-        }
-        do {
-            if service.status == .requiresApproval {
-                SMAppService.openSystemSettingsLoginItems()
-            } else {
-                try service.register()
-            }
-            needsApproval = service.status == .requiresApproval
-            helperEnabled = service.status == .enabled
-            if needsApproval { SMAppService.openSystemSettingsLoginItems() }
-        } catch {
-            // 首次注册可能以 EPERM 返回，但已进入系统待授权列表。
-            needsApproval = service.status == .requiresApproval
-            if needsApproval {
-                self.error = nil
-                SMAppService.openSystemSettingsLoginItems()
-            } else {
-                self.error = error.localizedDescription
-            }
-        }
-    }
     func configure(id: Int, profile: FanProfile) {
-        guard !busy else { return }
-        if competingApp != nil {
+        guard active, !sleeping, !busy else { return }
+        authorization()
+        guard competingApp == nil else {
             error = FanFailure.competingTool.localizedDescription
-            return
-        }
-        if preview {
-            do {
-                try previewRuntime?.configure(fanID: id, profile: profile, at: ProcessInfo.processInfo.systemUptime)
-                if let state = try previewRuntime?.snapshot() { snapshot = state }
-                error = nil
-            } catch { self.error = error.localizedDescription }
             return
         }
         guard helperEnabled else {
             error = FanFailure.notAuthorized.localizedDescription
             return
         }
-        controlRevision += 1
-        let revision = controlRevision
-        busy = true
-        Task {
-            defer { busy = false }
-            do {
-                let reading = try await client.request(FanCommand(action: .configure, fanID: id, profile: profile))
-                guard revision == controlRevision else { return }
-                snapshot = reading
-                controlConfirmed = true
-                error = nil
-            } catch {
-                guard revision == controlRevision else { return }
-                self.error = error.localizedDescription
-                controlConfirmed = false
-                if case FanFailure.connectionTimeout = error { return }
-                // 拒绝新配置和执行后恢复都会返回错误；立即回读，避免继续显示过期模式。
-                do {
-                    let reading = try await client.request(FanCommand(action: .status))
-                    guard revision == controlRevision else { return }
-                    snapshot = reading
-                    controlConfirmed = true
-                } catch {
-                    guard revision == controlRevision else { return }
-                    readLocal()
-                }
-            }
-        }
-    }
-    func uninstallHelper() {
-        guard !preview, !busy else { return }
-        controlRevision += 1
-        busy = true
-        Task {
-            defer { busy = false }
-            do {
-                // 恢复未获助手确认时保留助手，不能取消最后的恢复路径。
-                if service.status == .enabled {
-                    snapshot = try await client.request(FanCommand(action: .release))
-                }
-                try await service.unregister()
-                client.invalidate()
-                helperEnabled = service.status == .enabled
-                needsApproval = service.status == .requiresApproval
-                error = nil
-                readLocal()
-            } catch { self.error = error.localizedDescription }
-        }
-    }
-    func release() {
-        if preview {
-            previewRuntime?.releaseAll()
-            refresh()
+        var next = savedProfiles
+        if profile.mode == .system { next.removeValue(forKey: id) } else { next[id] = profile }
+        do { try persist(next) } catch {
+            self.error = error.localizedDescription
             return
         }
-        guard helperEnabled else { return }
-        controlRevision += 1
-        Task {
-            do { snapshot = try await client.request(FanCommand(action: .release)) } catch {
-                self.error = error.localizedDescription
+        savedProfiles = next
+        revision &+= 1
+        let token = revision
+        busy = true
+        updatePolling()
+        enqueue { [weak self] in
+            guard let self, self.active, !self.sleeping, self.revision == token else { return }
+            defer {
+                if self.revision == token {
+                    self.busy = false
+                    self.updatePolling()
+                }
             }
-            client.invalidate()
+            do {
+                let state = try await self.driver.request(FanCommand(action: .configure, fanID: id, profile: profile))
+                guard self.revision == token else { return }
+                self.snapshot = state
+                self.controlConfirmed = true
+                self.error = nil
+            } catch {
+                guard self.revision == token else { return }
+                self.error = error.localizedDescription
+                self.controlConfirmed = false
+                if let state = try? await self.driver.request(FanCommand(action: .status)), self.revision == token {
+                    self.snapshot = state
+                    self.controlConfirmed = true
+                }
+            }
+        }
+    }
+    private func restoreSavedProfiles() {
+        guard active, !sleeping else { return }
+        authorization()
+        revision &+= 1
+        let token = revision
+        let profiles = savedProfiles
+        controlConfirmed = !helperEnabled
+        busy = true
+        updatePolling()
+        enqueue { [weak self] in
+            guard let self, self.active, !self.sleeping, self.revision == token else { return }
+            defer {
+                if self.revision == token {
+                    self.busy = false
+                    self.updatePolling()
+                }
+            }
+            do {
+                var failures: [String] = []
+                if self.helperEnabled {
+                    guard self.competingApp == nil else { throw FanFailure.competingTool }
+                    for id in profiles.keys.sorted() {
+                        guard self.active, !self.sleeping, self.revision == token else { return }
+                        do {
+                            _ = try await self.driver.request(
+                                FanCommand(action: .configure, fanID: id, profile: profiles[id]))
+                        } catch { failures.append("风扇 \(id + 1)：\(error.localizedDescription)") }
+                    }
+                    let state = try await self.driver.request(FanCommand(action: .status))
+                    guard self.revision == token else { return }
+                    self.snapshot = state
+                } else {
+                    self.snapshot = try self.driver.read()
+                }
+                self.controlConfirmed = true
+                self.error = failures.isEmpty ? nil : failures.joined(separator: "；")
+            } catch {
+                guard self.revision == token else { return }
+                self.error = error.localizedDescription
+                self.controlConfirmed = false
+                self.readLocal()
+            }
+        }
+    }
+    func willSleep() {
+        guard active, !sleeping else { return }
+        sleeping = true
+        release()
+        updatePolling()
+    }
+    func didWake() {
+        guard active, sleeping else { return }
+        sleeping = false
+        restoreSavedProfiles()
+    }
+    func release() {
+        revision &+= 1
+        let token = revision
+        controlConfirmed = !driver.helperEnabled
+        busy = false
+        enqueue { [weak self] in
+            guard let self else { return }
+            do {
+                if self.driver.helperEnabled {
+                    let state = try await self.driver.request(FanCommand(action: .release))
+                    if self.revision == token {
+                        self.snapshot = state
+                        self.controlConfirmed = true
+                    }
+                }
+            } catch { if self.revision == token { self.error = error.localizedDescription } }
+            self.driver.invalidate()
         }
     }
     func stop() {
-        timer?.invalidate()
-        timer = nil
-        if let sleepObserver { NSWorkspace.shared.notificationCenter.removeObserver(sleepObserver) }
-        previewRuntime?.releaseAll()
-        // 断开连接触发助手恢复；失联租约是第二条恢复路径。
-        client.invalidate()
+        guard active else { return }
+        active = false
+        for observer in observers { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
+        observers = []
+        release()
+        updatePolling()
     }
-}
-
-@MainActor
-private final class PreviewFanHardware: FanHardware {
-    var fan = FanReading(id: 0, actualRPM: 1850, targetRPM: 1850, minimumRPM: 1000, maximumRPM: 4900, hardwareMode: 0)
-    func read() throws -> FanSnapshot { FanSnapshot(fans: [fan], temperature: 96, controlTemperature: 82) }
-    func setRPM(_ rpm: Double, fanID: Int) throws {
-        fan.actualRPM = rpm
-        fan.targetRPM = rpm
-        fan.hardwareMode = 1
+    func installHelper() {
+        do {
+            try driver.install()
+            restoreSavedProfiles()
+        } catch { self.error = error.localizedDescription }
     }
-    func restore(fanID: Int) throws {
-        fan.actualRPM = 1850
-        fan.targetRPM = 1850
-        fan.hardwareMode = 0
+    func uninstallHelper() {
+        guard !preview, !busy else { return }
+        revision &+= 1
+        let token = revision
+        busy = true
+        enqueue { [weak self] in
+            guard let self else { return }
+            defer { if self.revision == token { self.busy = false } }
+            do {
+                if self.driver.helperEnabled { _ = try await self.driver.request(FanCommand(action: .release)) }
+                try await self.driver.uninstall()
+                self.driver.invalidate()
+                self.authorization()
+                self.readLocal()
+                self.error = nil
+            } catch { self.error = error.localizedDescription }
+        }
     }
+    // 测试等待模型队列，不调用真实硬件。
+    func waitForOperations() async { await operation?.value }
 }

@@ -1,5 +1,5 @@
 // [INPUT]: Foundation XPC、Security 签名身份、Codable 风扇命令。
-// [OUTPUT]: 固定能力协议、双向签名要求、超时且仅完成一次的调用，保留助手的具体错误。
+// [OUTPUT]: 固定风扇 / 关机 / 重启能力协议、双向签名要求、超时且仅完成一次的调用，保留助手的具体错误。
 // [POS]: UI 与 root 助手的窄边界；不接受任意文件、进程、命令或 SMC 键。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import Foundation
@@ -31,10 +31,17 @@ public enum FanServiceIdentity {
 }
 
 public struct FanCommand: Codable, Sendable {
-    public enum Action: String, Codable, Sendable { case status, configure, release }
+    public enum Action: String, Codable, Sendable { case status, configure, release, shutdown, restart }
     public var action: Action
     public var fanID: Int?
     public var profile: FanProfile?
+    public func validate() throws {
+        if action == .configure {
+            guard fanID != nil, profile != nil else { throw FanFailure.unavailable }
+        } else {
+            guard fanID == nil, profile == nil else { throw FanFailure.notAuthorized }
+        }
+    }
     public init(action: Action, fanID: Int? = nil, profile: FanProfile? = nil) {
         self.action = action
         self.fanID = fanID

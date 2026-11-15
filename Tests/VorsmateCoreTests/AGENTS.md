@@ -12,4 +12,8 @@
 
 - UpdateTests.swift：版本顺序、数字版本、草稿 / 外部资产过滤、防降级及旧发布无 feed 的兼容。
 
+- PluginPreferencesTests.swift：旧版配置默认回退、新字段原子保存往返 / 冲突及六模块顺序。
+- ShutdownTests.swift：Mock 驱动和可推进时钟验证五秒倒计时、15 种取消组合、排除 / 保存、温和 / 强制顺序、错误与预览反馈。
+- FanCommandTests.swift：助手关机 / 重启固定无参数命令、额外载荷和未知动作拒绝。
+
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md

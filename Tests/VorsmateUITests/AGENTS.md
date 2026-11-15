@@ -6,4 +6,7 @@
 
 - UpdatePanelTests.swift：安装 / 稍后 / 关闭只消费一次回调，新状态保留及不可中断阶段的关闭保护。
 
+- PluginHostTests.swift：全 64 组合生命周期 / 顺序、保存失败不改运行态及禁用跨实例恢复。
+- FanModelTests.swift：Mock 风扇驱动验证固定 / 均衡 / 强冷保存和启动 / 唤醒恢复、空闲停轮询、未授权 / 争抢与停用在途命令隔离。
+
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md

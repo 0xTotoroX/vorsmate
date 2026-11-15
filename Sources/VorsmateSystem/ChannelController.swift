@@ -82,7 +82,7 @@ public final class ChannelController: ObservableObject, Identifiable {
         watching = false
     }
 
-    public func reload(_ policy: SelectionPolicy) {
+    public func reload(_ policy: SelectionPolicy, start: Bool = true) {
         stop()
         self.policy = policy
         pendingPolicy = nil
@@ -90,7 +90,7 @@ public final class ChannelController: ObservableObject, Identifiable {
         budget = SwitchBudget()
         suspended = false
         error = nil
-        start()
+        if start { self.start() }
     }
 
     public func setMode(_ mode: String) {

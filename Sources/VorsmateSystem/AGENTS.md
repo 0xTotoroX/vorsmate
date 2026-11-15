@@ -8,6 +8,9 @@
 - ReceiverMonitor.swift：后台串行读取厂商接口，按 USB 序列号匹配音频 UID；有界读取、断连重开、过期回退和停止清理，不写接收器设置。
 - ChannelController.swift：ObservableObject 运行时；选择与拖动松手单次保存、监听切换与有界回读、冷却重试与持续异常反馈；保存失败保持原策略，停用取消复查并拒绝迟到通知，保留只读刷新与配置重载。
 
+- ShutdownController.swift：可注入驱动 / 时钟的五秒倒计时、显隐 / 停用取消、排除列表保存与清理执行顺序。
+- ShutdownDriver.swift：常规应用枚举 / 身份复核、CFPreferences 窗口恢复设置、优雅 / 强制退出、系统动作回调与纯内存预览。
+
 适配器不录音、不监听按键；测试通过 SourceDriver 替身驱动控制器。
 
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md

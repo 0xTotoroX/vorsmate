@@ -50,7 +50,7 @@ enum VorsmateMain {
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSWindowDelegate {
     private var item: NSStatusItem?
     private let popover = NSPopover()
     private var model: AppModel?
@@ -77,6 +77,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         if preview {
             let window = NSWindow(contentViewController: host)
             window.title = "Vorsmate 预览"
+            window.delegate = self
             window.styleMask = [.titled, .closable, .miniaturizable]
             window.setContentSize(NSSize(width: 386, height: panelHeight))
             window.center()
@@ -130,6 +131,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         dismissal.stop()
         model?.stop()
     }
+    func windowWillClose(_ notification: Notification) { model?.panelVisible = false }
     func popoverDidClose(_ notification: Notification) {
         dismissal.stop()
         model?.panelVisible = false

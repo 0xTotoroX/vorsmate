@@ -1,4 +1,4 @@
-// [INPUT]: Foundation 文件系统、SelectionPolicy。
+// [INPUT]: Foundation 文件系统、SelectionPolicy、插件 / 风扇 / 关机配置。
 // [OUTPUT]: 带版本的 Preferences、核对预期值后原子写入的 PreferencesStore。
 // [POS]: 唯一配置持久化入口；损坏或未来版本不自动覆盖。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
@@ -7,7 +7,21 @@ import Foundation
 public struct Preferences: Codable, Equatable, Sendable {
     public var version = 1
     public var policies: [String: SelectionPolicy] = [:]
+    public var disabledPlugins: Set<PluginID> = []
+    public var fanProfiles: [Int: FanProfile] = [:]
+    public var shutdownPolicy = ShutdownPolicy()
     public init() {}
+    private enum CodingKeys: String, CodingKey {
+        case version, policies, disabledPlugins, fanProfiles, shutdownPolicy
+    }
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        version = try values.decodeIfPresent(Int.self, forKey: .version) ?? 1
+        policies = try values.decodeIfPresent([String: SelectionPolicy].self, forKey: .policies) ?? [:]
+        disabledPlugins = try values.decodeIfPresent(Set<PluginID>.self, forKey: .disabledPlugins) ?? []
+        fanProfiles = try values.decodeIfPresent([Int: FanProfile].self, forKey: .fanProfiles) ?? [:]
+        shutdownPolicy = try values.decodeIfPresent(ShutdownPolicy.self, forKey: .shutdownPolicy) ?? ShutdownPolicy()
+    }
     public subscript(channel: Channel) -> SelectionPolicy {
         get { policies[channel.rawValue] ?? SelectionPolicy() }
         set { policies[channel.rawValue] = newValue }

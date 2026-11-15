@@ -4,7 +4,9 @@
 
 - SelectionPolicy.swift：Channel、Source、Snapshot、SelectionPolicy；单次及 IndexSet 批量插入排序、锁定与未就绪回退，运行时就绪状态独立于持久优先级。
 - ReceiverStatus.swift：无线连接状态帧的流式校验、版本与记录识别、连接 / 断连确认和过期；不读取音量判断就绪。
-- Preferences.swift：Preferences 与 PreferencesStore；配置版本检查、保存前核对会话预期值、JSON 原子保存。
+- PluginID.swift：六模块固定顺序、标题、图标与通道映射。
+- ShutdownPolicy.swift：关机 / 重启动作、强制退出 / 窗口恢复偏好与按 Bundle ID 聚合的应用条目。
+- Preferences.swift：兼容 version 1 的插件禁用、风扇档位、关机偏好与 PreferencesStore；配置版本检查、保存前核对会话预期值、JSON 原子保存。
 - SwitchBudget.swift：切换间隔与竞争次数上限；由外部单调时钟驱动。
 - FanPolicy.swift：模式、读数、控制配置、温度与硬件范围校验；旧阈值仍作线性配置读取，保留字段和模式编码。
 - FanCurvePreset.swift：均衡 / 强冷的分段曲线与响应参数唯一来源；不访问硬件，不替代系统压力保护。

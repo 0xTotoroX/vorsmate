@@ -2,7 +2,7 @@
 
 # Vorsmate
 
-Input sources, audio devices, fan control, and time conversion in one compact Mac menu bar panel.
+Input sources, audio devices, fan control, time conversion, and Quick Shutdown in one compact Mac menu bar panel.
 
 [简体中文](README.md) · English · [Download](https://github.com/0xTotoroX/vorsmate/releases) · [Issues](https://github.com/0xTotoroX/vorsmate/issues)
 
@@ -25,6 +25,8 @@ Actual app screenshots using sample data. Click to switch; drag to reorder in th
 - **Input sources** — Switch quickly, lock a preferred input source, or drag to set priorities for automatic selection.
 - **Audio devices** — Reorder and lock microphone and playback devices independently. Fall back when a device disconnects and restore it when it returns. Supported wireless receivers become eligible only when a transmitter connects.
 - **Fan control** — System automatic, enhanced cooling, and fixed speed. Balanced and strong cooling use different response curves, with temperature smoothing and gradual cooldown.
+- **Quick Shutdown** — Clean up apps before shutting down or restarting, with a cancellable five-second countdown and per-app exclusions.
+- **Modules** — Enable or disable all six modules independently; disabling stops their background work.
 - **Time comparison** — View local and US Pacific time side by side. Convert dates and times with daylight saving handled for both locations.
 
 Built with SwiftUI and AppKit, with native Liquid Glass on macOS 26+. No account, audio recording, keystroke capture, or cloud service required.
@@ -53,11 +55,13 @@ For supported wireless microphones, availability follows the transmitter connect
 
 After a temporary switching failure, Vorsmate waits and rechecks automatically. Your lock or priority rules resume once the state recovers; a warning appears only if the problem persists.
 
-Fans default to system control. Enhanced cooling responds to sustained heat, slows gradually as temperatures drop, and returns control to macOS. Fixed mode maintains a chosen speed. Manual fan modes are not restored after restarting the app.
+Fans default to system control. Enhanced cooling responds to sustained heat, slows gradually as temperatures drop, and returns control to macOS. Fixed mode maintains a chosen speed. Enhanced and fixed profiles are saved and restored on startup and wake when the helper is authorized and no competing fan tool is running. Sleep, app exit, and module disable return control to macOS while retaining saved profiles; choosing Automatic clears them. Hidden, idle monitoring pauses the main-process polling timer.
 
 The left clock follows the Mac’s current time zone; the right shows US Pacific local time (PST / PDT). Click either clock to edit a date or use the slider to compare times. “Now” or closing the panel returns to the current time without changing the system time zone.
 
-The panel closes when the pointer leaves; background management continues. Launch at login, About, and Quit are in the top-right menu.
+Quick Shutdown appears below Fans. Closing the panel, pressing Escape, or disabling the module cancels a pending countdown. Forced quitting is enabled by default and can discard unsaved work; when disabled, apps waiting to save stop the operation. Exclusions skip cleanup only: macOS still exits those apps at shutdown. The authorized helper releases fans before a fixed shutdown/restart command; without it, System Events is used and may require automation permission. Preview mode only simulates actions.
+
+The panel closes when the pointer leaves; background management continues. The top-right menu contains independent switches for all six modules, Launch at Login, Check for Updates, About, and Quit.
 
 ## Build from source
 

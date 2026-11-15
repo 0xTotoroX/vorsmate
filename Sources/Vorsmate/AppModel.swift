@@ -1,32 +1,57 @@
 // [INPUT]: 系统驱动、PreferencesStore、SMAppService 与更新模型。
-// [OUTPUT]: 三通道应用模型、登录 / 更新状态、面板可见性、隔离预览与显式维护入口标记。
-// [POS]: 应用组合入口；原生界面仅通过此模型与 ChannelController 操作。
+// [OUTPUT]: 六模块装配、兼容配置与开关保存、可见性分发、隔离预览与显式维护入口。
+// [POS]: 应用组合入口；通过 PluginHost 控制各模块资源；关机执行选择已授权助手或系统回退。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import AppKit
 import Combine
 import ServiceManagement
 import VorsmateCore
+import VorsmateFan
 import VorsmateSystem
 
 @MainActor
 final class AppModel: ObservableObject {
     let preview: Bool
     let maintenance: Bool
-    let fan: FanModel
+    lazy var fan = FanModel(preview: preview, savedProfiles: preferences.fanProfiles) { [weak self] profiles in
+        try self?.save { $0.fanProfiles = profiles }
+    }
+    lazy var shutdown = ShutdownController(
+        driver: preview
+            ? PreviewShutdownDriver()
+            : SystemShutdownDriver(systemAction: { action in
+                if SMAppService.daemon(plistName: FanServiceIdentity.plist).status == .enabled {
+                    let client = FanConnection()
+                    defer { client.invalidate() }
+                    do {
+                        _ = try await client.request(FanCommand(action: action == .shutdown ? .shutdown : .restart))
+                        return
+                    } catch {
+                        _ = try? await client.request(FanCommand(action: .release))
+                    }
+                }
+                try await SystemShutdownDriver.appleScript(action)
+            }), policy: preferences.shutdownPolicy,
+        persist: { [weak self] policy in try self?.save { $0.shutdownPolicy = policy } })
+    lazy var plugins = PluginHost(plugins: builtinPlugins(), disabled: preferences.disabledPlugins) {
+        [weak self] disabled in
+        try self?.save { $0.disabledPlugins = disabled }
+    }
     let updates: UpdateModel
     @Published var configurationError: String?
     @Published var loginEnabled = false
     @Published var loginMessage: String?
-    @Published var panelVisible = false
+    @Published var panelVisible = false {
+        didSet { plugins.panelDidChangeVisibility(panelVisible) }
+    }
+    @Published private var preferences = Preferences()
     private(set) var controllers: [ChannelController] = []
-    private var preferences = Preferences()
     private let store = PreferencesStore.standard
     private var canSave = true
 
     init(preview: Bool) {
         self.preview = preview
         self.maintenance = !preview && CommandLine.arguments.contains("--maintenance")
-        self.fan = FanModel(preview: preview)
         self.updates = UpdateModel(enabled: !preview)
         if !preview {
             refreshLoginStatus()
@@ -55,9 +80,39 @@ final class AppModel: ObservableObject {
                 })
             controllers.append(controller)
         }
+        if canSave { plugins.start() }
+    }
+    private func save(_ change: (inout Preferences) -> Void) throws {
+        guard canSave else { throw CocoaError(.fileReadCorruptFile) }
+        var next = preferences
+        change(&next)
+        if !preview { try store.save(next, replacing: preferences) }
+        preferences = next
+    }
+    private func builtinPlugins() -> [any VorsmatePlugin] {
+        var result: [any VorsmatePlugin] = [BuiltinPlugin(id: .time)]
         for controller in controllers {
-            if canSave { controller.start() } else { controller.refresh(readOnly: true) }
+            result.append(
+                BuiltinPlugin(
+                    id: PluginID(rawValue: controller.channel.rawValue)!, activate: { controller.start() },
+                    deactivate: { controller.stop() }, refresh: { controller.refresh() }))
         }
+        let fan = fan
+        let shutdown = shutdown
+        result.append(
+            BuiltinPlugin(
+                id: .fan, activate: { fan.activate() }, deactivate: { fan.stop() },
+                refresh: { fan.refresh() }, visibility: { fan.setPanelVisible($0) }))
+        result.append(
+            BuiltinPlugin(
+                id: .quickShutdown, activate: { shutdown.activate() },
+                deactivate: { shutdown.deactivate() }, refresh: { shutdown.refresh() },
+                visibility: { shutdown.panelDidChangeVisibility($0) }))
+        return result
+    }
+    var enabledPlugins: [PluginID] { plugins.enabledIDs }
+    func setPlugin(_ id: PluginID, enabled: Bool) {
+        do { try plugins.setEnabled(enabled, for: id) } catch { configurationError = error.localizedDescription }
     }
     static func driver(for channel: Channel) -> any SourceDriver {
         switch channel {
@@ -73,20 +128,21 @@ final class AppModel: ObservableObject {
                 preferences = try store.load()
                 canSave = true
                 configurationError = nil
-                for controller in controllers { controller.reload(preferences[controller.channel]) }
+                for controller in controllers { controller.reload(preferences[controller.channel], start: false) }
+                fan.reloadSavedProfiles(preferences.fanProfiles)
+                shutdown.reloadPolicy(preferences.shutdownPolicy)
+                plugins.reloadDisabled(preferences.disabledPlugins)
+                plugins.start()
             } catch {
                 configurationError = "无法读取配置：\(error.localizedDescription)"
-                for controller in controllers { controller.refresh(readOnly: true) }
             }
         } else {
-            for controller in controllers { controller.refresh() }
+            plugins.refresh()
         }
-        fan.refresh()
     }
     func stop() {
         updates.stop()
-        for controller in controllers { controller.stop() }
-        fan.stop()
+        plugins.stop()
     }
     func setLogin(_ enabled: Bool) {
         guard !preview else {
