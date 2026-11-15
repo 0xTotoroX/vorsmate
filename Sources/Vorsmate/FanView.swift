@@ -96,7 +96,7 @@ private struct FanControlRow: View {
                     Text("固定").tag(FanMode.fixed)
                 }.labelsHidden().pickerStyle(.segmented)
                     .help("自动：由 macOS 决定转速。增强散热：持续升温后提前加速，降温后交还系统。固定：保持指定转速。")
-                if model.busy { ProgressView().controlSize(.small) }
+                // 操作反馈统一在摘要行显示，分段控件不随处理中状态改变宽度。
             }
             if current.mode == .fixed, fan.hasValidRange {
                 HStack {

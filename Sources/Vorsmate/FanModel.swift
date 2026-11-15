@@ -1,5 +1,5 @@
 // [INPUT]: 可替换风扇驱动、已存档位、保存回调与工作区睡眠 / 唤醒事件。
-// [OUTPUT]: 跨启动恢复、睡眠释放 / 唤醒恢复、空闲停轮询及控制确认状态。
+// [OUTPUT]: 跨启动恢复、睡眠释放 / 唤醒恢复、安静读数刷新及独立的手动处理状态。
 // [POS]: 界面与助手的装配；串行请求和代次检查阻止迟到回读与停用后接管。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import AppKit
@@ -27,6 +27,7 @@ final class FanModel: ObservableObject {
     private var active = false
     private var sleeping = false
     private var panelVisible = false
+    private var refreshing = false
     var polling: Bool { timer != nil }
     var competingApp: String? { driver.competingApp }
 
@@ -89,23 +90,23 @@ final class FanModel: ObservableObject {
         }
     }
     func refresh() {
-        guard active, !sleeping, !busy else { return }
+        guard active, !sleeping, !busy, !refreshing else { return }
         let wasEnabled = helperEnabled
         authorization()
         if !wasEnabled && helperEnabled {
             restoreSavedProfiles()
             return
         }
-        busy = true
+        // 状态读取不占用界面的操作状态；在途读数去重，手动切档仍可排队。
+        refreshing = true
         let token = revision
         enqueue { [weak self] in
-            guard let self, self.active, !self.sleeping, self.revision == token else { return }
+            guard let self else { return }
             defer {
-                if self.revision == token {
-                    self.busy = false
-                    self.updatePolling()
-                }
+                self.refreshing = false
+                self.updatePolling()
             }
+            guard self.active, !self.sleeping, self.revision == token else { return }
             do {
                 if self.helperEnabled {
                     let state = try await self.driver.request(FanCommand(action: .status))

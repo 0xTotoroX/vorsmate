@@ -1,3 +1,4 @@
+import Combine
 // [INPUT]: 纯内存风扇驱动和保存回调，不接触 SMC、系统授权或真实助手。
 // [OUTPUT]: 档位跨实例恢复、睡眠 / 唤醒、停用竞态、外部争抢与空闲轮询回归。
 // [POS]: FanModel 的真实生命周期测试；硬件规则另由 FanTests 覆盖。
@@ -135,6 +136,78 @@ struct FanModelTests {
         model.stop()
         await model.waitForOperations()
     }
+    @Test("后台读数刷新不进入操作状态，重复刷新去重且不写配置")
+    func quietRefresh() async {
+        let driver = FanMock()
+        var saves = 0
+        let model = FanModel(preview: true, driver: driver, persist: { _ in saves += 1 })
+        model.activate()
+        await model.waitForOperations()
+        var states: [Bool] = []
+        let observation = model.$busy.dropFirst().sink { states.append($0) }
+        for temperature in [79.0, 80.0, 81.0] {
+            driver.snapshot.temperature = temperature
+            driver.holdStatus = true
+            let previous = driver.actions.count
+            model.refresh()
+            model.refresh()
+            for _ in 0..<30 { await Task.yield() }
+            #expect(driver.actions.count == previous + 1)
+            #expect(!model.busy)
+            #expect(model.controlConfirmed)
+            #expect(states.isEmpty)
+            driver.resumeStatus()
+            await model.waitForOperations()
+            #expect(model.snapshot.temperature == temperature)
+            #expect(states.isEmpty)
+        }
+        #expect(saves == 0)
+        observation.cancel()
+        model.stop()
+        await model.waitForOperations()
+    }
+    @Test("状态读取在途仍接受手动切档，旧回读不覆盖新选择")
+    func configureDuringRefresh() async {
+        let driver = FanMock()
+        let model = FanModel(preview: true, savedProfiles: [0: FanCurvePreset.balanced.profile], driver: driver)
+        model.activate()
+        await model.waitForOperations()
+        driver.holdStatus = true
+        model.refresh()
+        for _ in 0..<30 { await Task.yield() }
+        #expect(!model.busy)
+        model.configure(id: 0, profile: FanCurvePreset.cooling.profile)
+        #expect(model.busy)
+        #expect(model.savedProfiles[0] == FanCurvePreset.cooling.profile)
+        driver.resumeStatus()
+        await model.waitForOperations()
+        #expect(driver.actions.suffix(2) == [.status, .configure])
+        #expect(model.snapshot.profiles[0] == FanCurvePreset.cooling.profile)
+        #expect(!model.busy)
+        model.stop()
+        await model.waitForOperations()
+    }
+    @Test("读取中停用与重新激活不会遗留刷新标记或接受迟到状态")
+    func stopDuringRefresh() async {
+        let driver = FanMock()
+        let model = FanModel(preview: true, driver: driver)
+        model.activate()
+        await model.waitForOperations()
+        driver.holdStatus = true
+        model.refresh()
+        for _ in 0..<30 { await Task.yield() }
+        model.stop()
+        model.activate()
+        driver.resumeStatus()
+        await model.waitForOperations()
+        let count = driver.actions.count
+        model.refresh()
+        await model.waitForOperations()
+        #expect(driver.actions.count == count + 1)
+        #expect(!model.busy)
+        model.stop()
+        await model.waitForOperations()
+    }
 }
 
 @MainActor
@@ -145,11 +218,18 @@ private final class FanMock: FanModelDriver {
     var actions: [FanCommand.Action] = []
     var snapshot = FanSnapshot()
     var hold = false
+    var holdStatus = false
     var rejectedID: Int?
     private var continuation: CheckedContinuation<Void, Never>?
+    private var statusContinuation: CheckedContinuation<Void, Never>?
     func read() throws -> FanSnapshot { snapshot }
     func request(_ command: FanCommand) async throws -> FanSnapshot {
         actions.append(command.action)
+        if command.action == .status, holdStatus {
+            let reading = snapshot
+            await withCheckedContinuation { statusContinuation = $0 }
+            return reading
+        }
         if command.action == .configure, hold {
             await withCheckedContinuation { continuation = $0 }
         }
@@ -168,6 +248,11 @@ private final class FanMock: FanModelDriver {
         hold = false
         continuation?.resume()
         continuation = nil
+    }
+    func resumeStatus() {
+        holdStatus = false
+        statusContinuation?.resume()
+        statusContinuation = nil
     }
     func invalidate() {}
     func install() throws {}
