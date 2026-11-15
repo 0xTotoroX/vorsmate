@@ -1,9 +1,41 @@
 // [INPUT]: FanModel 实测状态、单项展开绑定与主线程内的 SwiftUI 模式提交。
-// [OUTPUT]: 自动 / 增强散热 / 固定；两档差异仅在悬停解释，右侧保留实测读数。
+// [OUTPUT]: 自动 / 均衡 / 增强 / 自定义四个并列选项，右侧保留实测读数。
 // [POS]: 总览中的风扇模块；展开回显生效参数与预设，未授权时提供助手启用入口。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import SwiftUI
 import VorsmateCore
+
+enum FanControlChoice: CaseIterable, Hashable {
+    case automatic, balanced, enhanced, custom
+    var title: String {
+        switch self {
+        case .automatic: "自动"
+        case .balanced: "均衡"
+        case .enhanced: "增强"
+        case .custom: "自定义"
+        }
+    }
+    init(profile: FanProfile) {
+        switch profile.mode {
+        case .system: self = .automatic
+        case .fixed: self = .custom
+        case .curve:
+            switch profile.preset {
+            case .balanced: self = .balanced
+            case .cooling: self = .enhanced
+            case nil: self = .custom
+            }
+        }
+    }
+    func profile(rpm: Double) -> FanProfile {
+        switch self {
+        case .automatic: FanProfile()
+        case .balanced: FanCurvePreset.balanced.profile
+        case .enhanced: FanCurvePreset.cooling.profile
+        case .custom: FanProfile(mode: .fixed, rpm: rpm)
+        }
+    }
+}
 
 struct FanView: View {
     @ObservedObject var model: FanModel
@@ -13,17 +45,9 @@ struct FanView: View {
         if model.needsApproval { return "等待授权" }
         if !model.helperEnabled { return "监控" }
         if !model.controlConfirmed { return "待确认" }
-        let modes = model.snapshot.profiles.values.map(\.mode)
-        if let mode = modes.first {
-            guard modes.allSatisfy({ $0 == mode }) else { return "分别设置" }
-            switch mode {
-            case .system: return "自动"
-            case .fixed: return "固定"
-            case .curve:
-                let preset = model.snapshot.profiles.values.first?.preset
-                guard model.snapshot.profiles.values.allSatisfy({ $0.preset == preset }) else { return "增强 · 分别设置" }
-                return "增强 · \(preset?.title ?? "自定")"
-            }
+        let choices = model.snapshot.profiles.values.map { FanControlChoice(profile: $0) }
+        if let choice = choices.first {
+            return choices.allSatisfy { $0 == choice } ? choice.title : "分别设置"
         }
         return model.snapshot.fans.contains(where: { $0.hardwareMode == 1 }) ? "外部控制" : "自动"
     }
@@ -83,19 +107,22 @@ private struct FanControlRow: View {
     @ObservedObject var model: FanModel
     let fan: FanReading
     @State private var rpm = 2000.0
-    @State private var preset: FanCurvePreset = .balanced
     private var current: FanProfile { model.snapshot.profiles[fan.id] ?? FanProfile() }
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 if model.snapshot.fans.count > 1 { Text("风扇 \(fan.id + 1)") }
                 // 显式闭包避免 Swift 6.3 将主线程方法转为 Binding setter 时崩溃。
-                Picker("风扇 \(fan.id + 1) 模式", selection: Binding(get: { current.mode }, set: { setMode($0) })) {
-                    Text("自动").tag(FanMode.system)
-                    Text("增强散热").tag(FanMode.curve)
-                    Text("固定").tag(FanMode.fixed)
+                Picker(
+                    "风扇 \(fan.id + 1) 模式",
+                    selection: Binding(get: { FanControlChoice(profile: current) }, set: { setChoice($0) })
+                ) {
+                    ForEach(FanControlChoice.allCases, id: \.self) { choice in
+                        Text(choice.title).tag(choice)
+                    }
                 }.labelsHidden().pickerStyle(.segmented)
-                    .help("自动：由 macOS 决定转速。增强散热：持续升温后提前加速，降温后交还系统。固定：保持指定转速。")
+                    .accessibilityIdentifier("fans.mode.\(fan.id)")
+                    .help("自动：系统调速。均衡：温和增加散热。增强：更早、更强地散热。自定义：固定转速。均衡和增强降温后交还系统，选择会保留。")
                 // 操作反馈统一在摘要行显示，分段控件不随处理中状态改变宽度。
             }
             if current.mode == .fixed, fan.hasValidRange {
@@ -108,28 +135,18 @@ private struct FanControlRow: View {
                     ).accessibilityLabel("风扇 \(fan.id + 1) 目标转速")
                     Text("\(Int(rpm)) RPM").monospacedDigit().frame(width: 82, alignment: .trailing)
                 }
-            } else if current.mode == .curve {
-                Picker(
-                    "增强风格",
-                    selection: Binding(
-                        get: { current.preset ?? preset },
-                        set: { value in
-                            preset = value
-                            model.configure(id: fan.id, profile: value.profile)
-                        })
-                ) {
-                    ForEach(FanCurvePreset.allCases, id: \.self) { value in
-                        Text(value.title).tag(value)
-                    }
+            } else if current.mode == .curve, current.preset == nil {
+                HStack {
+                    Text("温控 \(Int(current.rampStart))–\(Int(current.fullSpeed))°C").font(.callout).foregroundStyle(
+                        .secondary)
+                    Spacer()
+                    Button("设置固定转速") { setChoice(.custom) }
                 }
-                .labelsHidden().pickerStyle(.segmented)
-                .accessibilityIdentifier("fans.preset.\(fan.id)")
-                .help("均衡：持续发热约 8 秒后温和加速。强冷：约 4 秒后更早介入，同温度下转速更高。持续升温适度提前加速，降温后缓慢回落。")
             } else if fan.hardwareMode == 1, current.mode == .system {
                 HStack {
                     Text("当前为外部手动转速").font(.callout).foregroundStyle(.secondary)
                     Spacer()
-                    Button("恢复自动") { setMode(.system) }
+                    Button("恢复自动") { setChoice(.automatic) }
                 }
             }
         }.onAppear {
@@ -137,13 +154,12 @@ private struct FanControlRow: View {
                 current.mode == .fixed
                 ? current.rpm
                 : min(fan.maximumRPM, max(max(500, fan.minimumRPM), fan.actualRPM.rounded()))
-            if let active = current.preset { preset = active }
         }
         .onChange(of: current) { _, value in
-            if let active = value.preset { preset = active }
+            if value.mode == .fixed { rpm = value.rpm }
         }
     }
-    private func setMode(_ mode: FanMode) {
-        model.configure(id: fan.id, profile: mode == .curve ? preset.profile : FanProfile(mode: mode, rpm: rpm))
+    private func setChoice(_ choice: FanControlChoice) {
+        model.configure(id: fan.id, profile: choice.profile(rpm: rpm))
     }
 }

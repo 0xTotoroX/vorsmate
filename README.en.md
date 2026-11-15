@@ -16,7 +16,7 @@ Actual app screenshots using sample data. Click to switch; drag to reorder in th
 <details>
 <summary>Fan controls</summary>
 
-<img src="docs/images/fan-control.png" width="370" alt="Expanded fan controls with automatic, enhanced cooling, fixed speed, balanced, and strong cooling options">
+<img src="docs/images/fan-control.png" width="370" alt="Expanded fan controls with four parallel choices: Automatic, Balanced, Enhanced, and Custom">
 
 </details>
 
@@ -24,7 +24,7 @@ Actual app screenshots using sample data. Click to switch; drag to reorder in th
 
 - **Input sources** — Switch quickly, lock a preferred input source, or drag to set priorities for automatic selection.
 - **Audio devices** — Reorder and lock microphone and playback devices independently. Fall back when a device disconnects and restore it when it returns. Supported wireless receivers become eligible only when a transmitter connects.
-- **Fan control** — System automatic, enhanced cooling, and fixed speed. Balanced and strong cooling use different response curves, with temperature smoothing and gradual cooldown.
+- **Fan control** — Four direct choices: Automatic, Balanced, Enhanced, and Custom. Balanced and Enhanced smooth temperature changes and slow down gradually; Custom sets a fixed speed.
 - **Quick Shutdown** — Clean up apps before shutting down or restarting, with a cancellable five-second countdown and per-app exclusions.
 - **Modules** — Enable or disable all six modules independently; disabling stops their background work.
 - **Time comparison** — View local and US Pacific time side by side. Convert dates and times with daylight saving handled for both locations.
@@ -55,7 +55,7 @@ For supported wireless microphones, availability follows the transmitter connect
 
 After a temporary switching failure, Vorsmate waits and rechecks automatically. Your lock or priority rules resume once the state recovers; a warning appears only if the problem persists.
 
-Fans default to system control. Enhanced cooling responds to sustained heat, slows gradually as temperatures drop, and returns control to macOS. Fixed mode maintains a chosen speed. Enhanced and fixed profiles are saved and restored on startup and wake when the helper is authorized and no competing fan tool is running. Sleep, app exit, and module disable return control to macOS while retaining saved profiles; choosing Automatic clears them. Hidden, idle monitoring pauses the main-process polling timer.
+Fans offer four parallel choices: Automatic, Balanced, Enhanced, and Custom. Automatic uses system control. Balanced and Enhanced respond to sustained heat, slow gradually as temperatures drop, and return control to macOS; Enhanced starts earlier and runs faster. Custom maintains a chosen speed. The last three choices are saved and restored on startup and wake when the helper is authorized and no competing fan tool is running. Sleep, app exit, and module disable return control to macOS while retaining saved profiles; choosing Automatic clears them. Hidden, idle monitoring pauses the main-process polling timer.
 
 The left clock follows the Mac’s current time zone; the right shows US Pacific local time (PST / PDT). Click either clock to edit a date or use the slider to compare times. “Now” or closing the panel returns to the current time without changing the system time zone.
 

@@ -1,6 +1,6 @@
 import Combine
 // [INPUT]: 纯内存风扇驱动和保存回调，不接触 SMC、系统授权或真实助手。
-// [OUTPUT]: 档位跨实例恢复、睡眠 / 唤醒、停用竞态、外部争抢与空闲轮询回归。
+// [OUTPUT]: 四项选择的旧配置兼容、跨实例恢复、睡眠 / 唤醒、停用竞态与安静轮询回归。
 // [POS]: FanModel 的真实生命周期测试；硬件规则另由 FanTests 覆盖。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import Foundation
@@ -13,6 +13,44 @@ import VorsmateFan
 @Suite("风扇模型恢复")
 @MainActor
 struct FanModelTests {
+    @Test("四项并列选择保存原有配置格式，均衡与增强能直接切换")
+    func parallelChoices() async throws {
+        var saved: [Int: FanProfile] = [:]
+        let driver = FanMock()
+        let model = FanModel(preview: true, driver: driver, persist: { saved = $0 })
+        model.activate()
+        await model.waitForOperations()
+        for choice in [FanControlChoice.custom, .balanced, .enhanced, .automatic] {
+            model.configure(id: 0, profile: choice.profile(rpm: 2800))
+            await model.waitForOperations()
+            let decoded = try JSONDecoder().decode(
+                [Int: FanProfile].self, from: JSONEncoder().encode(saved))
+            let profile = decoded[0] ?? FanProfile()
+            #expect(FanControlChoice(profile: profile) == choice)
+            #expect(model.snapshot.profiles == decoded)
+            switch choice {
+            case .automatic: #expect(decoded.isEmpty)
+            case .balanced: #expect(profile == FanCurvePreset.balanced.profile)
+            case .enhanced: #expect(profile == FanCurvePreset.cooling.profile)
+            case .custom: #expect(profile == FanProfile(mode: .fixed, rpm: 2800))
+            }
+        }
+        model.stop()
+        await model.waitForOperations()
+        let legacyCurve = FanProfile(mode: .curve, rampStart: 55, fullSpeed: 80)
+        var legacySaves = 0
+        let restored = FanModel(
+            preview: true, savedProfiles: [0: legacyCurve], driver: driver,
+            persist: { _ in legacySaves += 1 })
+        restored.activate()
+        await restored.waitForOperations()
+        #expect(FanControlChoice(profile: restored.snapshot.profiles[0] ?? FanProfile()) == .custom)
+        #expect(restored.snapshot.profiles[0] == legacyCurve)
+        #expect(restored.savedProfiles[0] == legacyCurve)
+        #expect(legacySaves == 0)
+        restored.stop()
+        await restored.waitForOperations()
+    }
     @Test(
         "固定和两档增强保存，跨实例与唤醒自动恢复",
         arguments: [
