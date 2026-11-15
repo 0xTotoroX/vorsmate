@@ -24,7 +24,7 @@ Actual app screenshots using sample data. Click to switch; drag to reorder in th
 
 - **Input sources** — Switch quickly, lock a preferred input source, or drag to set priorities for automatic selection.
 - **Audio devices** — Reorder and lock microphone and playback devices independently. Fall back when a device disconnects and restore it when it returns. Supported wireless receivers become eligible only when a transmitter connects.
-- **Fan control** — Four direct choices: Automatic, Balanced, Enhanced, and Custom. Balanced and Enhanced smooth temperature changes and slow down gradually; Custom sets a fixed speed.
+- **Fan control** — Four direct choices: Automatic, Balanced, Enhanced, and Custom. Balanced and Enhanced smooth temperature changes and slow down gradually; Custom sets a fixed speed. Background readings refresh without interrupting the controls.
 - **Quick Shutdown** — Clean up apps before shutting down or restarting, with a cancellable five-second countdown and per-app exclusions.
 - **Modules** — Enable or disable all six modules independently; disabling stops their background work.
 - **Time comparison** — View local and US Pacific time side by side. Convert dates and times with daylight saving handled for both locations.
@@ -35,7 +35,7 @@ Built with SwiftUI and AppKit, with native Liquid Glass on macOS 26+. No account
 
 Requires **macOS 14 or later**. The universal app includes Apple Silicon and Intel architectures.
 
-1. Download `Vorsmate-0.3.0-universal.dmg` from [GitHub Releases](https://github.com/0xTotoroX/vorsmate/releases/tag/v0.3.0).
+1. Download `Vorsmate-0.3.1-universal.dmg` from [GitHub Releases](https://github.com/0xTotoroX/vorsmate/releases/tag/v0.3.1).
 2. Open the disk image and drag **Vorsmate** into **Applications**.
 3. Launch it from Applications and click the **V** icon in the menu bar.
 
