@@ -47,11 +47,7 @@ Requires **macOS 14 or later**. The universal app includes Apple Silicon and Int
 2. Open the disk image and drag **Vorsmate** into **Applications**.
 3. Launch it from Applications and click the **V** icon in the menu bar.
 
-**Signed with an Apple development certificate and not notarized.** If macOS blocks the first launch, verify the download source, then use **System Settings → Privacy & Security → Open Anyway**. See [Apple’s instructions](https://support.apple.com/en-us/102445). Do not disable Gatekeeper or System Integrity Protection.
-
 **Upgrading from v0.3.0 / v0.3.1:** The old updater may keep waiting or hit API rate limits. If it cannot finish, download and install v0.3.2 manually. Keep your existing settings and fan helper enabled.
-
-Fan control requires enabling the helper in the app and completing macOS authorization. Enhanced cooling is currently enabled only for the validated `Mac16,10` model. Other models retain system cooling; monitoring and fixed speed depend on hardware support. The Intel build has not been tested on Intel hardware. See [fan control](docs/fan-control.md) and [validation scope](docs/verification.md) for details.
 
 ## Usage
 
