@@ -8,6 +8,8 @@
 
 - images/overview.png / images/device-priority.png / images/fan-control.png：总览、单列表排序与风扇控制的原生预览截图，使用无品牌演示数据，供中英文 README 展示。
 
+- images/update-check.png：本机 v0.3.2 修复构建实际完成检查后的原生窗口，不包含个人设备信息。
+
 - updates.md：固定签名更新源、截止时间 / 错误 / 重试、双重签名发布及配置 / 风扇助手授权保留边界。
 
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md

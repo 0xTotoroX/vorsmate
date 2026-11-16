@@ -20,6 +20,13 @@ Actual app screenshots using sample data. Click to switch; drag to reorder in th
 
 </details>
 
+<details>
+<summary>App updates</summary>
+
+<img src="docs/images/update-check.png" width="370" alt="Native Vorsmate v0.3.2 update window showing the installed version after a completed check">
+
+</details>
+
 ## Features
 
 - **Input sources** — Switch quickly, lock a preferred input source, or drag to set priorities for automatic selection.
@@ -27,6 +34,7 @@ Actual app screenshots using sample data. Click to switch; drag to reorder in th
 - **Fan control** — Four direct choices: Automatic, Balanced, Enhanced, and Custom. Balanced and Enhanced smooth temperature changes and slow down gradually; Custom sets a fixed speed. Background readings refresh without interrupting the controls.
 - **Quick Shutdown** — Clean up apps before shutting down or restarting, with a cancellable five-second countdown and per-app exclusions.
 - **Modules** — Enable or disable all six modules independently; disabling stops their background work.
+- **App updates** — Check a fixed signed feed and verify both the feed and installer. Clear timeout errors offer a retry while keeping your settings and fan helper authorization.
 - **Time comparison** — View local and US Pacific time side by side. Convert dates and times with daylight saving handled for both locations.
 
 Built with SwiftUI and AppKit, with native Liquid Glass on macOS 26+. No account, audio recording, keystroke capture, or cloud service required.
@@ -35,11 +43,13 @@ Built with SwiftUI and AppKit, with native Liquid Glass on macOS 26+. No account
 
 Requires **macOS 14 or later**. The universal app includes Apple Silicon and Intel architectures.
 
-1. Download `Vorsmate-0.3.1-universal.dmg` from [GitHub Releases](https://github.com/0xTotoroX/vorsmate/releases/tag/v0.3.1).
+1. Download `Vorsmate-0.3.2-universal.dmg` from [GitHub Releases](https://github.com/0xTotoroX/vorsmate/releases/tag/v0.3.2).
 2. Open the disk image and drag **Vorsmate** into **Applications**.
 3. Launch it from Applications and click the **V** icon in the menu bar.
 
 **Signed with an Apple development certificate and not notarized.** If macOS blocks the first launch, verify the download source, then use **System Settings → Privacy & Security → Open Anyway**. See [Apple’s instructions](https://support.apple.com/en-us/102445). Do not disable Gatekeeper or System Integrity Protection.
+
+**Upgrading from v0.3.0 / v0.3.1:** The old updater may keep waiting or hit API rate limits. If it cannot finish, download and install v0.3.2 manually. Keep your existing settings and fan helper enabled.
 
 Fan control requires enabling the helper in the app and completing macOS authorization. Enhanced cooling is currently enabled only for the validated `Mac16,10` model. Other models retain system cooling; monitoring and fixed speed depend on hardware support. The Intel build has not been tested on Intel hardware. See [fan control](docs/fan-control.md) and [validation scope](docs/verification.md) for details.
 
@@ -62,6 +72,8 @@ The left clock follows the Mac’s current time zone; the right shows US Pacific
 Quick Shutdown appears below Fans. Closing the panel, pressing Escape, or disabling the module cancels a pending countdown. Forced quitting is enabled by default and can discard unsaved work; when disabled, apps waiting to save stop the operation. Exclusions skip cleanup only: macOS still exits those apps at shutdown. The authorized helper releases fans before a fixed shutdown/restart command; without it, System Events is used and may require automation permission. Preview mode only simulates actions.
 
 The panel closes when the pointer leaves; background management continues. The top-right menu contains independent switches for all six modules, Launch at Login, Check for Updates, About, and Quit.
+
+Updates are checked one minute after startup and every 12 hours, or manually through the top-right menu. You confirm downloading and restarting. Checks time out after 20 seconds; downloads with no progress for 60 seconds and preparation exceeding 120 seconds stop waiting and offer a retry. Installation itself is never interrupted by a timer. Both the feed and installer require valid signatures. See [update behavior and publishing](docs/updates.md).
 
 ## Build from source
 
