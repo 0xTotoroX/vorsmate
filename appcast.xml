@@ -10,10 +10,10 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
       <sparkle:shortVersionString>0.3.2</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <pubDate>Mon, 16 Nov 2026 04:20:17 +0000</pubDate>
-      <enclosure sparkle:edSignature="zDenaTm1Wdf6mb0wrhA+NstdV04n7nVYcREtDZwpLNB6XYHERxQU96b/o0avbZMYmD52bcWi1odlszdFH1KjAQ==" length="4641319" url="https://github.com/0xTotoroX/vorsmate/releases/download/v0.3.2/Vorsmate-0.3.2-universal.dmg" type="application/octet-stream"></enclosure>
+      <enclosure sparkle:edSignature="zDenaTm1Wdf6mb0wrhA+NstdV04n7nVYcREtDZwpLNB6XYHERxQU96b/o0avbZMYmD52bcWi1odlszdFH1KjAQ==" length="4641319" url="https://github.com/0xTotoroX/vorsmate/releases/download/v0.3.2/Vorsmate-0.3.2.dmg" type="application/octet-stream"></enclosure>
     </item>
   </channel>
 </rss><!-- sparkle-signatures:
-edSignature: pSPQZ2BwWNs8aMhLv6wmBpbcT4rP6K36VUklMkRMmI9153jun4dNVNqYt13nxYlfcShRv+Y3h4I4YSMpmIeDCQ==
-length: 1103
+edSignature: fU/+2n8C40t/jcoJm/wKYpvlrjtVKvqtSqM1oM30+MwwCa8VZ+iSK+PoN8CDog9rVrqAkiYHwaXv5kzM2IU7Aw==
+length: 1093
 -->
