@@ -1,6 +1,6 @@
-// [INPUT]: GitHub Releases JSON 与本机版本；不读取用户配置。
-// [OUTPUT]: 语义版本比较及固定官方仓库的最新 Universal 更新信息。
-// [POS]: 更新发现的纯规则；下载、签名验证和安装交由 Sparkle。
+// [INPUT]: 官方固定更新源、版本和安装包地址；不读取用户配置。
+// [OUTPUT]: 固定签名 feed 地址、官方安装包校验与语义版本规则。
+// [POS]: 更新来源的纯规则；feed 解析、版本选择及双重签名验证交由 Sparkle。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import Foundation
 
@@ -61,55 +61,14 @@ public struct ReleaseVersion: Comparable, Sendable {
     private static func isNumeric(_ value: String) -> Bool { value.utf8.allSatisfy { (48...57).contains($0) } }
 }
 
-public struct GitHubUpdate: Equatable, Sendable {
-    public static let releasesURL = URL(
-        string: "https://api.github.com/repos/0xTotoroX/vorsmate/releases?per_page=100")!
-    public let version: String
-    public let releaseURL: URL
-    public let feedURL: URL?
-    public let downloadURL: URL
+public enum UpdatePolicy {
+    public static let feedURL = URL(string: "https://raw.githubusercontent.com/0xTotoroX/vorsmate/updates/appcast.xml")!
+    public static let releaseURL = URL(string: "https://github.com/0xTotoroX/vorsmate/releases")!
 
-    /// 从发布列表按版本比较，不让 /latest 的返回范围替代版本过滤。
-    public static func latest(in data: Data, newerThan current: String) throws -> Self? {
-        struct Asset: Decodable {
-            let name: String
-            let downloadURL: URL
-            enum CodingKeys: String, CodingKey {
-                case name
-                case downloadURL = "browser_download_url"
-            }
-        }
-        struct Release: Decodable {
-            let tag: String
-            let draft: Bool
-            let assets: [Asset]
-            enum CodingKeys: String, CodingKey {
-                case tag = "tag_name"
-                case draft, assets
-            }
-        }
-        guard let installed = ReleaseVersion(current) else { throw CocoaError(.coderInvalidValue) }
-        let releases = try JSONDecoder().decode([Release].self, from: data)
-        return releases.compactMap { release -> (ReleaseVersion, Self)? in
-            guard !release.draft, let parsed = ReleaseVersion(release.tag), parsed > installed else { return nil }
-            let version = release.tag.hasPrefix("v") ? String(release.tag.dropFirst()) : release.tag
-            let prefix = "https://github.com/0xTotoroX/vorsmate/releases/download/\(release.tag)/"
-            let filename = "Vorsmate-\(version)-universal.dmg"
-            guard
-                let download = release.assets.first(where: {
-                    $0.name == filename && $0.downloadURL.absoluteString == prefix + filename
-                })
-            else { return nil }
-            let feed = release.assets.first {
-                $0.name == "appcast.xml" && $0.downloadURL.absoluteString == prefix + "appcast.xml"
-            }
-            return (
-                parsed,
-                Self(
-                    version: version,
-                    releaseURL: URL(string: "https://github.com/0xTotoroX/vorsmate/releases/tag/\(release.tag)")!,
-                    feedURL: feed?.downloadURL, downloadURL: download.downloadURL)
-            )
-        }.max { $0.0 < $1.0 }?.1
+    public static func accepts(downloadURL: URL?, version: String) -> Bool {
+        guard ReleaseVersion(version) != nil else { return false }
+        let expected =
+            "https://github.com/0xTotoroX/vorsmate/releases/download/v\(version)/Vorsmate-\(version)-universal.dmg"
+        return downloadURL?.absoluteString == expected
     }
 }

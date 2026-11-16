@@ -1,6 +1,6 @@
 #!/bin/bash
 # [INPUT]: 已验证 Universal DMG、应用元数据与登录钥匙串中的项目更新密钥。
-# [OUTPUT]: 与 GitHub Release 资产对应的 Ed25519 签名 appcast.xml；不上传。
+# [OUTPUT]: 与 GitHub Release 资产对应的 feed / 安装包双重 Ed25519 签名 appcast.xml；不上传。
 # [POS]: 本地发布的最后一步，所有新版本与 DMG 一同发布。
 # [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 set -euo pipefail
@@ -38,5 +38,6 @@ enclosure.set('type', 'application/octet-stream')
 item.append(enclosure)
 ET.indent(rss)
 pathlib.Path('dist/release/appcast.xml').write_bytes(ET.tostring(rss, encoding='utf-8', xml_declaration=True))
-print('dist/release/appcast.xml')
 PY
+.build/artifacts/sparkle/Sparkle/bin/sign_update --account app.vorsmate.mac dist/release/appcast.xml
+printf '%s\n' 'dist/release/appcast.xml'

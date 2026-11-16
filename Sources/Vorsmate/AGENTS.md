@@ -18,8 +18,9 @@
 - FanView.swift：摘要显示自动 / 均衡 / 增强 / 自定义与实测值；展开为四个并列选项，自定义显示固定转速滑杆，兼容原有档位和旧自定义曲线；悬停区分热点与参考温度，临时保护与确认失败明确显示。
 - TimeComparisonView.swift：当地 / 美西双时钟，响应系统时区变化，点击展开当天滑杆与双向日期编辑；完成保留换算，现在 / 关闭面板复位，仅可见时定时更新。
 
-- UpdateModel.swift：官方 GitHub Releases 定时发现、检查菜单与 Sparkle 调度，不改配置或助手注册。
-- UpdateUserDriver.swift：Sparkle 自定义交互层，检查 / 下载 / 准备 / 重启复用同一窗口，框架负责验签和安装。
+- UpdateModel.swift：固定签名 feed 的定时 / 手动检查、独立 Sparkle 会话、来源校验和安全重试；不调用 GitHub API，不改配置或助手注册。
+- UpdateUserDriver.swift：检查 / 下载停滞 / 准备的截止时间、取消与迟到回调隔离；重试前立即确认框架错误，复用同一窗口，框架负责双重验签和安装。
+- UpdateFailure.swift：更新阶段 / 截止时间配置和嵌套网络、HTTP、签名、配置及安装错误的中文分类。
 - UpdatePanel.swift：紧凑原生更新窗口、进度及一次性操作 / 关闭语义。
 
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md

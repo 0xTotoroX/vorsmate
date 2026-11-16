@@ -1,67 +1,34 @@
-// [INPUT]: 合成发布列表及语义版本；不访问网络、硬件或配置。
-// [OUTPUT]: 发布发现、防止降级与非官方资产、旧发布兼容的规则回归。
-// [POS]: GitHubUpdate 纯规则测试，实际安装另由隔离 Sparkle 预览验收。
+// [INPUT]: 官方固定更新源、安装包地址及语义版本；不访问网络或配置。
+// [OUTPUT]: 官方包匹配、预发布版本及异常路径拒绝回归。
+// [POS]: 更新来源策略测试；feed / 安装包双重验签另由 Sparkle 完整流程验收。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import Foundation
 import Testing
 import VorsmateCore
 
-@Suite("更新发现")
+@Suite("更新来源")
 struct UpdateTests {
-    private func release(_ version: String, draft: Bool = false, feed: Bool = true) -> [String: Any] {
-        let tag = "v\(version)"
-        let prefix = "https://github.com/0xTotoroX/vorsmate/releases/download/\(tag)/"
-        var assets = [
-            [
-                "name": "Vorsmate-\(version)-universal.dmg",
-                "browser_download_url": prefix + "Vorsmate-\(version)-universal.dmg",
-            ]
-        ]
-        if feed { assets.append(["name": "appcast.xml", "browser_download_url": prefix + "appcast.xml"]) }
-        return ["tag_name": tag, "draft": draft, "prerelease": true, "assets": assets]
+    @Test("正式与预发布版本只接受对应官方 Universal 安装包", arguments: ["0.3.1", "0.3.2-beta.1"])
+    func officialPackage(version: String) {
+        let url = URL(
+            string:
+                "https://github.com/0xTotoroX/vorsmate/releases/download/v\(version)/Vorsmate-\(version)-universal.dmg")!
+        #expect(UpdatePolicy.accepts(downloadURL: url, version: version))
+        #expect(!UpdatePolicy.accepts(downloadURL: url, version: "0.3.0"))
+        #expect(!UpdatePolicy.accepts(downloadURL: nil, version: version))
     }
-    private func data(_ releases: [[String: Any]]) throws -> Data {
-        try JSONSerialization.data(withJSONObject: releases)
-    }
-
-    @Test("数字版本参与选择，按版本而不是 GitHub 返回顺序取最新")
-    func previewRelease() throws {
-        let update = try GitHubUpdate.latest(
-            in: data([release("0.3.0"), release("8.0.0", draft: true), release("0.10.0"), release("0.2.0")]),
-            newerThan: "0.2.0")
-        #expect(update?.version == "0.10.0")
-        #expect(update?.feedURL?.absoluteString.hasSuffix("/v0.10.0/appcast.xml") == true)
-    }
-
-    @Test("相同及较旧版本不提示，不降级", arguments: ["0.2.0", "v0.2.0", "0.3.0", "0.2.0+local"])
-    func noDowngrade(current: String) throws {
-        #expect(try GitHubUpdate.latest(in: data([release("0.1.2"), release("0.2.0")]), newerThan: current) == nil)
-    }
-
-    @Test("旧发布没有签名 feed 时仍能指向发布页，不伪装成可自动安装")
-    func legacyRelease() throws {
-        let update = try GitHubUpdate.latest(in: data([release("0.3.0", feed: false)]), newerThan: "0.2.0")
-        #expect(update?.version == "0.3.0")
-        #expect(update?.feedURL == nil)
-        #expect(update?.releaseURL.absoluteString == "https://github.com/0xTotoroX/vorsmate/releases/tag/v0.3.0")
-    }
-
     @Test(
-        "外部仓库或伪装资产不作为可安装版本",
+        "外部仓库、伪装域名、不安全协议与异常资产不能安装",
         arguments: [
-            "http://github.com/0xTotoroX/vorsmate/releases/download/v0.3.0/",
-            "https://github.com.evil.example/0xTotoroX/vorsmate/releases/download/v0.3.0/",
-            "https://github.com/another/repo/releases/download/v0.3.0/",
-            "https://github.com/0xTotoroX/vorsmate/releases/download/v0.2.0/",
+            "http://github.com/0xTotoroX/vorsmate/releases/download/v0.3.1/Vorsmate-0.3.1-universal.dmg",
+            "https://github.com.evil.example/0xTotoroX/vorsmate/releases/download/v0.3.1/Vorsmate-0.3.1-universal.dmg",
+            "https://github.com/another/repo/releases/download/v0.3.1/Vorsmate-0.3.1-universal.dmg",
+            "https://github.com/0xTotoroX/vorsmate/releases/download/v0.3.1/Vorsmate-0.3.1-universal.dmg?redirect=elsewhere",
+            "https://github.com/0xTotoroX/vorsmate/releases/download/v0.3.1/other.dmg",
         ])
-    func foreignArchive(prefix: String) throws {
-        var value = release("0.3.0")
-        value["assets"] = [
-            ["name": "Vorsmate-0.3.0-universal.dmg", "browser_download_url": prefix + "Vorsmate-0.3.0-universal.dmg"]
-        ]
-        #expect(try GitHubUpdate.latest(in: data([value]), newerThan: "0.2.0") == nil)
+    func foreignPackage(address: String) {
+        #expect(!UpdatePolicy.accepts(downloadURL: URL(string: address), version: "0.3.1"))
     }
-
     @Test("语义版本遵循候选顺序和元数据规则")
     func versions() {
         let ordered = [
@@ -82,10 +49,4 @@ struct UpdateTests {
         ])
     func invalidVersion(value: String) { #expect(ReleaseVersion(value) == nil) }
 
-    @Test("无发布、无安装包和损坏响应安全结束")
-    func emptyAndInvalid() throws {
-        #expect(try GitHubUpdate.latest(in: data([]), newerThan: "0.2.0") == nil)
-        #expect(throws: (any Error).self) { try GitHubUpdate.latest(in: Data("not JSON".utf8), newerThan: "0.2.0") }
-        #expect(throws: (any Error).self) { try GitHubUpdate.latest(in: data([]), newerThan: "dev") }
-    }
 }

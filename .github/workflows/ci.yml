@@ -30,7 +30,7 @@ jobs:
           xcodebuild -version
           xcrun swift --version
       - name: Swift format
-        run: xcrun swift-format lint --strict --recursive --configuration .swift-format Package.swift Sources Tests scripts/make-icon.swift
+        run: xcrun swift-format lint --strict --recursive --configuration .swift-format Package.swift Sources Tests scripts/make-icon.swift scripts/verify-update.swift
       - name: Tests
         run: swift test
       - name: Build universal app and helper

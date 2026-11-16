@@ -6,6 +6,8 @@
 - package.sh：验证应用及助手的两种架构、签名和许可，将应用、Applications 链接及安装说明打包为 DMG；不自动签名、公证或上传。
 - make-icon.swift：从 Resources/AppIcon-Source.png 导出各尺寸透明应用图标，并生成单色矢量 StatusIcon.pdf；保留已选折面材质与小尺寸轮廓。
 
-- appcast.sh：核对包内公钥与钥匙串的更新密钥，为发行 DMG 签名并生成对应官方 Release 的 appcast.xml，不上传。
+- appcast.sh：核对包内公钥与钥匙串的更新密钥，签署发行 DMG 与完整 appcast.xml，生成对应官方 Release 的双重签名描述，不上传。
+- verify-update.swift：只使用应用公钥核验 feed / 安装包签名、长度与版本 / 构建号，不访问钥匙串或写入文件。
+- publish-appcast.sh：显式将已公开且与安装包字节一致的签名 feed 推到固定 updates 分支；独立索引，不修改主分支，不强推或创建 Release。
 
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md

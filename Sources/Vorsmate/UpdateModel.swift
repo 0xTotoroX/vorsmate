@@ -1,38 +1,75 @@
-// [INPUT]: 官方 GitHub Releases、Sparkle、包内更新公钥；不读取或改写设备配置。
-// [OUTPUT]: 后台更新检查、单一菜单入口与原生下载 / 安装 / 重启流程。
-// [POS]: 应用级更新装配；更新前沿用正常退出恢复，助手授权不注销。
+// [INPUT]: 固定签名 feed、Sparkle 更新会话和主线程检查入口。
+// [OUTPUT]: 定时 / 手动检查、可取消且有截止时间的独立会话与安全重试。
+// [POS]: 更新装配；不调用 GitHub API，不读取或改写设备配置及助手授权。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
-import AppKit
 import Combine
+import Foundation
 import Sparkle
 import SwiftUI
 import VorsmateCore
 
 @MainActor
-final class UpdateModel: NSObject, ObservableObject, SPUUpdaterDelegate {
-    @Published private(set) var checking = false
-    @Published private(set) var canCheck = true
-    private let enabled: Bool
-    private let session: URLSession
-    private let version: String
-    private var schedule: Task<Void, Never>?
-    private var checkTask: Task<Void, Never>?
-    private var candidate: GitHubUpdate?
-    private var observation: AnyCancellable?
-    private var started = false
-    private let driver = UpdateUserDriver()
+protocol UpdateSession: AnyObject {
+    func start() throws
+}
+
+@MainActor
+final class SparkleUpdateSession: NSObject, UpdateSession, SPUUpdaterDelegate {
+    private let driver: UpdateUserDriver
+    private let feedURL: URL
     private lazy var updater = SPUUpdater(
         hostBundle: .main, applicationBundle: .main, userDriver: driver, delegate: self)
 
-    init(enabled: Bool) {
+    init(driver: UpdateUserDriver, feedURL: URL = UpdatePolicy.feedURL) {
+        self.driver = driver
+        self.feedURL = feedURL
+    }
+    func start() throws {
+        try updater.start()
+        // 统一由本项目安排检查；后台仅隐藏检查 / 无更新 / 失败反馈，不绕过用户确认。
+        updater.checkForUpdates()
+    }
+    func feedURLString(for updater: SPUUpdater) -> String? { feedURL.absoluteString }
+    func updater(_ updater: SPUUpdater, mayPerform updateCheck: SPUUpdateCheck) throws {
+        if !driver.active { throw URLError(.cancelled) }
+    }
+    func updater(_ updater: SPUUpdater, shouldProceedWithUpdate item: SUAppcastItem, updateCheck: SPUUpdateCheck)
+        throws
+    {
+        guard driver.active else { throw URLError(.cancelled) }
+        guard
+            item.isInformationOnlyUpdate
+                || UpdatePolicy.accepts(downloadURL: item.fileURL, version: item.displayVersionString)
+        else { throw UpdateFailure.untrustedSource }
+    }
+}
+
+@MainActor
+final class UpdateModel: ObservableObject {
+    @Published private(set) var checking = false
+    @Published private(set) var canCheck = true
+    let panel = UpdatePanelController()
+    private let enabled: Bool
+    private let timeouts: UpdateTimeouts
+    private let showsWindows: Bool
+    private let pause: (Duration) async throws -> Void
+    private let makeSession: @MainActor (UpdateUserDriver) -> any UpdateSession
+    private var schedule: Task<Void, Never>?
+    private var session: (any UpdateSession)?
+    private var driver: UpdateUserDriver?
+    private var attempt = UUID()
+
+    init(
+        enabled: Bool, scheduled: Bool = true, timeouts: UpdateTimeouts = UpdateTimeouts(), showsWindows: Bool = true,
+        pause: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
+        makeSession: @escaping @MainActor (UpdateUserDriver) -> any UpdateSession = { SparkleUpdateSession(driver: $0) }
+    ) {
         self.enabled = enabled
-        self.version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 20
-        configuration.timeoutIntervalForResource = 30
-        self.session = URLSession(configuration: configuration)
-        super.init()
-        guard enabled else { return }
+        self.timeouts = timeouts
+        self.showsWindows = showsWindows
+        self.pause = pause
+        self.makeSession = makeSession
+        guard enabled, scheduled else { return }
         schedule = Task { [weak self] in
             do {
                 try await Task.sleep(for: .seconds(60))
@@ -43,79 +80,32 @@ final class UpdateModel: NSObject, ObservableObject, SPUUpdaterDelegate {
             } catch {}
         }
     }
-
     func check(manual: Bool = true) {
-        guard !checking, canCheck, enabled else { return }
-        checking = true
-        if manual { driver.checking { [weak self] in self?.checkTask?.cancel() } }
-        checkTask = Task { [weak self] in
-            guard let self else { return }
-            defer {
-                checking = false
-                checkTask = nil
-            }
-            do {
-                var request = URLRequest(url: GitHubUpdate.releasesURL)
-                request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-                request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
-                request.setValue("Vorsmate/\(version)", forHTTPHeaderField: "User-Agent")
-                let (data, response) = try await session.data(for: request)
-                try Task.checkCancellation()
-                guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-                    throw URLError(.badServerResponse)
-                }
-                candidate = try GitHubUpdate.latest(in: data, newerThan: version)
-                guard let candidate else {
-                    if manual { show(message: "已是最新版本", detail: "当前版本 \(version)。") }
-                    return
-                }
-                guard candidate.feedURL != nil else {
-                    if manual {
-                        show(
-                            message: "发现新版本 \(candidate.version)", detail: "此版本尚未提供应用内更新包，可从发布页下载安装。",
-                            release: candidate.releaseURL)
-                    }
-                    return
-                }
-                if !started {
-                    try updater.start()
-                    started = true
-                    observation = updater.publisher(for: \.canCheckForUpdates)
-                        .sink { [weak self] value in self?.canCheck = value }
-                }
-                if manual { updater.checkForUpdates() } else { updater.checkForUpdatesInBackground() }
-            } catch is CancellationError {
-            } catch {
-                if manual && !Task.isCancelled { show(message: "暂时无法检查更新", detail: "请检查网络连接后重试。") }
-            }
+        guard enabled else { return }
+        if let driver, driver.active {
+            if manual { driver.focus() }
+            return
         }
-    }
-
-    func feedURLString(for updater: SPUUpdater) -> String? { candidate?.feedURL?.absoluteString }
-
-    func updater(_ updater: SPUUpdater, shouldProceedWithUpdate updateItem: SUAppcastItem, updateCheck: SPUUpdateCheck)
-        throws
-    {
-        guard let candidate, updateItem.fileURL == candidate.downloadURL,
-            updateItem.displayVersionString == candidate.version
-        else {
-            throw NSError(
-                domain: "Vorsmate.Update", code: 1, userInfo: [NSLocalizedDescriptionKey: "更新包与 GitHub 发布版本不一致。"])
+        let id = UUID()
+        attempt = id
+        let driver = UpdateUserDriver(panel: panel, timeouts: timeouts, showsWindows: showsWindows, pause: pause)
+        driver.changed = { [weak self] stage in
+            guard let self, attempt == id else { return }
+            checking = stage == .checking
+            canCheck = ![.checking, .downloading, .preparing, .installing].contains(stage)
         }
+        driver.retry = { [weak self] in self?.check() }
+        self.driver = driver
+        // 截止时间覆盖 Sparkle 开始回调前的助手探测；失效会话不能覆盖下一次检查。
+        driver.begin(manual: manual)
+        let session = makeSession(driver)
+        self.session = session
+        do { try session.start() } catch { driver.fail(UpdateFailure(error)) }
     }
-
     func stop() {
         schedule?.cancel()
         schedule = nil
-        checkTask?.cancel()
-        checkTask = nil
-        session.invalidateAndCancel()
-    }
-
-    private func show(message: String, detail: String, release: URL? = nil) {
-        driver.message(message, detail: detail, button: release == nil ? "好" : "前往发布页") {
-            if let release { NSWorkspace.shared.open(release) }
-        }
+        driver?.stop()
     }
 }
 
