@@ -22,7 +22,7 @@ Swift 6 + Swift Package Manager + SwiftUI / AppKit + Sparkle + TIS + CoreAudio +
 - 内置插件按 time / inputSource / audioInput / audioOutput / fan / quickShutdown 排列，全部默认启用；通道内管理仍默认关闭。PluginHost 统一激活、停用、刷新和显隐通知，禁用立即释放监听 / 定时器 / 控制；分隔线只存在于两个启用模块之间。Preferences 继续 version 1，缺失新字段回退默认，原子保存。
 - 一键下班在风扇下方：五秒倒计时，取消 / 面板隐藏 / 插件停用均取消未提交动作；只清理常规应用，跳过自身、Finder、系统基础服务及用户排除项。关闭强制选项时，未退出应用阻止关机；“跳过”只跳过清理，不能阻止系统最终退出应用。助手先归还风扇再确认并执行固定关机 / 重启命令，无助手走 System Events。所有开发验收使用 Mock 或 --preview，严禁关机、重启或关闭真实运行应用；不覆盖 /Applications/Vorsmate.app。
 
-- 更新在启动一分钟后及每 12 小时直接读取固定 updates 分支的签名 feed，不调用 GitHub API 或 /latest；Sparkle 必须验证 feed 与安装包的双重 Ed25519 签名。检查 20 秒截止，下载无进展 60 秒、准备 120 秒截止；取消与失败后可重试，旧会话回调不能覆盖新状态，实际安装阶段不强制中断；更新不修改 settings.json 或注销助手。安装前用户确认，所有反馈复用紧凑窗口。预览不启动网络更新，发布附 appcast.xml，见 docs/updates.md。
+- 更新在启动一分钟后及每 12 小时直接读取固定 updates 分支的签名 feed，不调用 GitHub API 或 /latest；Sparkle 必须验证 feed 与安装包的双重 Ed25519 签名。检查 20 秒截止，下载无进展 60 秒、准备 120 秒截止；取消与失败后可重试，旧会话回调不能覆盖新状态，实际安装阶段不强制中断；更新不修改 settings.json 或注销助手。安装前用户确认，所有反馈复用紧凑窗口。预览不启动网络更新。Release 只附 DMG、说明仅列英中功能变化；appcast.xml 单独发布到固定 updates 分支，见 docs/updates.md。
 
 ## 地图
 

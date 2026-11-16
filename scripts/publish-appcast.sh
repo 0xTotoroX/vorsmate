@@ -6,7 +6,7 @@
 set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$PROJECT_ROOT"
-FEED="${1:-dist/release/appcast.xml}"
+FEED="${1:-dist/updates/appcast.xml}"
 APP="${2:-dist/Vorsmate.app}"
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
 ARCHIVE="${3:-dist/release/Vorsmate-$VERSION-universal.dmg}"

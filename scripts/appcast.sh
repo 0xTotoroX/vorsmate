@@ -1,7 +1,7 @@
 #!/bin/bash
 # [INPUT]: 已验证 Universal DMG、应用元数据与登录钥匙串中的项目更新密钥。
 # [OUTPUT]: 与 GitHub Release 资产对应的 feed / 安装包双重 Ed25519 签名 appcast.xml；不上传。
-# [POS]: 本地发布的最后一步，所有新版本与 DMG 一同发布。
+# [POS]: 本地发布的最后一步，更新清单单独推送固定 updates 分支，不作为 Release 附件。
 # [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -13,6 +13,7 @@ PUBLIC_KEY="$(.build/artifacts/sparkle/Sparkle/bin/generate_keys --account app.v
 EXPECTED_KEY="$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' dist/Vorsmate.app/Contents/Info.plist)"
 [[ "$PUBLIC_KEY" == "$EXPECTED_KEY" ]] || { printf 'Update key does not match application\n' >&2; exit 1; }
 SIGNATURE="$(.build/artifacts/sparkle/Sparkle/bin/sign_update --account app.vorsmate.mac "$DMG")"
+mkdir -p dist/updates
 python3 - "$VERSION" "$SIGNATURE" <<'PY'
 import datetime, email.utils, pathlib, plistlib, sys, xml.etree.ElementTree as ET
 version, signature = sys.argv[1:]
@@ -37,7 +38,7 @@ enclosure.set('url', f'https://github.com/0xTotoroX/vorsmate/releases/download/v
 enclosure.set('type', 'application/octet-stream')
 item.append(enclosure)
 ET.indent(rss)
-pathlib.Path('dist/release/appcast.xml').write_bytes(ET.tostring(rss, encoding='utf-8', xml_declaration=True))
+pathlib.Path('dist/updates/appcast.xml').write_bytes(ET.tostring(rss, encoding='utf-8', xml_declaration=True))
 PY
-.build/artifacts/sparkle/Sparkle/bin/sign_update --account app.vorsmate.mac dist/release/appcast.xml
-printf '%s\n' 'dist/release/appcast.xml'
+.build/artifacts/sparkle/Sparkle/bin/sign_update --account app.vorsmate.mac dist/updates/appcast.xml
+printf '%s\n' 'dist/updates/appcast.xml'

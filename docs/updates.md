@@ -26,12 +26,12 @@ Sparkle 锁定于 `Package.resolved`。更新私钥保存在登录钥匙串，�
 VORSMATE_SIGN_IDENTITY='证书名称或指纹' bash scripts/build.sh --universal
 bash scripts/package.sh
 bash scripts/appcast.sh
-swift scripts/verify-update.swift dist/release/appcast.xml dist/Vorsmate.app dist/release/Vorsmate-<版本>-universal.dmg
+swift scripts/verify-update.swift dist/updates/appcast.xml dist/Vorsmate.app dist/release/Vorsmate-<版本>-universal.dmg
 ```
 
-发布标题使用 `Vorsmate v<版本>`，设为常规发布；最新版本标记为 Latest。发布说明先完整英文、再完整中文，两个语言区块不交叉；只保留功能变化、安装步骤与必要升级操作，不加入测试数量、验收记录、签名 / 公证提示或机型限制段落。
+发布标题使用 `Vorsmate v<版本>`，设为常规发布；最新版本标记为 Latest。发布说明先完整英文、再完整中文，两个语言区块不交叉；仅列功能变化，不加入安装步骤、升级指引、测试数量、验收记录、签名 / 公证提示或机型限制段落。
 
-每个 Release 上传 DMG 和双重签名的 appcast.xml。所有版本、构建号、最低系统、地址与签名来自实际应用和载荷；先提交最终源码再构建，不覆盖既有安装包。钥匙串公钥不匹配时生成失败，不发布不完整更新。
+Release 仅上传 DMG。双重签名的 appcast.xml 生成在 dist/updates/，回验后单独发布到固定 updates 分支，不作为 Release 附件。所有版本、构建号、最低系统、地址与签名来自实际应用和载荷；先提交最终源码再构建，不覆盖既有安装包。钥匙串公钥不匹配时生成失败，不发布不完整更新。
 
 Release 公开、资产下载回验通过后，显式更新固定源：
 
