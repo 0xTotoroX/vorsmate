@@ -8,7 +8,7 @@ PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$PROJECT_ROOT"
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' dist/Vorsmate.app/Contents/Info.plist)"
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { printf 'Invalid version\n' >&2; exit 1; }
-DMG="dist/release/Vorsmate-$VERSION-universal.dmg"
+DMG="dist/release/Vorsmate-$VERSION.dmg"
 PUBLIC_KEY="$(.build/artifacts/sparkle/Sparkle/bin/generate_keys --account app.vorsmate.mac -p)"
 EXPECTED_KEY="$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' dist/Vorsmate.app/Contents/Info.plist)"
 [[ "$PUBLIC_KEY" == "$EXPECTED_KEY" ]] || { printf 'Update key does not match application\n' >&2; exit 1; }
@@ -22,7 +22,7 @@ ET.register_namespace('sparkle', namespace)
 info = plistlib.loads(pathlib.Path('dist/Vorsmate.app/Contents/Info.plist').read_bytes())
 enclosure = ET.fromstring(f'<enclosure xmlns:sparkle="{namespace}" {signature}/>')
 assert enclosure.attrib[f'{{{namespace}}}edSignature']
-filename = f'Vorsmate-{version}-universal.dmg'
+filename = f'Vorsmate-{version}.dmg'
 assert int(enclosure.attrib['length']) == pathlib.Path('dist/release', filename).stat().st_size
 rss = ET.Element('rss', version='2.0')
 channel = ET.SubElement(rss, 'channel')

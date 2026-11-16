@@ -9,7 +9,7 @@ cd "$PROJECT_ROOT"
 FEED="${1:-dist/updates/appcast.xml}"
 APP="${2:-dist/Vorsmate.app}"
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
-ARCHIVE="${3:-dist/release/Vorsmate-$VERSION-universal.dmg}"
+ARCHIVE="${3:-dist/release/Vorsmate-$VERSION.dmg}"
 swift scripts/verify-update.swift "$FEED" "$APP" "$ARCHIVE"
 python3 - "$FEED" "$APP" "$ARCHIVE" <<'PY'
 import hashlib, json, os, pathlib, plistlib, subprocess, sys, tempfile, xml.etree.ElementTree as ET
@@ -17,7 +17,7 @@ feed, app, archive = map(pathlib.Path, sys.argv[1:])
 info = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
 version = info['CFBundleShortVersionString']
 repo = '0xTotoroX/vorsmate'
-filename = f'Vorsmate-{version}-universal.dmg'
+filename = f'Vorsmate-{version}.dmg'
 release = json.loads(subprocess.check_output(['gh', 'release', 'view', f'v{version}', '--repo', repo,
     '--json', 'tagName,isDraft,assets']))
 assert release['tagName'] == f'v{version}' and not release['isDraft'], 'Release must be public before updating the feed'

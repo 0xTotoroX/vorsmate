@@ -26,12 +26,12 @@ Sparkle 锁定于 `Package.resolved`。更新私钥保存在登录钥匙串，�
 VORSMATE_SIGN_IDENTITY='证书名称或指纹' bash scripts/build.sh --universal
 bash scripts/package.sh
 bash scripts/appcast.sh
-swift scripts/verify-update.swift dist/updates/appcast.xml dist/Vorsmate.app dist/release/Vorsmate-<版本>-universal.dmg
+swift scripts/verify-update.swift dist/updates/appcast.xml dist/Vorsmate.app dist/release/Vorsmate-<版本>.dmg
 ```
 
 发布标题使用 `Vorsmate v<版本>`，设为常规发布；最新版本标记为 Latest。发布说明先完整英文、再完整中文，两个语言区块不交叉；仅列功能变化，不加入安装步骤、升级指引、测试数量、验收记录、签名 / 公证提示或机型限制段落。
 
-Release 仅上传 DMG。双重签名的 appcast.xml 生成在 dist/updates/，回验后单独发布到固定 updates 分支，不作为 Release 附件。所有版本、构建号、最低系统、地址与签名来自实际应用和载荷；先提交最终源码再构建，不覆盖既有安装包。钥匙串公钥不匹配时生成失败，不发布不完整更新。
+Release 仅上传 `Vorsmate-<版本>.dmg`，首字母大写，不添加架构后缀。双重签名的 appcast.xml 生成在 dist/updates/，回验后单独发布到固定 updates 分支，不作为 Release 附件。所有版本、构建号、最低系统、地址与签名来自实际应用和载荷；先提交最终源码再构建，不覆盖既有安装包。钥匙串公钥不匹配时生成失败，不发布不完整更新。
 
 Release 公开、资产下载回验通过后，显式更新固定源：
 
@@ -41,4 +41,4 @@ bash scripts/publish-appcast.sh
 
 该脚本先只用公钥检查 feed / 载荷签名、长度和版本，再核对公开 Release 的载荷摘要，最后用独立索引提交并推送 updates 分支。它不修改主分支，不创建 Release，不强推；并发更新被拒绝时先核对远端，不覆盖他人的 feed。上传后还需匿名下载固定源，确认字节与已验证文件一致。
 
-旧 v0.3.0 / v0.3.1 使用匿名 API 发现更新，可能受出口限流影响；固定源修复不改变已发布的旧安装包。旧版无法完成应用内检查时，需要先手动安装 v0.3.2 或更新的修复版本。应用标识和更新公钥继续保留。发布、完整升级与本机安装分别验收，见[验证范围](verification.md)。
+v0.3.0 / v0.3.1 使用匿名 API 发现更新。已发布的 v0.3.2 及更早版本限定旧安装包名，改名后它们的下一次升级需要手动安装包含命名兼容逻辑的新版本。当前源码接受对应官方版本的新文件名与旧 `-universal` 文件名，继续严格限制仓库、协议、路径与版本；不通过改名重新打包或覆盖旧版程序。应用标识和更新公钥继续保留。发布、完整升级与本机安装分别验收，见[验证范围](verification.md)。

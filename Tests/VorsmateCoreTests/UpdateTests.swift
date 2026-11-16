@@ -8,13 +8,16 @@ import VorsmateCore
 
 @Suite("更新来源")
 struct UpdateTests {
-    @Test("正式与预发布版本只接受对应官方 Universal 安装包", arguments: ["0.3.1", "0.3.2-beta.1"])
+    @Test("正式与预发布版本接受官方新旧安装包命名", arguments: ["0.3.1", "0.3.2-beta.1"])
     func officialPackage(version: String) {
-        let url = URL(
-            string:
-                "https://github.com/0xTotoroX/vorsmate/releases/download/v\(version)/Vorsmate-\(version)-universal.dmg")!
-        #expect(UpdatePolicy.accepts(downloadURL: url, version: version))
-        #expect(!UpdatePolicy.accepts(downloadURL: url, version: "0.3.0"))
+        for suffix in ["", "-universal"] {
+            let url = URL(
+                string:
+                    "https://github.com/0xTotoroX/vorsmate/releases/download/v\(version)/Vorsmate-\(version)\(suffix).dmg"
+            )!
+            #expect(UpdatePolicy.accepts(downloadURL: url, version: version))
+            #expect(!UpdatePolicy.accepts(downloadURL: url, version: "0.3.0"))
+        }
         #expect(!UpdatePolicy.accepts(downloadURL: nil, version: version))
     }
     @Test(
@@ -24,6 +27,12 @@ struct UpdateTests {
             "https://github.com.evil.example/0xTotoroX/vorsmate/releases/download/v0.3.1/Vorsmate-0.3.1-universal.dmg",
             "https://github.com/another/repo/releases/download/v0.3.1/Vorsmate-0.3.1-universal.dmg",
             "https://github.com/0xTotoroX/vorsmate/releases/download/v0.3.1/Vorsmate-0.3.1-universal.dmg?redirect=elsewhere",
+            "http://github.com/0xTotoroX/vorsmate/releases/download/v0.3.1/Vorsmate-0.3.1.dmg",
+            "https://github.com.evil.example/0xTotoroX/vorsmate/releases/download/v0.3.1/Vorsmate-0.3.1.dmg",
+            "https://github.com/another/repo/releases/download/v0.3.1/Vorsmate-0.3.1.dmg",
+            "https://github.com/0xTotoroX/vorsmate/releases/download/v0.3.1/Vorsmate-0.3.1.dmg?redirect=elsewhere",
+            "https://github.com/0xTotoroX/vorsmate/releases/download/v0.3.1/Vorsmate-0.3.1.dmg#download",
+            "https://github.com/0xTotoroX/vorsmate/releases/download/v0.3.1/Vorsmate-0.3.0.dmg",
             "https://github.com/0xTotoroX/vorsmate/releases/download/v0.3.1/other.dmg",
         ])
     func foreignPackage(address: String) {

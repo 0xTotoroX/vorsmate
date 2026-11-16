@@ -43,11 +43,11 @@ Built with SwiftUI and AppKit, with native Liquid Glass on macOS 26+. No account
 
 Requires **macOS 14 or later**. The universal app includes Apple Silicon and Intel architectures.
 
-1. Download `Vorsmate-0.3.2-universal.dmg` from [GitHub Releases](https://github.com/0xTotoroX/vorsmate/releases/tag/v0.3.2).
+1. Download `Vorsmate-0.3.2.dmg` from [GitHub Releases](https://github.com/0xTotoroX/vorsmate/releases/tag/v0.3.2).
 2. Open the disk image and drag **Vorsmate** into **Applications**.
 3. Launch it from Applications and click the **V** icon in the menu bar.
 
-**Upgrading from v0.3.0 / v0.3.1:** The old updater may keep waiting or hit API rate limits. If it cannot finish, download and install v0.3.2 manually. Keep your existing settings and fan helper enabled.
+**Upgrading from v0.3.2 or earlier:** These versions use the old installer naming rule. Install the next release manually from GitHub Releases; that release includes the new rule for subsequent in-app updates. Existing settings and fan helper authorization are retained.
 
 ## Usage
 

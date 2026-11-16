@@ -10,7 +10,7 @@
 - FanCurveTests.swift：两档持续中负载的实际差异、有限趋势提前量、小波动不变速、短脉冲不接管、系统目标下界、分档升降速、冷却释放及采样 / 时钟边界。
 - TimeComparisonTests.swift：可注入的当地时区、非整点 / 反向 / 零时差、独立夏令时、跨年以及 23 / 25 小时滑杆边界。
 
-- UpdateTests.swift：语义版本、对应官方 Universal 安装包匹配与外部域名 / 仓库、协议、路径和异常版本拒绝。
+- UpdateTests.swift：语义版本、对应官方新旧安装包命名匹配与外部域名 / 仓库、协议、路径和异常版本拒绝。
 
 - PluginPreferencesTests.swift：旧版配置默认回退、新字段原子保存往返 / 冲突及六模块顺序。
 - ShutdownTests.swift：Mock 驱动和可推进时钟验证五秒倒计时、15 种取消组合、排除 / 保存、温和 / 强制顺序、错误与预览反馈。

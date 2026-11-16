@@ -43,11 +43,11 @@
 
 需要 **macOS 14 或更新版本**。安装包包含 Apple Silicon 与 Intel 两种架构；应用界面目前为简体中文。
 
-1. 在 [GitHub Releases](https://github.com/0xTotoroX/vorsmate/releases/tag/v0.3.2) 下载 `Vorsmate-0.3.2-universal.dmg`。
+1. 在 [GitHub Releases](https://github.com/0xTotoroX/vorsmate/releases/tag/v0.3.2) 下载 `Vorsmate-0.3.2.dmg`。
 2. 打开磁盘镜像，将 **Vorsmate** 拖入 **Applications**。
 3. 从“应用程序”中启动，点击菜单栏的 **V** 图标。
 
-**从 v0.3.0 / v0.3.1 升级**：旧版检查更新可能一直等待或受 API 限流影响。若无法完成，请手动下载安装 v0.3.2，无需删除现有配置或停用风扇助手。
+**升级说明**：v0.3.2 及更早版本仍使用旧文件名规则，下一次升级请从 Releases 手动安装新版。新规则随下一版生效，后续可继续应用内更新；现有配置和风扇助手授权保留。
 
 ## 使用
 

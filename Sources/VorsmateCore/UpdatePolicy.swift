@@ -66,9 +66,8 @@ public enum UpdatePolicy {
     public static let releaseURL = URL(string: "https://github.com/0xTotoroX/vorsmate/releases")!
 
     public static func accepts(downloadURL: URL?, version: String) -> Bool {
-        guard ReleaseVersion(version) != nil else { return false }
-        let expected =
-            "https://github.com/0xTotoroX/vorsmate/releases/download/v\(version)/Vorsmate-\(version)-universal.dmg"
-        return downloadURL?.absoluteString == expected
+        guard ReleaseVersion(version) != nil, let address = downloadURL?.absoluteString else { return false }
+        let base = "https://github.com/0xTotoroX/vorsmate/releases/download/v\(version)/Vorsmate-\(version)"
+        return address == "\(base).dmg" || address == "\(base)-universal.dmg"
     }
 }
