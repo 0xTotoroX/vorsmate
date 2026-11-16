@@ -29,6 +29,8 @@ bash scripts/appcast.sh
 swift scripts/verify-update.swift dist/release/appcast.xml dist/Vorsmate.app dist/release/Vorsmate-<版本>-universal.dmg
 ```
 
+发布标题使用 `Vorsmate v<版本>`，设为常规发布；最新版本标记为 Latest。发布说明先完整英文、再完整中文，两个语言区块不交叉。签名与公证状态按实际情况说明。
+
 每个 Release 上传 DMG 和双重签名的 appcast.xml。所有版本、构建号、最低系统、地址与签名来自实际应用和载荷；先提交最终源码再构建，不覆盖既有安装包。钥匙串公钥不匹配时生成失败，不发布不完整更新。
 
 Release 公开、资产下载回验通过后，显式更新固定源：
