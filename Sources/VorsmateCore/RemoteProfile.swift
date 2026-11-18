@@ -103,6 +103,7 @@ public struct RemoteBinding: Codable, Equatable, Sendable {
     public var single = RemoteAction(.none)
     public var double = RemoteAction(.none)
     public var long = RemoteAction(.none)
+    package var hold: RemoteHoldMode?
     public var rapid = false
     public init() {}
     public subscript(_ gesture: RemoteGesture) -> RemoteAction {
@@ -127,6 +128,7 @@ public struct RemoteProfile: Codable, Equatable, Sendable {
     public var buttons: [String: RemoteBinding] = [:]
     public var doubleMilliseconds = 300
     public var longMilliseconds = 550
+    package var applications: [String: RemoteApplicationMap]?
     public var voiceFn = false
     public init() {
         var ok = RemoteBinding()
@@ -140,7 +142,7 @@ public struct RemoteProfile: Codable, Equatable, Sendable {
             if button == .voice {
                 if voiceFn { values[source] = 0xff_0000_0003 }
             } else if let binding = buttons[button.rawValue] {
-                if binding.single.kind == .shortcut, (binding.single.flags ?? 0) == 0,
+                if (binding.hold ?? .once) == .once, binding.single.kind == .shortcut, (binding.single.flags ?? 0) == 0,
                     binding.double.kind == .none, binding.long.kind == .none,
                     let modifier = RemoteModifier.all.first(where: { $0.code == binding.single.keyCode })
                 {
@@ -154,10 +156,25 @@ public struct RemoteProfile: Codable, Equatable, Sendable {
     }
 
     public func validate() throws {
-        guard version == 1, (1...3000).contains(doubleMilliseconds), (1...5000).contains(longMilliseconds) else {
+        guard (1...2).contains(version), (1...3000).contains(doubleMilliseconds), (1...5000).contains(longMilliseconds)
+        else {
             throw CocoaError(.fileReadCorruptFile)
         }
+        for (id, map) in applications ?? [:] {
+            guard version == 2, !id.isEmpty, !map.name.isEmpty,
+                map.buttons.allSatisfy({ key, override in
+                    guard let button = RemoteButton(rawValue: key), button != .voice else { return false }
+                    return override.actions.keys.allSatisfy { RemoteGesture(rawValue: $0) != nil }
+                })
+            else { throw CocoaError(.fileReadCorruptFile) }
+            try resolved(for: id).validateBindings()
+        }
+        try validateBindings()
+    }
+
+    private func validateBindings() throws {
         for binding in buttons.values {
+            if binding.hold != nil && version < 2 { throw CocoaError(.fileReadCorruptFile) }
             for gesture in RemoteGesture.allCases {
                 let action = binding[gesture]
                 if action.kind == .shortcut && action.keyCode.map({ $0 <= 127 }) != true {
@@ -172,7 +189,16 @@ public struct RemoteProfile: Codable, Equatable, Sendable {
         }
     }
     public static var location: URL { URL.applicationSupportDirectory.appending(path: "VorsmateRemote/buttons.json") }
-    public static func read(from url: URL = location) throws -> Self {
+    // Preserve the existing v1 file for the previous app when advanced mappings are first saved.
+    package static func advancedLocation(for url: URL) -> URL {
+        let stem = url.deletingPathExtension().lastPathComponent
+        if stem.hasSuffix("-v2") { return url }
+        return url.deletingLastPathComponent().appending(path: stem + "-v2.json")
+    }
+
+    public static func read(from base: URL = location) throws -> Self {
+        let advanced = advancedLocation(for: base)
+        let url = FileManager.default.fileExists(atPath: advanced.path) ? advanced : base
         guard FileManager.default.fileExists(atPath: url.path) else { return Self() }
         let p = try JSONDecoder().decode(Self.self, from: Data(contentsOf: url))
         try p.validate()
@@ -184,6 +210,8 @@ public struct RemoteProfile: Codable, Equatable, Sendable {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        try encoder.encode(self).write(to: url, options: .atomic)
+        let advanced = Self.advancedLocation(for: url)
+        let destination = version >= 2 || FileManager.default.fileExists(atPath: advanced.path) ? advanced : url
+        try encoder.encode(self).write(to: destination, options: .atomic)
     }
 }

@@ -49,7 +49,10 @@ def convert(data):
     mappings = device["mappings"]
     apps = {a["id"]: a for a in unpack("customApplicationProfiles", [])}
     timing = mappings["interactionSettings"]
-    if timing.get("modes") or data.get("voiceKeyMode") != "fn" or data.get("voiceFnTapModeEnabled"):
+    modes = timing.get("modes", {})
+    if any(key not in KEYS or mode not in ("once", "repeatSingle", "repeatLong") for key, mode in modes.items()):
+        raise ValueError("此配置使用了暂不支持的持续按下方向键模式")
+    if data.get("voiceKeyMode") != "fn" or data.get("voiceFnTapModeEnabled"):
         raise ValueError("该设备的长按模式或语音键设置与目前支持的配置不同")
     bindings = {}
     for key in dict.fromkeys((*KEYS, *mappings["buttonBindings"])):
@@ -63,19 +66,28 @@ def convert(data):
         for trigger, record in gestures.items():
             binding[GESTURES[trigger]] = convert_action(record, apps)
         binding["rapid"] = mappings["buttonRapidPressEnabled"].get(key, False)
+        if modes.get(key, "once") != "once":
+            binding["hold"] = modes[key]
         bindings[key] = binding
     # The user explicitly replaced this one gesture with the tested dictation toggle.
     bindings["ok"]["single"] = DICTATION_SHORTCUT.copy()
-    return {"version": 1, "buttons": bindings, "voiceFn": True,
+    version = 2 if any("hold" in binding for binding in bindings.values()) else 1
+    return {"version": version, "buttons": bindings, "voiceFn": True,
             "doubleMilliseconds": timing["doubleClickMilliseconds"], "longMilliseconds": timing["longPressMilliseconds"]}
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, default=Path.home() / "Library/Preferences/com.hd838a.RemoteMic.plist")
-    parser.add_argument("--output", type=Path, default=Path.home() / "Library/Application Support/VorsmateRemote/buttons.json")
+    parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     profile = convert(plistlib.loads(args.source.read_bytes()))
+    if args.output is None:
+        base = Path.home() / "Library/Application Support/VorsmateRemote/buttons.json"
+        advanced = base.with_name("buttons-v2.json")
+        args.output = advanced if advanced.exists() or profile["version"] == 2 else base
+        if profile["version"] == 2 and base.exists() and not advanced.exists():
+            parser.error("目标已有键位配置。请用 --output 选择新文件，不会替换已有编辑。")
     if args.output.exists():
         existing = json.loads(args.output.read_bytes())
         # Compare the old named preset without rewriting the user's file.

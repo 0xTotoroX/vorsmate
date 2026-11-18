@@ -56,6 +56,7 @@ final class RemoteApp: NSObject, NSApplicationDelegate {
                 NSApp.terminate(nil)
             }
         }
+        monitor.observeFrontmost()
         if !preview { monitor.start() }
         if !hosted { show() }
     }
@@ -93,6 +94,11 @@ final class RemoteApp: NSObject, NSApplicationDelegate {
         case .postPermission:
             monitor.requestPostAccess()
             publishState()
+        case .configure(let id, let revision, let edit):
+            let error = monitor.configure(edit, revision: revision)
+            let state = monitor.editorState
+            lastState = state
+            reply(.saved(id, state: state, error: error))
         case .change(let id, let button, let gesture, let previous, let action):
             let error = monitor.edit(button, gesture: gesture, action: action, previous: previous)
             let state = monitor.editorState

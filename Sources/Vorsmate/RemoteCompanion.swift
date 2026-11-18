@@ -94,7 +94,7 @@ final class RemoteCompanion: ObservableObject, VorsmatePlugin {
     func panelDidChangeVisibility(_ visible: Bool) { if visible { discover() } }
 
     private var supportsEditor: Bool {
-        Bundle(url: url)?.object(forInfoDictionaryKey: "VorsmateRemoteEditorProtocol") as? Int == 1
+        Bundle(url: url)?.object(forInfoDictionaryKey: "VorsmateRemoteMappingProtocol") as? Int == 1
     }
 
     func beginEditing() {
@@ -113,12 +113,12 @@ final class RemoteCompanion: ObservableObject, VorsmatePlugin {
         editor = nil
     }
 
-    func change(_ button: RemoteButton, gesture: RemoteGesture, previous: RemoteAction, action: RemoteAction) {
-        guard observing, pending == nil, editor != nil else { return }
+    func configure(_ edit: RemoteMappingEdit, revision: UUID?) {
+        guard observing, pending == nil, let revision else { return }
         let id = UUID()
         pending = id
         editorError = nil
-        send(.change(id: id, button: button, gesture: gesture, previous: previous, action: action))
+        send(.configure(id: id, revision: revision, edit: edit))
     }
 
     func requestPermission(input: Bool) { send(input ? .inputPermission : .postPermission) }

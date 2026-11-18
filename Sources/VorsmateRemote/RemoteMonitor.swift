@@ -37,9 +37,15 @@ final class RemoteMonitor: ObservableObject {
     private var pending: [(RemoteStroke, RemoteAction)] = []
     private var sending = false
     private var generation = 0
+    private var revision = UUID()
+    @Published private(set) var frontApp: String?
+    private var rawPressed: Set<RemoteButton> = []
+    private var effective = RemoteProfile()
+
     @Published private(set) var lastGesture: String?
 
     private var deadlineTimer: Timer?
+    private var remapAfterRelease = false
     private var activeMap: [UInt64: UInt64] = [:]
     private var now: Int { Int(ProcessInfo.processInfo.systemUptime * 1000) }
 
@@ -51,16 +57,20 @@ final class RemoteMonitor: ObservableObject {
         }
         if preview {
             profile = .editorPreview
+            effective = profile
         } else {
             reloadProfile()
         }
     }
 
     var editorState: RemoteEditorState {
-        RemoteEditorState(
+        var state = RemoteEditorState(
             profile: profile, status: preview ? "预览" : status, voice: preview ? "预览" : voiceStatus,
             needsInput: !preview && needsPermission, needsPost: !preview && !CGPreflightPostEventAccess(),
             problem: profileError, feedback: feedback)
+        state.revision = revision
+        state.frontApp = frontApp
+        return state
     }
 
     func reloadProfile() {
@@ -71,7 +81,7 @@ final class RemoteMonitor: ObservableObject {
             profileError = nil
             if changed {
                 cancelGestures()
-                profile = saved
+                replaceProfile(saved)
                 if locked { tick() }
             }
         } catch {
@@ -84,14 +94,33 @@ final class RemoteMonitor: ObservableObject {
     func edit(_ button: RemoteButton, gesture: RemoteGesture, action: RemoteAction, previous: RemoteAction? = nil)
         -> String?
     {
-        if let profileError { return profileError }
-        do {
-            let next = try profile.editing(
+        save {
+            try profile.editing(
                 button, gesture: gesture, previous: previous ?? profile.action(for: button, gesture: gesture),
                 action: action)
+        }
+    }
+
+    func configure(_ edit: RemoteMappingEdit, revision expected: UUID) -> String? {
+        save {
+            guard expected == revision else { throw PreferenceError.changedOnDisk }
+            return try profile.applying(edit)
+        }
+    }
+
+    private func replaceProfile(_ value: RemoteProfile) {
+        revision = UUID()
+        profile = value
+        effective = value.resolved(for: frontApp)
+    }
+
+    private func save(_ change: () throws -> RemoteProfile) -> String? {
+        if let profileError { return profileError }
+        do {
+            let next = try change()
             if !preview { try next.save(replacing: profile) }
             cancelGestures()
-            profile = next
+            replaceProfile(next)
             feedback = nil
             if locked { tick() }
             return nil
@@ -113,7 +142,7 @@ final class RemoteMonitor: ObservableObject {
     private func cancelGestures() {
         generation &+= 1
         pending.removeAll()
-        gestures = RemoteGestures()
+        gestures.cancel(holding: rawPressed)
         deadlineTimer?.invalidate()
         deadlineTimer = nil
     }
@@ -136,6 +165,7 @@ final class RemoteMonitor: ObservableObject {
             return
         }
         let events = NSWorkspace.shared.notificationCenter
+
         events.addObserver(self, selector: #selector(willSleep), name: NSWorkspace.willSleepNotification, object: nil)
         events.addObserver(self, selector: #selector(didWake), name: NSWorkspace.didWakeNotification, object: nil)
         tick()
@@ -165,6 +195,7 @@ final class RemoteMonitor: ObservableObject {
         voice.stop()
         voiceState(message, external ? "external" : "offline")
         sourceID = nil
+        rawPressed = []
         cancelGestures()
         if let manager {
             IOHIDManagerUnscheduleFromRunLoop(manager, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
@@ -187,8 +218,30 @@ final class RemoteMonitor: ObservableObject {
         tick()
     }
 
+    @discardableResult
+    private func refreshFrontmost() -> Bool {
+        let id = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        guard id != frontApp else { return false }
+        cancelGestures()
+        frontApp = id
+        effective = profile.resolved(for: id)
+        return true
+    }
+
+    func observeFrontmost() {
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self, selector: #selector(frontmostChanged), name: NSWorkspace.didActivateApplicationNotification,
+            object: nil)
+        refreshFrontmost()
+    }
+
+    @objc private func frontmostChanged() {
+        if refreshFrontmost() { tick() }
+    }
+
     private func tick() {
         guard locked && !sleeping else { return }
+        refreshFrontmost()
         if let profileError {
             idle("无法读取按键配置：\(profileError)")
             return
@@ -217,6 +270,7 @@ final class RemoteMonitor: ObservableObject {
                         monitor.voice.stop()
                         monitor.voiceState("遥控器麦克风已断开", "offline")
                         monitor.sourceID = nil
+                        monitor.rawPressed = []
                         monitor.cancelGestures()
                         do {
                             try monitor.lease.recover()
@@ -251,6 +305,7 @@ final class RemoteMonitor: ObservableObject {
         let only = devices.count == 1 ? devices.first : nil
         let current = only.flatMap(Self.registryID)
         if sourceID != current || current == nil {
+            rawPressed = []
             sourceID = nil
             cancelGestures()
             do { try lease.recover() } catch {
@@ -266,10 +321,10 @@ final class RemoteMonitor: ObservableObject {
         }
         let unique = IOHIDDeviceGetProperty(only, "PhysicalDeviceUniqueID" as CFString) as? String
         voice.poll(identity: unique.flatMap(UUID.init(uuidString:)))
-        var desired = profile.deviceMap
+        var desired = effective.deviceMap
         if !CGPreflightPostEventAccess() {
             for button in RemoteButton.allCases where button != .voice {
-                guard let binding = profile.buttons[button.rawValue] else { continue }
+                guard let binding = effective.buttons[button.rawValue] else { continue }
                 // A mapped confirm shortcut must never fall through as a physical Return.
                 if button == .ok && binding.single.kind == .shortcut { continue }
                 let canPerform = RemoteGesture.allCases.contains {
@@ -279,11 +334,22 @@ final class RemoteMonitor: ObservableObject {
                 if !canPerform && desired[key] == 0 { desired.removeValue(forKey: key) }
             }
         }
-        if sourceID == current && activeMap == desired && lease.isSuppressed() { return }
+        if sourceID == current && lease.isSuppressed() {
+            if activeMap == desired {
+                remapAfterRelease = false
+                return
+            }
+            // Retain a held native modifier's existing mapping until its release.
+            if !rawPressed.isEmpty {
+                remapAfterRelease = true
+                return
+            }
+        }
         sourceID = nil
         cancelGestures()
         do {
             try lease.acquire(desired)
+            remapAfterRelease = false
             activeMap = desired
             sourceID = current
             update("遥控器就绪")
@@ -299,8 +365,17 @@ final class RemoteMonitor: ObservableObject {
         guard let sourceID, Self.registryID(device) == sourceID,
             let pressed = RemoteButton.pressed(reportID: id, bytes: bytes)
         else { return }
+        if refreshFrontmost() { tick() }
+        guard self.sourceID == sourceID else { return }
+        rawPressed = pressed
+        if remapAfterRelease {
+            gestures.cancel(holding: pressed)
+            if pressed.isEmpty { tick() }
+            return
+        }
+        pending.removeAll { $0.0.repeated && !pressed.contains($0.0.button) }
         let claimed = pressed.filter { activeMap[UInt64(7) << 32 | UInt64($0.usage)] == 0 }
-        let actions = gestures.ingest(claimed, at: now, profile: profile)
+        let actions = gestures.ingest(claimed, at: now, profile: effective)
         scheduleDeadline()
         deliver(actions)
     }
@@ -312,6 +387,10 @@ final class RemoteMonitor: ObservableObject {
         let timer = Timer(timeInterval: Double(max(0, due - now)) / 1000, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
+                if self.refreshFrontmost() {
+                    self.tick()
+                    return
+                }
                 let actions = self.gestures.advance(to: self.now)
                 self.scheduleDeadline()
                 self.deliver(actions)
@@ -323,13 +402,18 @@ final class RemoteMonitor: ObservableObject {
 
     private func deliver(_ strokes: [RemoteStroke]) {
         guard !strokes.isEmpty else { return }
+        if refreshFrontmost() {
+            tick()
+            return
+        }
         guard sourceID != nil, !competing, lease.isSuppressed() else {
             cancelGestures()
             tick()
             return
         }
         for stroke in strokes {
-            guard let action = profile.buttons[stroke.button.rawValue]?[stroke.gesture], action.kind != .none else {
+            if stroke.repeated && (sending || !rawPressed.contains(stroke.button)) { continue }
+            guard let action = effective.buttons[stroke.button.rawValue]?[stroke.gesture], action.kind != .none else {
                 continue
             }
             pending.append((stroke, action))
@@ -339,6 +423,10 @@ final class RemoteMonitor: ObservableObject {
         Task {
             defer { sending = false }
             while !pending.isEmpty {
+                if refreshFrontmost() {
+                    tick()
+                    return
+                }
                 let (stroke, action) = pending.removeFirst()
                 let current = generation
                 guard sourceID != nil, !competing, lease.isSuppressed() else {
@@ -353,7 +441,12 @@ final class RemoteMonitor: ObservableObject {
                         lastGesture = "\(stroke.button.name) · \(stroke.gesture.name)"
                         sent += 1
                     }
-                } catch { if current == generation { feedback = error.localizedDescription } }
+                } catch {
+                    if current == generation {
+                        feedback = error.localizedDescription
+                        cancelGestures()
+                    }
+                }
             }
         }
     }
@@ -390,6 +483,18 @@ extension RemoteProfile {
         ok.double = shortcut(87, "Numpad5")
         ok.long = shortcut(36, "回车")
         profile.buttons[RemoteButton.ok.rawValue] = ok
+        // Representative per-app overrides are confined to the in-memory UI preview.
+        let chrome = "com.google.Chrome"
+        do {
+            profile = try profile.applying(.addApp(id: chrome, name: "Google Chrome"))
+            var previous = shortcut(33, "[")
+            previous.flags = RemoteModifier.flags(RemoteModifier.all.filter { $0.code == 55 })
+            var next = previous
+            next.keyCode = 30
+            next.label = "]"
+            profile = try profile.applying(.action(app: chrome, button: .left, gesture: .single, value: previous))
+            profile = try profile.applying(.action(app: chrome, button: .right, gesture: .single, value: next))
+        } catch { assertionFailure("无效的遥控器预览配置") }
         return profile
     }
 }

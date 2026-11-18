@@ -14,6 +14,7 @@ struct PanelView: View {
     var onHeightChange: (CGFloat) -> Void
     @State private var expandedSection: PluginID?
     @State private var remotePage = RemotePanelPage.home
+    @State private var remoteAppID: String?
     @State private var remoteGesture = RemoteGesture.single
     @State private var contentHeight: CGFloat = 360
 
@@ -24,7 +25,7 @@ struct PanelView: View {
                     content
                 } else {
                     RemotePanel(
-                        plugin: model.remote, page: $remotePage, gesture: $remoteGesture,
+                        plugin: model.remote, page: $remotePage, gesture: $remoteGesture, appID: $remoteAppID,
                         protectInteraction: protectInteraction)
                 }
             }
@@ -55,6 +56,7 @@ struct PanelView: View {
                 expandedSection = nil
                 remotePage = .home
                 remoteGesture = .single
+                remoteAppID = nil
             }
         }
         .onChange(of: remotePage == .home) { _, home in

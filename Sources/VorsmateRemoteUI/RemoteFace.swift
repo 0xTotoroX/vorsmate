@@ -4,16 +4,12 @@
 import SwiftUI
 import VorsmateCore
 
-package struct RemoteFace: View {
-    @Binding var selected: RemoteButton
-    private let scale: CGFloat
-    private let image: NSImage?
-    package init(selected: Binding<RemoteButton>, image: NSImage? = NSImage(named: "RC003"), scale: CGFloat = 0.29) {
-        _selected = selected
-        self.image = image
-        self.scale = scale
+package enum RemoteFaceLayout {
+    package static func key(at location: CGPoint, scale: CGFloat) -> RemoteButton? {
+        let point = CGPoint(x: location.x / scale, y: location.y / scale)
+        return RemoteButton.allCases.first { region($0).contains(point) }
     }
-    private func region(_ key: RemoteButton) -> Path {
+    package static func region(_ key: RemoteButton) -> Path {
         func circle(_ x: CGFloat, _ y: CGFloat, _ r: CGFloat) -> Path {
             Path(ellipseIn: CGRect(x: x - r, y: y - r, width: 2 * r, height: 2 * r))
         }
@@ -51,21 +47,58 @@ package struct RemoteFace: View {
         }
     }
 
+}
+
+package struct RemoteFaceArtwork: View {
+    let image: NSImage?
+    let scale: CGFloat
+    let selected: RemoteButton?
+    let pressed: RemoteButton?
+    package init(image: NSImage?, scale: CGFloat, selected: RemoteButton? = nil, pressed: RemoteButton? = nil) {
+        self.image = image
+        self.scale = scale
+        self.selected = selected
+        self.pressed = pressed
+    }
     package var body: some View {
         ZStack {
-            if let image {
-                Image(nsImage: image).resizable().interpolation(.high)
-            }
+            if let image { Image(nsImage: image).resizable().interpolation(.high) }
             Canvas { context, _ in
                 context.scaleBy(x: scale, y: scale)
-                context.stroke(region(selected), with: .color(.accentColor), lineWidth: 1.6 / scale)
-            }
-        }.frame(width: 460 * scale, height: 1440 * scale).contentShape(Rectangle())
-            .gesture(
-                SpatialTapGesture().onEnded { tap in
-                    let point = CGPoint(x: tap.location.x / scale, y: tap.location.y / scale)
-                    if let key = RemoteButton.allCases.first(where: { region($0).contains(point) }) { selected = key }
+                if pressed != nil {
+                    let body = Path(roundedRect: CGRect(x: 55, y: 28, width: 350, height: 1384), cornerRadius: 18)
+                    context.stroke(body, with: .color(.blue.opacity(0.75)), lineWidth: 1.2 / scale)
                 }
-            ).accessibilityHidden(true)
+                if let key = pressed ?? selected {
+                    let path = RemoteFaceLayout.region(key)
+                    if pressed != nil { context.fill(path, with: .color(.blue.opacity(0.18))) }
+                    context.stroke(path, with: .color(.blue), lineWidth: (pressed == nil ? 1.6 : 2.4) / scale)
+                }
+            }
+        }.frame(width: 460 * scale, height: 1440 * scale).accessibilityHidden(true)
+    }
+}
+
+package struct RemoteFace: View {
+    @Binding var selected: RemoteButton
+    @GestureState private var pressed: RemoteButton?
+    private let scale: CGFloat
+    private let image: NSImage?
+    package init(selected: Binding<RemoteButton>, image: NSImage? = NSImage(named: "RC003"), scale: CGFloat = 0.29) {
+        _selected = selected
+        self.image = image
+        self.scale = scale
+    }
+    private func hit(_ drag: DragGesture.Value) -> RemoteButton? {
+        let key = RemoteFaceLayout.key(at: drag.startLocation, scale: scale)
+        return key == RemoteFaceLayout.key(at: drag.location, scale: scale) ? key : nil
+    }
+    package var body: some View {
+        RemoteFaceArtwork(image: image, scale: scale, selected: selected, pressed: pressed)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .updating($pressed) { drag, state, _ in state = hit(drag) }
+                    .onEnded { drag in if let key = hit(drag) { selected = key } })
     }
 }

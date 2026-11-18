@@ -4,6 +4,7 @@ import Foundation
 
 package enum RemoteEditorCommand: Codable, Equatable {
     case observe, stopObserving, inputPermission, postPermission
+    case configure(id: UUID, revision: UUID, edit: RemoteMappingEdit)
     case change(id: UUID, button: RemoteButton, gesture: RemoteGesture, previous: RemoteAction, action: RemoteAction)
 }
 
@@ -11,6 +12,8 @@ package struct RemoteEditorState: Codable, Equatable {
     package var profile: RemoteProfile
     package var status: String
     package var voice: String
+    package var revision: UUID?
+    package var frontApp: String?
     package var needsInput: Bool
     package var needsPost: Bool
     package var feedback: String?

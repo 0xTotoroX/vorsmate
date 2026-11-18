@@ -4,7 +4,9 @@
 public struct RemoteStroke: Equatable, Sendable {
     public let button: RemoteButton
     public let gesture: RemoteGesture
-    public init(_ button: RemoteButton, _ gesture: RemoteGesture) {
+    package let repeated: Bool
+    public init(_ button: RemoteButton, _ gesture: RemoteGesture, repeated: Bool = false) {
+        self.repeated = repeated
         self.button = button
         self.gesture = gesture
     }
@@ -16,9 +18,17 @@ public struct RemoteGestures: Sendable {
         var second = false
         var releasedAt: Int?
         var holdAt: Int?
+        var holdGesture = RemoteGesture.long
+        var repeats = false
         var singleAt: Int?
     }
     private var states: [RemoteButton: State] = [:]
+    private var waitForRelease: Set<RemoteButton> = []
+    package mutating func cancel(holding keys: Set<RemoteButton>) {
+        states.removeAll()
+        waitForRelease = keys
+    }
+    package static let repeatInterval = 120
     public init() {}
     public var deadline: Int? { states.values.compactMap { [$0.holdAt, $0.singleAt].compactMap { $0 }.min() }.min() }
     public mutating func advance(to now: Int) -> [RemoteStroke] {
@@ -26,8 +36,8 @@ public struct RemoteGestures: Sendable {
         for key in RemoteButton.allCases {
             guard var state = states[key] else { continue }
             if let due = state.holdAt, due <= now {
-                result.append(RemoteStroke(key, .long))
-                state.holdAt = nil
+                result.append(RemoteStroke(key, state.holdGesture, repeated: state.fired))
+                state.holdAt = state.repeats ? now + Self.repeatInterval : nil
                 state.fired = true
             }
             if let due = state.singleAt, due <= now {
@@ -39,6 +49,12 @@ public struct RemoteGestures: Sendable {
         return result
     }
     public mutating func ingest(_ pressed: Set<RemoteButton>, at now: Int, profile: RemoteProfile) -> [RemoteStroke] {
+        waitForRelease.formIntersection(pressed)
+        let pressed = pressed.subtracting(waitForRelease)
+        // A delayed repeat timer must not add a final repeat on the release report.
+        for key in states.keys where !pressed.contains(key) && states[key]?.fired == true {
+            states[key]?.holdAt = nil
+        }
         var result = advance(to: now)
         for key in RemoteButton.allCases where key != .voice {
             guard let binding = profile.buttons[key.rawValue] else { continue }
@@ -53,7 +69,10 @@ public struct RemoteGestures: Sendable {
                 state.second = !bounced && state.singleAt != nil
                 if !bounced {
                     state.singleAt = nil
-                    if binding.long.kind != .none { state.holdAt = now + profile.longMilliseconds }
+                    let mode = binding.hold ?? .once
+                    state.holdGesture = mode == .repeatSingle && binding.single.kind != .none ? .single : .long
+                    state.repeats = mode == .repeatLong || state.holdGesture == .single
+                    if binding[state.holdGesture].kind != .none { state.holdAt = now + profile.longMilliseconds }
                 }
             } else {
                 state.releasedAt = now
