@@ -65,7 +65,7 @@ struct ShutdownTests {
         controller.start(.restart)
         await settle()
         #expect(driver.events == ["quit:close", "quit:keep"])
-        #expect(controller.error != nil)
+        #expect(controller.error?.contains("「文稿」") == true)
         controller.deactivate()
     }
     @Test("自然退出后不强制退出；系统错误可见且可再次发起")
@@ -96,6 +96,72 @@ struct ShutdownTests {
         #expect(bad.policy.excludedBundleIDs.isEmpty)
         #expect(bad.error != nil)
     }
+    @Test("批量选择只改目标集合，一次保存，保留离线应用排除项")
+    func bulkSelection() {
+        var policy = ShutdownPolicy()
+        policy.excludedBundleIDs = ["offline", "keep"]
+        var writes = 0
+        let controller = ShutdownController(driver: ShutdownMock(), policy: policy, persist: { _ in writes += 1 })
+        controller.setIncluded(false, ids: ["keep", "close"])
+        #expect(controller.policy.excludedBundleIDs == ["keep", "close", "offline"])
+        controller.setIncluded(false, ids: ["close"])
+        #expect(writes == 1)
+        controller.setIncluded(true, ids: ["keep"])
+        #expect(controller.policy.excludedBundleIDs == ["close", "offline"])
+        #expect(writes == 2)
+    }
+
+    @Test("倒计时锁定用户看到的进程，之后打开的应用不会被插件退出")
+    func reviewedAppsOnly() async {
+        let clock = ShutdownClock()
+        let driver = ShutdownMock()
+        let controller = ShutdownController(driver: driver, sleep: { try await clock.sleep($0) })
+        controller.activate()
+        controller.panelDidChangeVisibility(true)
+        controller.start(.restart)
+        driver.apps.append(RunningAppItem(bundleID: "late", name: "新启动", pids: [4]))
+        controller.refresh()
+        #expect(!controller.apps.contains { $0.id == "late" })
+        for _ in 0..<6 { await clock.advance() }
+        await settle()
+        #expect(!driver.events.contains("quit:late"))
+        #expect(driver.events.last == "restart")
+        #expect(controller.apps.contains { $0.id == "late" })
+    }
+
+    @Test("系统已接收请求后，收起再打开不能重复提交")
+    func pendingReceipt() async {
+        let driver = ShutdownMock()
+        driver.waitForReceipt = true
+        let controller = ShutdownController(driver: driver, sleep: { _ in })
+        controller.activate()
+        controller.panelDidChangeVisibility(true)
+        controller.start(.shutdown)
+        await settle()
+        #expect(driver.receipt != nil)
+        controller.panelDidChangeVisibility(false)
+        controller.panelDidChangeVisibility(true)
+        controller.start(.restart)
+        #expect(controller.executing && controller.pendingAction == .shutdown)
+        driver.receipt?.resume()
+        await settle()
+        #expect(!controller.executing)
+        #expect(driver.events.filter { $0 == "shutdown" || $0 == "restart" } == ["shutdown"])
+    }
+    @Test("取消后立即显示倒计时期间新打开的应用")
+    func refreshAfterCancel() {
+        let driver = ShutdownMock()
+        let controller = ShutdownController(driver: driver)
+        controller.activate()
+        controller.panelDidChangeVisibility(true)
+        controller.start(.shutdown)
+        driver.apps.append(RunningAppItem(bundleID: "late", name: "新启动", pids: [4]))
+        controller.refresh()
+        #expect(controller.appCount == 2)
+        controller.cancel()
+        #expect(controller.appCount == 3)
+        #expect(driver.events.isEmpty)
+    }
     private func settle() async { for _ in 0..<30 { await Task.yield() } }
 }
 
@@ -120,17 +186,19 @@ private final class ShutdownMock: ShutdownDriver {
     var events: [String] = []
     var quits = false
     var fails = false
-    func runningApps() -> [RunningAppItem] {
-        [
-            RunningAppItem(bundleID: "close", name: "文稿", pids: [1, 2]),
-            RunningAppItem(bundleID: "keep", name: "保留", pids: [3]),
-        ]
-    }
+    var waitForReceipt = false
+    var receipt: CheckedContinuation<Void, Never>?
+    var apps = [
+        RunningAppItem(bundleID: "close", name: "文稿", pids: [1, 2]),
+        RunningAppItem(bundleID: "keep", name: "保留", pids: [3]),
+    ]
+    func runningApps() -> [RunningAppItem] { apps }
     func disableReopenWindows() throws { events.append("preference") }
     func terminate(_ app: RunningAppItem, force: Bool) { events.append("\(force ? "force" : "quit"):\(app.id)") }
     func isRunning(_ app: RunningAppItem) -> Bool { !quits }
     func execute(_ action: ShutdownAction) async throws {
         events.append(action.rawValue)
+        if waitForReceipt { await withCheckedContinuation { receipt = $0 } }
         if fails { throw CocoaError(.executableLoad) }
     }
 }

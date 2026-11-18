@@ -15,7 +15,7 @@
 - UpdateTests.swift：语义版本、对应官方新旧安装包命名匹配与外部域名 / 仓库、协议、路径和异常版本拒绝。
 
 - PluginPreferencesTests.swift：旧版配置默认回退、新字段原子保存往返 / 冲突及六模块顺序。
-- ShutdownTests.swift：Mock 驱动和可推进时钟验证五秒倒计时、15 种取消组合、排除 / 保存、温和 / 强制顺序、错误与预览反馈。
+- ShutdownTests.swift：Mock 验证倒计时与 15 种取消组合、批量排除、固定应用范围、退出顺序、阻塞应用反馈和等待回执防重。
 - FanCommandTests.swift：助手关机 / 重启固定无参数命令、额外载荷和未知动作拒绝。
 
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md

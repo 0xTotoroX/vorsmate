@@ -16,8 +16,12 @@ enum VorsmateMain {
             return
         }
         let app = NSApplication.shared
-        if CommandLine.arguments.contains("--preview"), CommandLine.arguments.contains("--preview-dark") {
-            app.appearance = NSAppearance(named: .darkAqua)
+        if CommandLine.arguments.contains("--preview") {
+            if CommandLine.arguments.contains("--preview-dark") {
+                app.appearance = NSAppearance(named: .darkAqua)
+            } else if CommandLine.arguments.contains("--preview-light") {
+                app.appearance = NSAppearance(named: .aqua)
+            }
         }
         let delegate = AppDelegate()
         app.delegate = delegate

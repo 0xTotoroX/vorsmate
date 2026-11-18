@@ -65,7 +65,7 @@ Fans offer four parallel choices: Automatic, Balanced, Enhanced, and Custom. Aut
 
 The left clock follows the Mac’s current time zone; the right shows US Pacific local time (PST / PDT). Click either clock to edit a date or use the slider to compare times. “Now” or closing the panel returns to the current time without changing the system time zone.
 
-Quick Shutdown appears below Fans. Closing the panel, pressing Escape, or disabling the module cancels a pending countdown. Forced quitting is enabled by default and can discard unsaved work; when disabled, apps waiting to save stop the operation. Exclusions skip cleanup only: macOS still exits those apps at shutdown. The authorized helper releases fans before a fixed shutdown/restart command; without it, System Events is used and may require automation permission. Preview mode only simulates actions.
+Open Quick Shutdown in the menu bar to choose which apps to quit in advance. With more than six apps, search and select the matching results together. Shut Down and Restart start a five-second countdown. Cancel, Escape, Back, or closing the panel cancels it. Force Quit is enabled by default and can discard unsaved work. Turn it off in Options to stop if an app is still running. macOS handles unselected or newly opened apps at shutdown or restart. The enabled helper releases the fans before submitting the request. Without the helper, Vorsmate uses System Events and may need automation permission. Preview uses simulated apps.
 
 The panel closes when the pointer leaves; background management continues. The top-right menu contains independent switches for all six modules, Launch at Login, Check for Updates, About, and Quit.
 

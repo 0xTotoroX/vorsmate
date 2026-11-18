@@ -18,17 +18,14 @@ final class AppModel: ObservableObject {
     }
     lazy var shutdown = ShutdownController(
         driver: preview
-            ? PreviewShutdownDriver()
+            ? PreviewShutdownDriver(longList: CommandLine.arguments.contains("--preview-long-list"))
             : SystemShutdownDriver(systemAction: { action in
                 if SMAppService.daemon(plistName: FanServiceIdentity.plist).status == .enabled {
                     let client = FanConnection()
                     defer { client.invalidate() }
-                    do {
-                        _ = try await client.request(FanCommand(action: action == .shutdown ? .shutdown : .restart))
-                        return
-                    } catch {
-                        _ = try? await client.request(FanCommand(action: .release))
-                    }
+                    // A lost reply does not mean the helper failed to submit the system request.
+                    _ = try await client.request(FanCommand(action: action == .shutdown ? .shutdown : .restart))
+                    return
                 }
                 try await SystemShutdownDriver.appleScript(action)
             }), policy: preferences.shutdownPolicy,

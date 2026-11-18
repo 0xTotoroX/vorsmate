@@ -82,7 +82,14 @@ public final class PreviewShutdownDriver: ShutdownDriver {
         RunningAppItem(bundleID: "preview.browser", name: "浏览器", pids: [102, 103]),
         RunningAppItem(bundleID: "preview.notes", name: "笔记", pids: [104]),
     ]
-    public init() {}
+    public init(longList: Bool = false) {
+        if longList {
+            let names = ["项目资料与协作笔记编辑器", "日历", "邮件", "图像编辑器", "音乐", "文件传输", "视频会议", "阅读器"]
+            apps += names.enumerated().map { index, name in
+                RunningAppItem(bundleID: "preview.extra.\(index)", name: name, pids: [pid_t(105 + index)])
+            }
+        }
+    }
     public func runningApps() -> [RunningAppItem] { apps }
     public func disableReopenWindows() throws {}
     public func terminate(_ app: RunningAppItem, force: Bool) { apps.removeAll { $0.id == app.id } }

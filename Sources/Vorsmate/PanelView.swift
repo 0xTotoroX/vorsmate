@@ -19,27 +19,21 @@ struct PanelView: View {
     @State private var contentHeight: CGFloat = 360
 
     var body: some View {
-        ScrollView {
-            Group {
-                if remotePage == .home {
-                    content
-                } else {
-                    RemotePanel(
-                        plugin: model.remote, page: $remotePage, gesture: $remoteGesture, appID: $remoteAppID,
-                        protectInteraction: protectInteraction)
+        Group {
+            if expandedSection == .quickShutdown {
+                QuickShutdownView(controller: model.shutdown, maximumHeight: maximumHeight) {
+                    model.shutdown.cancel()
+                    expandedSection = nil
                 }
+                .background(
+                    GeometryReader { geometry in
+                        Color.clear.preference(key: PanelHeightKey.self, value: geometry.size.height)
+                    })
+            } else {
+                overviewScroll
             }
-            .fixedSize(horizontal: false, vertical: true)
-            .background(
-                GeometryReader { geometry in
-                    Color.clear.preference(key: PanelHeightKey.self, value: geometry.size.height)
-                })
         }
-        .id(remotePage.scrollID)
-        .scrollIndicators(.automatic)
-        .scrollDisabled(contentHeight <= maximumHeight)
-        .frame(width: 386, height: min(contentHeight, maximumHeight))
-        .fixedSize()
+        .frame(width: 386)
         .modifier(PanelMaterial())
         .onPreferenceChange(PanelHeightKey.self) { measured in
             guard measured > 0 else { return }
@@ -62,6 +56,30 @@ struct PanelView: View {
         .onChange(of: remotePage == .home) { _, home in
             if home { model.remote.endEditing() } else { model.remote.beginEditing() }
         }
+    }
+
+    private var overviewScroll: some View {
+        ScrollView {
+            Group {
+                if remotePage == .home {
+                    content
+                } else {
+                    RemotePanel(
+                        plugin: model.remote, page: $remotePage, gesture: $remoteGesture, appID: $remoteAppID,
+                        protectInteraction: protectInteraction)
+                }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            .background(
+                GeometryReader { geometry in
+                    Color.clear.preference(key: PanelHeightKey.self, value: geometry.size.height)
+                })
+        }
+        .id(remotePage.scrollID)
+        .scrollIndicators(.automatic)
+        .scrollDisabled(contentHeight <= maximumHeight)
+        .frame(width: 386, height: min(contentHeight, maximumHeight))
+        .fixedSize()
     }
 
     private var content: some View {
@@ -135,7 +153,7 @@ struct PanelView: View {
                 remotePage = .overview
             }
         case .fan: FanView(model: model.fan, expanded: expansion(for: id))
-        case .quickShutdown: QuickShutdownView(controller: model.shutdown, expanded: expansion(for: id))
+        case .quickShutdown: ShutdownSummary(controller: model.shutdown) { expandedSection = .quickShutdown }
         }
     }
     private func expansion(for section: PluginID) -> Binding<Bool> {

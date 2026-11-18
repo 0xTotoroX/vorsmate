@@ -22,7 +22,10 @@ public final class ShutdownController: ObservableObject {
     private var generation = 0
     private var active = false
     private var visible = false
+    private var submitted = false
     private var observers: [NSObjectProtocol] = []
+    public static let countdownSeconds = 5
+    public var isPreview: Bool { driver.isPreview }
     public var appCount: Int { apps.filter { !policy.excludedBundleIDs.contains($0.id) }.count }
     public var status: String {
         if executing { return "正在清理" }
@@ -65,7 +68,9 @@ public final class ShutdownController: ObservableObject {
         self.visible = visible
         if !visible { cancel() } else { refresh() }
     }
-    public func refresh() { if active { apps = driver.runningApps() } }
+    public func refresh() {
+        if active && countdown == nil && !executing { apps = driver.runningApps() }
+    }
     public func updatePolicy(_ next: ShutdownPolicy) {
         guard !executing, countdown == nil else { return }
         do {
@@ -75,20 +80,25 @@ public final class ShutdownController: ObservableObject {
         } catch { self.error = error.localizedDescription }
     }
     public func toggleExcluded(_ id: String) {
+        setIncluded(policy.excludedBundleIDs.contains(id), ids: [id])
+    }
+    public func setIncluded(_ included: Bool, ids: Set<String>) {
         var next = policy
-        if !next.excludedBundleIDs.insert(id).inserted { next.excludedBundleIDs.remove(id) }
-        updatePolicy(next)
+        if included { next.excludedBundleIDs.subtract(ids) } else { next.excludedBundleIDs.formUnion(ids) }
+        if next != policy { updatePolicy(next) }
     }
     public func start(_ action: ShutdownAction) {
         guard active, visible, countdown == nil, !executing else { return }
         message = nil
         error = nil
         pendingAction = action
-        countdown = 5
+        countdown = Self.countdownSeconds
+        let policy = self.policy
+        let planned = apps.filter { !policy.excludedBundleIDs.contains($0.id) }
         let token = generation
         task = Task { [weak self, sleep] in
             do {
-                for remaining in stride(from: 4, through: 0, by: -1) {
+                for remaining in stride(from: Self.countdownSeconds - 1, through: 0, by: -1) {
                     try await sleep(.seconds(1))
                     try Task.checkCancellation()
                     guard let self, self.generation == token else { return }
@@ -97,20 +107,22 @@ public final class ShutdownController: ObservableObject {
                 guard let self, self.generation == token else { return }
                 self.countdown = nil
                 self.executing = true
-                let policy = self.policy
-                self.refresh()
-                let targets = self.apps.filter { !policy.excludedBundleIDs.contains($0.id) }
+                // The driver checks the original PIDs and bundle identity again before each quit.
+                let targets = planned.filter { self.driver.isRunning($0) }
                 if policy.disableReopenWindows { try self.driver.disableReopenWindows() }
                 for app in targets { self.driver.terminate(app, force: false) }
-                try await sleep(.milliseconds(1500))
+                if !targets.isEmpty { try await sleep(.milliseconds(1500)) }
                 try Task.checkCancellation()
                 guard self.generation == token else { return }
                 let remaining = targets.filter { self.driver.isRunning($0) }
                 if policy.forceCloseApps {
                     for app in remaining { self.driver.terminate(app, force: true) }
                 } else if !remaining.isEmpty {
-                    throw ShutdownFailure.message("仍有应用等待保存，已停止\(action.title)。")
+                    let names = remaining.prefix(2).map { "「" + $0.name + "」" }.joined(separator: "、")
+                    let rest = remaining.count > 2 ? "等 \(remaining.count) 个应用" : ""
+                    throw ShutdownFailure.message("\(names)\(rest)仍在运行，已停止\(action.title)。")
                 }
+                self.submitted = true
                 try await self.driver.execute(action)
                 guard self.generation == token else { return }
                 self.message = self.driver.isPreview ? "已完成模拟\(action.title)" : "已提交\(action.title)请求"
@@ -121,6 +133,7 @@ public final class ShutdownController: ObservableObject {
                 self.error = error.localizedDescription
             }
             guard let self, self.generation == token else { return }
+            self.submitted = false
             self.countdown = nil
             self.pendingAction = nil
             self.executing = false
@@ -129,11 +142,14 @@ public final class ShutdownController: ObservableObject {
         }
     }
     public func cancel() {
+        guard !submitted else { return }
+        let wasPending = countdown != nil || executing
         generation &+= 1
         task?.cancel()
         task = nil
         countdown = nil
         pendingAction = nil
         executing = false
+        if wasPending && visible { refresh() }
     }
 }
