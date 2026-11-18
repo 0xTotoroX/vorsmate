@@ -1,5 +1,5 @@
 // [INPUT]: 系统驱动、PreferencesStore、SMAppService 与更新模型。
-// [OUTPUT]: 六模块装配、兼容配置与开关保存、可见性分发、隔离预览与显式维护入口。
+// [OUTPUT]: 内置与外置插件装配、兼容配置与开关保存、可见性分发、隔离预览与显式维护入口。
 // [POS]: 应用组合入口；通过 PluginHost 控制各模块资源；关机执行选择已授权助手或系统回退。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import AppKit
@@ -33,9 +33,10 @@ final class AppModel: ObservableObject {
                 try await SystemShutdownDriver.appleScript(action)
             }), policy: preferences.shutdownPolicy,
         persist: { [weak self] policy in try self?.save { $0.shutdownPolicy = policy } })
-    lazy var plugins = PluginHost(plugins: builtinPlugins(), disabled: preferences.disabledPlugins) {
+    lazy var remote = RemoteCompanion(preview: preview)
+    lazy var plugins = PluginHost(plugins: builtinPlugins(), disabled: preferences.disabledAtRuntime) {
         [weak self] disabled in
-        try self?.save { $0.disabledPlugins = disabled }
+        try self?.save { $0.disabledAtRuntime = disabled }
     }
     let updates: UpdateModel
     @Published var configurationError: String?
@@ -108,9 +109,11 @@ final class AppModel: ObservableObject {
                 id: .quickShutdown, activate: { shutdown.activate() },
                 deactivate: { shutdown.deactivate() }, refresh: { shutdown.refresh() },
                 visibility: { shutdown.panelDidChangeVisibility($0) }))
+        result.append(remote)
         return result
     }
-    var enabledPlugins: [PluginID] { plugins.enabledIDs }
+    var availablePlugins: [PluginID] { PluginID.allCases.filter { $0 != .remote || remote.available } }
+    var enabledPlugins: [PluginID] { availablePlugins.filter { plugins.enabledIDs.contains($0) } }
     func setPlugin(_ id: PluginID, enabled: Bool) {
         do { try plugins.setEnabled(enabled, for: id) } catch { configurationError = error.localizedDescription }
     }
@@ -122,6 +125,8 @@ final class AppModel: ObservableObject {
         }
     }
     func refresh() {
+        remote.discover()
+        objectWillChange.send()
         if !preview { refreshLoginStatus() }
         if !canSave {
             do {
@@ -131,7 +136,7 @@ final class AppModel: ObservableObject {
                 for controller in controllers { controller.reload(preferences[controller.channel], start: false) }
                 fan.reloadSavedProfiles(preferences.fanProfiles)
                 shutdown.reloadPolicy(preferences.shutdownPolicy)
-                plugins.reloadDisabled(preferences.disabledPlugins)
+                plugins.reloadDisabled(preferences.disabledAtRuntime)
                 plugins.start()
             } catch {
                 configurationError = "无法读取配置：\(error.localizedDescription)"

@@ -2,6 +2,7 @@
 
 > L2 | 父级: ../AGENTS.md
 
+- RemoteConfirmTests.swift：短按、重复、其他键、错误及语音报告的单次发送边界。
 - PolicyTests.swift：优先级、拖动上下 / 批量 / 边界、锁定重连、输入源、重试预算及配置保护；ControllerTests 验证三通道拖动单次保存、生效、无效移动不保存及失败重试不改锁定。
 - ControllerTests.swift：FakeDriver 驱动的切换回读、冷却退避、无通知自动恢复、持续异常提示、成功后争抢限频、手动覆盖与取消复查；保留保存恢复、只读刷新、当前设备锁定与监听失败验证。
 - AudioSnapshotTests.swift：模拟读取期间的设备回连，验证有界复核与不一致快照拒绝。

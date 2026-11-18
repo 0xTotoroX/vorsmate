@@ -1,5 +1,5 @@
-// [INPUT]: 六个资源计数插件与临时配置存储。
-// [OUTPUT]: 全 64 组合顺序、幂等启停、持久化失败与禁用不刷新测试。
+// [INPUT]: 内置与可选资源计数插件与临时配置存储。
+// [OUTPUT]: 全组合顺序、幂等启停、持久化失败与禁用不刷新测试。
 // [POS]: 内置宿主生命周期回归，不调用设备 API。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import Foundation
@@ -11,7 +11,7 @@ import VorsmateCore
 @Suite("插件宿主")
 @MainActor
 struct PluginHostTests {
-    @Test("任意组合保留顺序且关闭立即释放资源", arguments: Array(0..<64))
+    @Test("任意组合保留顺序且关闭立即释放资源", arguments: Array(0..<(1 << PluginID.allCases.count)))
     func combinations(mask: Int) throws {
         let probes = PluginID.allCases.map { PluginProbe(id: $0) }
         var saved: Set<PluginID> = []

@@ -8,17 +8,26 @@ public struct Preferences: Codable, Equatable, Sendable {
     public var version = 1
     public var policies: [String: SelectionPolicy] = [:]
     public var disabledPlugins: Set<PluginID> = []
+    public var remoteEnabled = false
+    public var disabledAtRuntime: Set<PluginID> {
+        get { remoteEnabled ? disabledPlugins.subtracting([.remote]) : disabledPlugins.union([.remote]) }
+        set {
+            remoteEnabled = !newValue.contains(.remote)
+            disabledPlugins = newValue.subtracting([.remote])
+        }
+    }
     public var fanProfiles: [Int: FanProfile] = [:]
     public var shutdownPolicy = ShutdownPolicy()
     public init() {}
     private enum CodingKeys: String, CodingKey {
-        case version, policies, disabledPlugins, fanProfiles, shutdownPolicy
+        case version, policies, disabledPlugins, remoteEnabled, fanProfiles, shutdownPolicy
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         version = try values.decodeIfPresent(Int.self, forKey: .version) ?? 1
         policies = try values.decodeIfPresent([String: SelectionPolicy].self, forKey: .policies) ?? [:]
         disabledPlugins = try values.decodeIfPresent(Set<PluginID>.self, forKey: .disabledPlugins) ?? []
+        remoteEnabled = try values.decodeIfPresent(Bool.self, forKey: .remoteEnabled) ?? false
         fanProfiles = try values.decodeIfPresent([Int: FanProfile].self, forKey: .fanProfiles) ?? [:]
         shutdownPolicy = try values.decodeIfPresent(ShutdownPolicy.self, forKey: .shutdownPolicy) ?? ShutdownPolicy()
     }

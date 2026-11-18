@@ -1,11 +1,11 @@
 // [INPUT]: Foundation 与现有 Channel 标识。
-// [OUTPUT]: 六个内置插件的稳定标识、顺序与界面元数据。
+// [OUTPUT]: 内置与可选插件的稳定标识、顺序与界面元数据。
 // [POS]: 注册表与配置共用的插件身份；不持有运行资源。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import Foundation
 
 public enum PluginID: String, Codable, CaseIterable, Sendable, Identifiable {
-    case time, inputSource, audioInput, audioOutput, fan, quickShutdown
+    case time, inputSource, audioInput, audioOutput, fan, quickShutdown, remote
     public var id: Self { self }
     public var title: String {
         switch self {
@@ -15,6 +15,7 @@ public enum PluginID: String, Codable, CaseIterable, Sendable, Identifiable {
         case .audioOutput: "播放设备"
         case .fan: "风扇"
         case .quickShutdown: "一键下班"
+        case .remote: "遥控器"
         }
     }
     public var symbol: String {
@@ -25,6 +26,7 @@ public enum PluginID: String, Codable, CaseIterable, Sendable, Identifiable {
         case .audioOutput: "speaker.wave.2"
         case .fan: "fan"
         case .quickShutdown: "power"
+        case .remote: "appletvremote.gen4"
         }
     }
     public var channel: Channel? { Channel(rawValue: rawValue) }

@@ -1,5 +1,5 @@
 // [INPUT]: AppModel、BrandIcon、各功能分区与主线程内的 SwiftUI 设置提交。
-// [OUTPUT]: 分区清晰的紧凑总览、单项展开、含六模块开关的无分隔线菜单与原生面板。
+// [OUTPUT]: 分区清晰的紧凑总览、单项展开、含可用模块开关的无分隔线菜单与原生面板。
 // [POS]: 日常管理的唯一主界面；左侧管理状态、右侧当前值，低频设置收进菜单。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import ServiceManagement
@@ -52,7 +52,7 @@ struct PanelView: View {
                 if model.preview { Text("预览").font(.caption).foregroundStyle(.secondary) }
                 Menu {
                     Menu("功能模块") {
-                        ForEach(PluginID.allCases) { id in
+                        ForEach(model.availablePlugins) { id in
                             Toggle(
                                 id.title,
                                 isOn: Binding(
@@ -107,6 +107,7 @@ struct PanelView: View {
                 ChannelView(controller: controller, expanded: expansion(for: id))
                     .disabled(model.configurationError != nil)
             }
+        case .remote: RemoteRow(plugin: model.remote, expanded: expansion(for: id))
         case .fan: FanView(model: model.fan, expanded: expansion(for: id))
         case .quickShutdown: QuickShutdownView(controller: model.shutdown, expanded: expansion(for: id))
         }

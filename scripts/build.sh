@@ -1,6 +1,6 @@
 #!/bin/bash
 # [INPUT]: Swift Package Manager、Sparkle 二进制框架、Resources 元数据、可选 --universal 与签名身份。
-# [OUTPUT]: 带源码修订、完整许可与签名的 dist/Vorsmate.app；不安装、不注册登录项。
+# [OUTPUT]: 带源码修订、完整许可与签名的主应用和独立遥控器插件；不安装、不注册登录项。
 # [POS]: 先在临时目录装配并验证，再替换构建产物，不保留旧包残留。
 # [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 set -euo pipefail
@@ -49,6 +49,22 @@ VORSMATE_SIGN_IDENTITY="${VORSMATE_SIGN_IDENTITY:--}"
 SIGN_ARGS=(--force --sign "$VORSMATE_SIGN_IDENTITY")
 # 临时签名仅供本地开发；已签名发行包使用 hardened runtime，嵌套框架采用同一身份。
 if [[ "$VORSMATE_SIGN_IDENTITY" != "-" ]]; then SIGN_ARGS+=(--options runtime --timestamp); fi
+# 可选插件只放在主应用旁，主应用的 DMG 不隐式安装它。
+REMOTE="$STAGING_ROOT/VorsmateRemote.app"
+mkdir -p "$REMOTE/Contents/MacOS" "$REMOTE/Contents/Resources"
+cp "$BIN_PATH/VorsmateRemote" "$REMOTE/Contents/MacOS/"
+cp "$PROJECT_ROOT/Resources/Remote/Info.plist" "$REMOTE/Contents/"
+cp "$PROJECT_ROOT/Resources/Remote/RC003.png" "$PROJECT_ROOT/LICENSE" "$REMOTE/Contents/Resources/"
+codesign "${SIGN_ARGS[@]}" "$REMOTE"
+codesign --verify --strict "$REMOTE"
+if [[ "$VORSMATE_SIGN_IDENTITY" == "-" ]]; then
+    /usr/libexec/PlistBuddy -c 'Add :VorsmateRemoteDevelopmentHashes array' "$STAGED_APP/Contents/Info.plist"
+    for arch in $(lipo -archs "$REMOTE/Contents/MacOS/VorsmateRemote"); do
+        hash="$(codesign -dvvv --arch "$arch" "$REMOTE" 2>&1 | sed -n 's/^CDHash=//p')"
+        [[ -n "$hash" ]]
+        /usr/libexec/PlistBuddy -c "Add :VorsmateRemoteDevelopmentHashes: string $hash" "$STAGED_APP/Contents/Info.plist"
+    done
+fi
 for SERVICE in "$SPARKLE"/Versions/B/XPCServices/*.xpc; do codesign "${SIGN_ARGS[@]}" "$SERVICE"; done
 codesign "${SIGN_ARGS[@]}" "$SPARKLE/Versions/B/Autoupdate"
 codesign "${SIGN_ARGS[@]}" "$SPARKLE/Versions/B/Updater.app"
@@ -60,4 +76,6 @@ codesign --verify --strict "$STAGED_APP"
 codesign --verify --deep --strict "$STAGED_APP"
 rm -rf "$APP_PATH"
 mv "$STAGED_APP" "$APP_PATH"
+rm -rf "$PROJECT_ROOT/dist/VorsmateRemote.app"
+mv "$REMOTE" "$PROJECT_ROOT/dist/VorsmateRemote.app"
 printf '%s\n' "$APP_PATH"

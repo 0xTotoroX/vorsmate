@@ -13,6 +13,7 @@ struct PluginPreferencesTests {
         for json in [#"{"version":1,"policies":{}}"#, #"{"version":1,"policies":{},"disabledPlugins":null}"#] {
             let value = try JSONDecoder().decode(Preferences.self, from: Data(json.utf8))
             #expect(value == Preferences())
+            #expect(value.disabledAtRuntime == [.remote])
         }
     }
     @Test("完整新配置原子保存、重新加载且冲突不覆盖")
@@ -24,6 +25,7 @@ struct PluginPreferencesTests {
         try store.save(old)
         var value = old
         value.disabledPlugins = [.time, .audioOutput]
+        value.remoteEnabled = true
         value.fanProfiles = [0: FanProfile(mode: .fixed, rpm: 2800), 1: FanCurvePreset.balanced.profile]
         value.shutdownPolicy.excludedBundleIDs = ["test.notes"]
         value.shutdownPolicy.forceCloseApps = false
@@ -33,9 +35,23 @@ struct PluginPreferencesTests {
         #expect(try store.load() == value)
         #expect(value.version == 1)
     }
-    @Test("六模块顺序稳定")
+    @Test("遥控器的开关独立保存，旧宿主仍能识别原来的禁用列表")
+    func optionalRemote() throws {
+        var value = Preferences()
+        value.disabledPlugins = [.fan]
+        #expect(value.disabledAtRuntime == [.fan, .remote])
+        value.disabledAtRuntime.remove(.remote)
+        let data = try JSONEncoder().encode(value)
+        let restored = try JSONDecoder().decode(Preferences.self, from: data)
+        #expect(restored.remoteEnabled)
+        #expect(restored.disabledPlugins == [.fan])
+        value.disabledAtRuntime.insert(.remote)
+        #expect(!value.remoteEnabled)
+        #expect(value.disabledPlugins == [.fan])
+    }
+    @Test("可选模块排在内置模块之后")
     func order() {
-        #expect(PluginID.allCases == [.time, .inputSource, .audioInput, .audioOutput, .fan, .quickShutdown])
+        #expect(PluginID.allCases == [.time, .inputSource, .audioInput, .audioOutput, .fan, .quickShutdown, .remote])
         #expect(PluginID.audioInput.channel == .audioInput)
     }
 }

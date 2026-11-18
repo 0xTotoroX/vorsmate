@@ -6,6 +6,7 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [
         .executable(name: "Vorsmate", targets: ["Vorsmate"]),
+        .executable(name: "VorsmateRemote", targets: ["VorsmateRemote"]),
         .executable(name: "VorsmateFanHelper", targets: ["VorsmateFanHelper"]),
     ],
     dependencies: [
@@ -26,6 +27,7 @@ let package = Package(
             name: "CSMC", exclude: ["AGENTS.md"], publicHeadersPath: "include",
             linkerSettings: [.linkedFramework("IOKit")]),
         .target(name: "VorsmateFan", dependencies: ["VorsmateCore", "CSMC"], exclude: ["AGENTS.md"]),
+        .executableTarget(name: "VorsmateRemote", dependencies: ["VorsmateCore"], exclude: ["AGENTS.md"]),
         .executableTarget(name: "VorsmateFanHelper", dependencies: ["VorsmateFan"], exclude: ["AGENTS.md"]),
         .executableTarget(
             name: "Vorsmate",
