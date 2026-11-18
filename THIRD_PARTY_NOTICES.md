@@ -7,3 +7,7 @@
 ## 随应用分发的框架
 
 [Sparkle 2.10.1](https://github.com/sparkle-project/Sparkle) 提供更新包验证、下载、安装和重启，采用 MIT 及所列第三方许可。完整版权及许可见 [LICENSES/Sparkle-LICENSE.txt](LICENSES/Sparkle-LICENSE.txt)，框架及该通知随应用分发。
+
+## 遥控器音频互操作
+
+RC003 插件在运行时使用用户已安装的 MiRemoteV 2ch 音频设备。插件独立实现蓝牙语音、IMA ADPCM 解码及快捷键发送，采用项目 MIT 许可。构建产物不包含 SayAll 软件、其虚拟音频驱动或旧键盘桥。

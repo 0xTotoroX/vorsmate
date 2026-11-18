@@ -18,3 +18,5 @@
 - FanCommandTests.swift：助手关机 / 重启固定无参数命令、额外载荷和未知动作拒绝。
 
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+
+- RemoteVoiceTests.swift：协议、解码、原输入优先级以及左右修饰键的回归。

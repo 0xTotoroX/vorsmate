@@ -11,6 +11,7 @@ final class RemoteCompanion: ObservableObject, VorsmatePlugin {
     let id = PluginID.remote
     @Published private(set) var available = false
     @Published private(set) var status = "已停用"
+    var voiceReadiness: (Bool?) -> Void = { _ in }
     private let preview: Bool
     private var wanted = false
     private var stopping = false
@@ -21,6 +22,10 @@ final class RemoteCompanion: ObservableObject, VorsmatePlugin {
     init(preview: Bool) {
         self.preview = preview
         discover()
+    }
+
+    private var managesVoice: Bool {
+        Bundle(url: url)?.object(forInfoDictionaryKey: "VorsmateRemoteVoiceProtocol") as? Int == 1
     }
 
     private func trusted() -> Bool {
@@ -59,7 +64,12 @@ final class RemoteCompanion: ObservableObject, VorsmatePlugin {
         let exists = trusted()
         if available == exists { return }
         available = exists
-        if !exists { closeSession() } else if wanted { launch() }
+        if !exists {
+            voiceReadiness(nil)
+            closeSession()
+        } else if wanted {
+            launch()
+        }
     }
     func activate() {
         wanted = true
@@ -67,6 +77,7 @@ final class RemoteCompanion: ObservableObject, VorsmatePlugin {
     }
     func deactivate() {
         wanted = false
+        voiceReadiness(nil)
         closeSession()
         status = "已停用"
     }
@@ -86,11 +97,13 @@ final class RemoteCompanion: ObservableObject, VorsmatePlugin {
     }
     private func launch() {
         guard child == nil, available, trusted() else { return }
+        if !preview { voiceReadiness(managesVoice ? false : nil) }
         let process = Process()
         let input = Pipe()
         let output = Pipe()
         process.executableURL = url.appending(path: "Contents/MacOS/VorsmateRemote")
         process.arguments = preview ? ["--host-v1", "--preview"] : ["--host-v1"]
+        if !preview, managesVoice { process.arguments?.append("--voice-status-v1") }
         process.standardInput = input
         process.standardOutput = output
         process.terminationHandler = { [weak self] process in
@@ -101,7 +114,10 @@ final class RemoteCompanion: ObservableObject, VorsmatePlugin {
                 try? self.control?.close()
                 self.control = nil
                 self.stopping = false
-                if self.wanted { self.status = "插件已退出" }
+                if self.wanted {
+                    self.status = "插件已退出"
+                    self.voiceReadiness(self.available && self.managesVoice ? false : nil)
+                }
                 if restart { self.launch() }
             }
         }
@@ -117,7 +133,12 @@ final class RemoteCompanion: ObservableObject, VorsmatePlugin {
             do {
                 for try await line in output.fileHandleForReading.bytes.lines {
                     guard let self, self.child === process, self.wanted, !self.stopping else { continue }
-                    self.status = line
+                    switch line {
+                    case "voice=ready": self.voiceReadiness(true)
+                    case "voice=offline": self.voiceReadiness(false)
+                    case "voice=external": self.voiceReadiness(nil)
+                    default: self.status = line
+                    }
                 }
             } catch {}
         }

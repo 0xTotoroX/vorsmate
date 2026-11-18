@@ -127,8 +127,15 @@ public struct RemoteProfile: Codable, Equatable, Sendable {
             let source = UInt64(7) << 32 | UInt64(button.usage)
             if button == .voice {
                 if voiceFn { values[source] = 0xff_0000_0003 }
-            } else if buttons[button.rawValue] != nil {
-                values[source] = 0
+            } else if let binding = buttons[button.rawValue] {
+                if binding.single.kind == .shortcut, (binding.single.flags ?? 0) == 0,
+                    binding.double.kind == .none, binding.long.kind == .none,
+                    let modifier = RemoteModifier.all.first(where: { $0.code == binding.single.keyCode })
+                {
+                    values[source] = UInt64(7) << 32 | modifier.hidUsage
+                } else {
+                    values[source] = 0
+                }
             }
         }
         return values

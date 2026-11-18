@@ -25,11 +25,7 @@ extension RemoteAction {
     var title: String {
         if kind == .openApplication { return label ?? "打开应用" }
         guard kind == .shortcut else { return kind.title }
-        let f = NSEvent.ModifierFlags(rawValue: UInt(flags ?? 0))
-        var text = ""
-        for (flag, mark) in [(NSEvent.ModifierFlags.control, "⌃"), (.option, "⌥"), (.shift, "⇧"), (.command, "⌘")]
-        where f.contains(flag) { text += mark }
-        return text + (label ?? "键码 \(keyCode ?? 0)")
+        return RemoteModifier.display(code: keyCode ?? 0, flags: flags ?? 0, label: label)
     }
 }
 
@@ -74,7 +70,9 @@ struct RemoteWindow: View {
                     ForEach(RemoteButton.allCases) { Text($0.name).tag($0) }
                 }.labelsHidden().fixedSize().accessibilityLabel("实体键")
                 if button == .voice {
-                    LabeledContent("按住", value: monitor.profile.voiceFn ? "Fn / 地球键" : "系统默认")
+                    if !preview { Text(monitor.voiceStatus).foregroundStyle(.secondary) }
+                    LabeledContent("按住说话", value: "MiRemoteV 2ch")
+                    if monitor.profile.voiceFn { LabeledContent("同时发送", value: "Fn / 地球键") }
                 } else {
                     let binding = monitor.profile.buttons[button.rawValue] ?? RemoteBinding()
                     ForEach(RemoteGesture.allCases) { gesture in
@@ -102,6 +100,7 @@ struct RemoteWindow: View {
                     }
                 }
                 if verify {
+                    Text(monitor.voiceStatus).font(.callout)
                     Text(monitor.lastGesture ?? "验收输入框").font(.headline)
                     TextEditor(text: $draft).font(.body).frame(height: 52).border(.quaternary).focused($editing)
                     Text("已发送 \(monitor.sent) 次 · 当前换行 \(draft.filter { $0 == "\n" }.count) 个").font(
@@ -152,11 +151,33 @@ private struct KeyRecorder: NSViewRepresentable {
             keyDown(with: event)
             return true
         }
+        private var held = [RemoteModifier]()
+        private var chord = [RemoteModifier]()
+        private var completed = false
+        override func flagsChanged(with event: NSEvent) {
+            guard !completed, let key = RemoteModifier.all.first(where: { $0.code == event.keyCode }) else { return }
+            let bits = event.cgEvent?.flags.rawValue ?? UInt64(event.modifierFlags.rawValue)
+            if bits & key.bit != 0 {
+                if !held.contains(key) { held.append(key) }
+                chord = held
+            } else if held.contains(key) {
+                held.removeAll { $0 == key }
+                if held.isEmpty, let last = chord.last {
+                    var action = RemoteAction(.shortcut)
+                    action.keyCode = last.code
+                    action.flags = RemoteModifier.flags(Array(chord.dropLast()))
+                    action.label = last.title
+                    completed = true
+                    capture?(action)
+                }
+            }
+        }
         override func keyDown(with event: NSEvent) {
-            guard !event.isARepeat else { return }
+            guard !event.isARepeat, !completed else { return }
+            completed = true
             var action = RemoteAction(.shortcut)
             action.keyCode = event.keyCode
-            action.flags = UInt64(event.modifierFlags.rawValue) & 0x00ff_ffff
+            action.flags = (event.cgEvent?.flags.rawValue ?? UInt64(event.modifierFlags.rawValue)) & 0x00ff_ffff
             let special: [UInt16: String] = [
                 36: "回车", 48: "Tab", 49: "空格", 51: "退格", 53: "Esc", 123: "←", 124: "→", 125: "↓", 126: "↑",
             ]

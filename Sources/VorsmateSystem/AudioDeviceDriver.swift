@@ -10,6 +10,13 @@ import VorsmateCore
 @MainActor
 public final class AudioDeviceDriver: SourceDriver {
     private let input: Bool
+    private var remoteVoiceReady: Bool?
+    private var notify: (@MainActor () -> Void)?
+    public func setRemoteVoiceReady(_ ready: Bool?) {
+        guard remoteVoiceReady != ready else { return }
+        remoteVoiceReady = ready
+        notify?()
+    }
     private var listeners: [VMAudioListenerRef] = []
     private var generation = 0
     private var removalError: OSStatus = noErr
@@ -73,11 +80,20 @@ public final class AudioDeviceDriver: SourceDriver {
     public func read() throws -> Snapshot {
         var snapshot = try Self.readSnapshot(devices: devices, selectedDevice: { try number(system, defaultSelector) })
         if input {
-            for source in snapshot.sources {
-                snapshot.availability[source.id] = ReceiverMonitor.availability(for: source.id, states: receiverStates)
-            }
+            Self.applyInputAvailability(to: &snapshot, receivers: receiverStates, remoteReady: remoteVoiceReady)
         }
         return snapshot
+    }
+    static func applyInputAvailability(
+        to snapshot: inout Snapshot, receivers: [String: SourceAvailability], remoteReady: Bool?
+    ) {
+        for source in snapshot.sources {
+            if source.id == RemoteVoice.deviceUID, let remoteReady {
+                snapshot.availability[source.id] = remoteReady ? .ready : .waitingForRemote
+            } else {
+                snapshot.availability[source.id] = ReceiverMonitor.availability(for: source.id, states: receivers)
+            }
+        }
     }
     static func readSnapshot(
         devices: () throws -> [(AudioDeviceID, Source)],
@@ -129,6 +145,7 @@ public final class AudioDeviceDriver: SourceDriver {
                 }
                 receiverMonitor = monitor
                 monitor.start()
+                notify = onChange
             }
         } catch {
             stop()
@@ -136,6 +153,7 @@ public final class AudioDeviceDriver: SourceDriver {
         }
     }
     public func stop() {
+        notify = nil
         generation &+= 1
         receiverMonitor?.stop()
         receiverMonitor = nil

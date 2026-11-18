@@ -5,13 +5,14 @@
 import Foundation
 
 public enum SourceAvailability: String, Codable, Sendable {
-    case ready, checking, waitingForTransmitter, unknown
+    case ready, checking, waitingForTransmitter, waitingForRemote, unknown
 
     public var label: String? {
         switch self {
         case .ready: nil
         case .checking: "确认连接中"
         case .waitingForTransmitter: "等待发射器"
+        case .waitingForRemote: "等待遥控器"
         case .unknown: "连接状态未知"
         }
     }

@@ -5,6 +5,7 @@
 - SelectionPolicy.swift：Channel、Source、Snapshot、SelectionPolicy；单次及 IndexSet 批量插入排序、锁定与未就绪回退，运行时就绪状态独立于持久优先级。
 - ReceiverStatus.swift：无线连接状态帧的流式校验、版本与记录识别、连接 / 断连确认和过期；不读取音量判断就绪。
 - RemoteProfile.swift / RemoteGestures.swift：RC003 三槽报告、独立键位存储、手势截止时间与互斥触发。
+- RemoteModifiers.swift / RemoteVoice.swift：左右修饰键解析、16 kHz 能力识别、独立 IMA ADPCM 解码与既有音频 UID。
 - PluginID.swift：内置与可选模块顺序、标题、图标与通道映射。
 - ShutdownPolicy.swift：关机 / 重启动作、强制退出 / 窗口恢复偏好与按 Bundle ID 聚合的应用条目。
 - Preferences.swift：兼容 version 1 的插件禁用、风扇档位、关机偏好与 PreferencesStore；配置版本检查、保存前核对会话预期值、JSON 原子保存。

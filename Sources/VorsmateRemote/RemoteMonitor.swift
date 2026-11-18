@@ -1,5 +1,5 @@
-// [INPUT]: RC003 专用 HID 管理器、设备映射租约和虚拟键盘桥。
-// [OUTPUT]: 实际状态及中心键的单次听写切换请求。
+// [INPUT]: RC003 专用 HID 管理器、设备映射租约与蓝牙语音连接。
+// [OUTPUT]: 实际按键与蓝牙状态，以及独立的单次动作派发。
 // [POS]: 主运行循环串行处理报告；断连、竞争、停用均清理按键状态。
 import AppKit
 import IOKit.hid
@@ -11,6 +11,21 @@ final class RemoteMonitor: ObservableObject {
     @Published private(set) var sent = 0
     @Published private(set) var needsPermission = false
     var report: (String) -> Void = { _ in }
+    @Published private(set) var voiceStatus = "等待遥控器麦克风"
+    private var voiceReady: String?
+    private let voice = RemoteVoiceLink()
+    private func voiceState(_ message: String, _ state: String) {
+        if voiceStatus != message {
+            voiceStatus = message
+            if CommandLine.arguments.contains("--verify") { report("mic: " + message) }
+        }
+        if voiceReady != state {
+            voiceReady = state
+            if CommandLine.arguments.contains("--voice-status-v1") || CommandLine.arguments.contains("--verify") {
+                report("voice=" + state)
+            }
+        }
+    }
     private let lease = ReturnLease()
     private var manager: IOHIDManager?
     private var sourceID: UInt64?
@@ -30,6 +45,10 @@ final class RemoteMonitor: ObservableObject {
 
     init(preview: Bool) {
         self.preview = preview
+        voice.status = { [weak self] message, ready in self?.voiceState(message, ready ? "ready" : "offline") }
+        if CommandLine.arguments.contains("--verify") {
+            voice.receipt = { [weak self] count, peak in self?.report("voiceSamples=\(count) peak=\(peak)") }
+        }
         if !preview {
             do { profile = try RemoteProfile.read() } catch { profileError = error.localizedDescription }
         }
@@ -99,7 +118,9 @@ final class RemoteMonitor: ObservableObject {
         tick()
     }
 
-    private func idle(_ message: String) {
+    private func idle(_ message: String, external: Bool = false) {
+        voice.stop()
+        voiceState(message, external ? "external" : "offline")
         sourceID = nil
         cancelGestures()
         if let manager {
@@ -130,7 +151,7 @@ final class RemoteMonitor: ObservableObject {
             return
         }
         if competing {
-            idle("请先退出 SayAll，再接管遥控器")
+            idle("请先退出 SayAll，再接管遥控器", external: true)
             return
         }
         needsPermission = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) != kIOHIDAccessTypeGranted
@@ -150,6 +171,8 @@ final class RemoteMonitor: ObservableObject {
                         guard let current = monitor.sourceID, RemoteMonitor.registryID(device) == current else {
                             return
                         }
+                        monitor.voice.stop()
+                        monitor.voiceState("遥控器麦克风已断开", "offline")
                         monitor.sourceID = nil
                         monitor.cancelGestures()
                         do {
@@ -192,10 +215,14 @@ final class RemoteMonitor: ObservableObject {
                 return
             }
         }
-        guard let current else {
+        guard let current, let only else {
+            voice.stop()
+            voiceState("等待遥控器连接", "offline")
             update(devices.isEmpty ? "等待遥控器连接" : "请只连接一只 RC003")
             return
         }
+        let unique = IOHIDDeviceGetProperty(only, "PhysicalDeviceUniqueID" as CFString) as? String
+        voice.poll(identity: unique.flatMap(UUID.init(uuidString:)))
         var desired = profile.deviceMap
         if !CGPreflightPostEventAccess() {
             for button in RemoteButton.allCases where button != .voice {
@@ -203,7 +230,8 @@ final class RemoteMonitor: ObservableObject {
                 let canPerform = RemoteGesture.allCases.contains {
                     [.typeless, .openApplication].contains(binding[$0].kind)
                 }
-                if !canPerform { desired.removeValue(forKey: UInt64(7) << 32 | UInt64(button.usage)) }
+                let key = UInt64(7) << 32 | UInt64(button.usage)
+                if !canPerform && desired[key] == 0 { desired.removeValue(forKey: key) }
             }
         }
         if sourceID == current && activeMap == desired && lease.isSuppressed() { return }
@@ -226,7 +254,7 @@ final class RemoteMonitor: ObservableObject {
         guard let sourceID, Self.registryID(device) == sourceID,
             let pressed = RemoteButton.pressed(reportID: id, bytes: bytes)
         else { return }
-        let claimed = pressed.filter { activeMap[UInt64(7) << 32 | UInt64($0.usage)] != nil }
+        let claimed = pressed.filter { activeMap[UInt64(7) << 32 | UInt64($0.usage)] == 0 }
         let actions = gestures.ingest(claimed, at: now, profile: profile)
         scheduleDeadline()
         deliver(actions)

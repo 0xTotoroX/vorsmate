@@ -20,12 +20,17 @@ python3 scripts/import-remote.py
 
 - 配对后 macOS 将 RC003 枚举为低功耗蓝牙 HID 键盘。插件通过 IOKit 匹配蓝牙传输、厂商 0x2717、产品 0x32b8 和键盘用途。普通按键来自报告 1，每帧最多三个小端 16 位键值。
 - 插件以共享方式读取这只设备的原始输入，只在它的键盘服务上临时屏蔽已配置的原生键。Fn 配置将遥控器 F5 映射到系统 Fn。写入后回读完整映射；停用时按所属标记撤回。相同型号设备超过一只、现有映射冲突或 SayAll 正在接管时会等待。宿主管道断开触发清理；插件被强制终止后的残留由下次启动按同一启动会话、服务身份恢复。
-- 普通快捷键和系统媒体键使用 macOS 事件接口，需要输入监控及相应的辅助功能权限。打开应用使用系统工作区。Typeless 听写通过本机已有的虚拟键盘桥发送左 Control + 左 Option + V；适配的 Q/T 组合也可经同一桥发送。回执表示已提交，听写结果需观察 Typeless。其他按键可以在 Typeless 关闭时使用。
-- SayAll 2.0.8 同样读取遥控器 HID；其完整产品还经 CoreBluetooth 连接 ATVV 语音服务，解码遥控器送来的音频并交给虚拟音频设备。本插件只迁移按键功能。Typeless 使用自己的录音输入。Vorsmate 原有的 DJI 无线麦接收器管理走 USB 厂商接口读取发射器连接状态，是另一条设备链路。[SayAll 技术说明](https://github.com/HD838A/remote-mic-app/blob/v2.0.8/TECHNICAL.md) · [本项目无线麦接口](wireless-microphones.md)
-- 插件及原创模型图随项目采用 MIT，包内附 LICENSE。可编辑的 Blender 源文件保存在 [RC003.blend](../Resources/Remote/RC003.blend)，按键丝印已内嵌；插件包使用同目录的正面 PNG。音量摇杆与旁边的按键共用哑光材质。本机已验证的外部桥使用 Karabiner-DriverKit-VirtualHIDDevice 8.5.0。插件不会安装该桥和第三方驱动。
+- 普通快捷键和 Typeless 均使用系统键盘事件。录入支持左、右 Control、Option、Command 和 Shift，可单用或组合其他键。确定键的预设依次按下左 Control、左 Option、V，再释放，保留原来的双击与长按。若某个实体键只配置了一个单独的修饰键，设备级映射会保留真实的按住时长。旧配置中没有记录左右侧的通用组合按左侧发送。快捷键派发需要辅助功能权限。
+- 项目代码与原创遥控器模型采用 MIT，构建时随附 LICENSE。可编辑的模型是 [RC003.blend](../Resources/Remote/RC003.blend)。
+
+## 遥控器收音
+
+开启遥控器插件并允许蓝牙访问。在 Vorsmate 原有「麦克风」列表中选择或拖动「MiRemoteV 2ch」，或让自动模式按已有顺序选择。Typeless 使用系统默认麦克风或明确选中该设备。短按确定键开始听写，按住右上角语音键说话，松开语音键，然后再短按确定键结束。RC003 的音频由实体语音键启动，每次持续时间受遥控器固件限制。
+
+插件通过 macOS CoreBluetooth 连接已配对且在线的 RC003，订阅 ATVV 控制和音频通知，确认 16 kHz 模式后独立解码 IMA ADPCM。PCM 只写入已安装的「MiRemoteV 2ch」回环设备，系统扬声器和默认播放设备保持原设置。遥控器与回环均就绪时才参与自动选择；断开后按原顺序回退，重连后恢复。停用时归还输入管理权给系统和其他音源。端点缺失时，语音键页面会显示所需设备，按键映射可继续使用。插件不附带第三方驱动，也不调用 SayAll 或旧的虚拟键盘桥。[公开设备协议说明](https://github.com/HD838A/remote-mic-app/blob/v2.0.8/TECHNICAL.md) · [RC003 实景语音时限](https://github.com/HD838A/remote-mic-app/blob/v2.0.8/Testing/RC003VoiceExtensionPreview.md)
 
 ## 开发验证
 
 `bash scripts/build.sh` 生成两个独立应用。临时签名构建核对配套代码签名哈希，正式签名构建校验同一 Apple 团队。主程序安装包可以独立分发。
 
-直接打开插件显示隔离预览。运行 `dist/VorsmateRemote.app/Contents/MacOS/VorsmateRemote --verify` 进入单独的真机验收。用空白输入框检查确定键单击开始 / 结束、双击及长按；验收输出记录手势和次数，不记录输入文本。退出后回读设备级 UserKeyMapping 确认恢复。
+直接打开插件显示隔离预览。运行 `dist/VorsmateRemote.app/Contents/MacOS/VorsmateRemote --verify` 进入单独的真机验收。用空白输入框检查确定键单击开始 / 结束、双击及长按；验收输出记录按键次数、换行计数以及语音段的采样数和峰值，不保存音频或输入内容。退出后回读设备级 UserKeyMapping 确认恢复。

@@ -24,7 +24,7 @@ Swift 6 + Swift Package Manager + SwiftUI / AppKit + Sparkle + TIS + CoreAudio +
 
 - 更新在启动一分钟后及每 12 小时直接读取固定 updates 分支的签名 feed，不调用 GitHub API 或 /latest；Sparkle 必须验证 feed 与安装包的双重 Ed25519 签名。检查 20 秒截止，下载无进展 60 秒、准备 120 秒截止；取消与失败后可重试，旧会话回调不能覆盖新状态，实际安装阶段不强制中断；更新不修改 settings.json 或注销助手。安装前用户确认，所有反馈复用紧凑窗口。预览不启动网络更新。Release 只附 DMG、说明仅列英中功能变化；appcast.xml 单独发布到固定 updates 分支，见 docs/updates.md。
 
-- 小米遥控器是独立、默认关闭的可选插件。配套包与宿主同目录，拥有自己的输入权限；RC003 全键映射、配置导入、虚拟键盘依赖与实机验收见 [docs/remote.md](docs/remote.md)。
+- 小米遥控器是独立、默认关闭的可选插件。配套包与宿主同目录，拥有自己的输入权限；RC003 全键映射、配置导入、左右修饰键、遥控器音频与实机验收见 [docs/remote.md](docs/remote.md)。
 
 ## 地图
 

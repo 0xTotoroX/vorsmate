@@ -14,6 +14,7 @@
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>LSUIElement</key><true/>
     <key>NSHighResolutionCapable</key><true/>
+    <key>NSBluetoothAlwaysUsageDescription</key><string>开启遥控器插件后，连接已配对的小米遥控器供语音输入使用。</string>
     <key>NSAppleEventsUsageDescription</key><string>一键下班在未启用助手时，需要通过 System Events 请求关机或重启。</string>
     <key>NSPrincipalClass</key><string>NSApplication</string>
     <key>NSHumanReadableCopyright</key><string>Copyright © 2026 Vorsmate contributors.</string>

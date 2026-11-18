@@ -69,6 +69,9 @@ final class AppModel: ObservableObject {
         }
         for channel in Channel.allCases {
             let driver: any SourceDriver = preview ? PreviewDriver(channel: channel) : Self.driver(for: channel)
+            if channel == .audioInput, let input = driver as? AudioDeviceDriver {
+                remote.voiceReadiness = { [weak input] in input?.setRemoteVoiceReady($0) }
+            }
             let controller = ChannelController(
                 channel: channel, driver: driver, policy: preferences[channel],
                 persist: { [weak self] policy in
