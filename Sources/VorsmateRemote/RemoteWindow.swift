@@ -55,7 +55,7 @@ struct RemoteWindow: View {
                     ForEach(RemoteGesture.allCases) { gesture in
                         LabeledContent(gesture.name) {
                             Menu(binding[gesture].title) {
-                                ForEach(RemoteAction.Kind.allCases, id: \.self) { kind in
+                                ForEach(RemoteAction.Kind.choices, id: \.self) { kind in
                                     Button(kind.title) { select(kind, for: gesture) }
                                 }
                             }.fixedSize().accessibilityLabel("\(gesture.name)，\(binding[gesture].title)")

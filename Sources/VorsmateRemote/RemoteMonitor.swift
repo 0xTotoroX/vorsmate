@@ -270,6 +270,8 @@ final class RemoteMonitor: ObservableObject {
         if !CGPreflightPostEventAccess() {
             for button in RemoteButton.allCases where button != .voice {
                 guard let binding = profile.buttons[button.rawValue] else { continue }
+                // A mapped confirm shortcut must never fall through as a physical Return.
+                if button == .ok && binding.single.kind == .shortcut { continue }
                 let canPerform = RemoteGesture.allCases.contains {
                     [.typeless, .openApplication].contains(binding[$0].kind)
                 }
@@ -367,10 +369,10 @@ final class RemoteMonitor: ObservableObject {
 extension RemoteProfile {
     fileprivate static var editorPreview: Self {
         var profile = Self()
-        func shortcut(_ code: UInt16, _ label: String, flags: UInt64 = 0) -> RemoteAction {
+        func shortcut(_ code: UInt16, _ label: String) -> RemoteAction {
             var value = RemoteAction(.shortcut)
             value.keyCode = code
-            value.flags = flags
+            value.flags = 0
             value.label = label
             return value
         }
@@ -384,8 +386,7 @@ extension RemoteProfile {
             profile.buttons[button.rawValue] = binding
         }
         var ok = RemoteBinding()
-        ok.single = shortcut(
-            9, "V", flags: RemoteModifier.flags(RemoteModifier.all.filter { [59, 58].contains($0.code) }))
+        ok.single = .dictationShortcut
         ok.double = shortcut(87, "Numpad5")
         ok.long = shortcut(36, "回车")
         profile.buttons[RemoteButton.ok.rawValue] = ok

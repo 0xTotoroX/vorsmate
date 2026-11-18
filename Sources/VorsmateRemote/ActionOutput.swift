@@ -17,14 +17,11 @@ enum ActionOutput {
                 ? path : NSWorkspace.shared.urlForApplication(withBundleIdentifier: id)
             guard let url else { throw RemoteError.message("找不到指定的应用") }
             _ = try await NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
-        case .typeless:
-            guard typelessRunning else { throw RemoteError.message("请先打开 Typeless") }
-            // ANSI V, left Control and left Option from the user's existing Typeless shortcut.
-            try sendShortcut(
-                code: 9, raw: RemoteModifier.flags(RemoteModifier.all.filter { [59, 58].contains($0.code) }))
-        case .shortcut:
-            guard let code = action.keyCode else { throw RemoteError.message("快捷键缺少键码") }
-            try sendShortcut(code: code, raw: action.flags ?? 0)
+        case .typeless, .shortcut:
+            if action.kind == .typeless && !typelessRunning { throw RemoteError.message("请先打开 Typeless") }
+            let shortcut = action.editableAction
+            guard let code = shortcut.keyCode else { throw RemoteError.message("快捷键缺少键码") }
+            try sendShortcut(code: code, raw: shortcut.flags ?? 0)
         case .volumeUp: try media(0)
         case .volumeDown: try media(1)
         case .mute: try media(7)

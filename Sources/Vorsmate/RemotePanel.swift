@@ -70,17 +70,26 @@ struct RemotePanel: View {
 
     private func overview(_ state: RemoteEditorState) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 12) {
-                if let face = plugin.face {
-                    Image(nsImage: face).resizable().scaledToFit().frame(width: 32, height: 65).accessibilityHidden(
-                        true)
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("遥控器").font(.title2.weight(.semibold))
-                    Text("小米蓝牙遥控器 2 Pro").font(.callout)
-                    Text(state.status).font(.caption).foregroundStyle(.secondary)
-                }
-            }
+            Button {
+                page = .detail(.ok)
+            } label: {
+                HStack(spacing: 12) {
+                    if let face = plugin.face {
+                        Image(nsImage: face).resizable().scaledToFit().frame(width: 32, height: 65).accessibilityHidden(
+                            true)
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("遥控器").font(.title2.weight(.semibold))
+                        Text("小米蓝牙遥控器 2 Pro").font(.callout)
+                        Text(state.status).font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
+                }.contentShape(Rectangle())
+            }.buttonStyle(.plain)
+                .accessibilityLabel("小米蓝牙遥控器 2 Pro，" + state.status)
+                .accessibilityHint("打开模型，选择实体按键")
+                .accessibilityIdentifier("remote.position")
             gestures
             VStack(spacing: 0) {
                 ForEach(buttons) { key in
@@ -100,16 +109,6 @@ struct RemotePanel: View {
                     if key != buttons.last { Divider() }
                 }
             }
-            Divider()
-            Button {
-                page = .detail(.ok)
-            } label: {
-                HStack {
-                    Label("按位置选键", systemImage: "scope")
-                    Spacer()
-                    Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
-                }.contentShape(Rectangle())
-            }.buttonStyle(.plain).accessibilityIdentifier("remote.position")
         }
     }
 
@@ -133,14 +132,15 @@ struct RemotePanel: View {
             if state.profile.voiceFn { LabeledContent("同时发送", value: "Fn / 地球键") }
         } else {
             gestures
-            let action = state.profile.action(for: key, gesture: gesture)
+            let saved = state.profile.action(for: key, gesture: gesture)
+            let action = saved.editableAction
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Text("动作")
                     Spacer()
                     Menu(action.kind.title) {
-                        ForEach(RemoteAction.Kind.allCases, id: \.self) { kind in
-                            Button(kind.title) { choose(kind, key: key, previous: action) }
+                        ForEach(RemoteAction.Kind.choices, id: \.self) { kind in
+                            Button(kind.title) { choose(kind, key: key, previous: saved) }
                         }
                     }.fixedSize().accessibilityIdentifier("remote.action")
                 }
@@ -167,10 +167,10 @@ struct RemotePanel: View {
                             }
                         }.accessibilityElement(children: .ignore).accessibilityLabel(action.title)
                     }
-                    Button("重新录入") { beginCapture(action) }.buttonStyle(.link).accessibilityIdentifier("remote.record")
+                    Button("重新录入") { beginCapture(saved) }.buttonStyle(.link).accessibilityIdentifier("remote.record")
                 } else if action.kind == .openApplication {
                     LabeledContent("应用", value: action.title)
-                    Button("更换应用…") { choose(.openApplication, key: key, previous: action) }.buttonStyle(.link)
+                    Button("更换应用…") { choose(.openApplication, key: key, previous: saved) }.buttonStyle(.link)
                 }
                 if state.profile.buttons[key.rawValue]?.rapid == true {
                     Text("允许快速连按").font(.callout).foregroundStyle(.secondary)

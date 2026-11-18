@@ -13,6 +13,7 @@ GESTURES = {"singleClick": "single", "doubleClick": "double", "longPress": "long
 ACTIONS = {"disabled": "none", "volumeUp": "volumeUp", "volumeDown": "volumeDown",
            "volumeMute": "mute", "playPause": "playPause", "previousCommandLeft": "previousTrack",
            "nextCommandRight": "nextTrack"}
+DICTATION_SHORTCUT = {"kind": "shortcut", "keyCode": 9, "label": "V", "flags": 0xC0021}
 KEYCODES = {"escape": (53, "Esc"), "returnKey": (36, "回车"), "deleteBackward": (51, "退格"),
             "arrowLeft": (123, "←"), "arrowRight": (124, "→"), "arrowUp": (126, "↑"), "arrowDown": (125, "↓")}
 
@@ -64,7 +65,7 @@ def convert(data):
         binding["rapid"] = mappings["buttonRapidPressEnabled"].get(key, False)
         bindings[key] = binding
     # The user explicitly replaced this one gesture with the tested dictation toggle.
-    bindings["ok"]["single"] = {"kind": "typeless"}
+    bindings["ok"]["single"] = DICTATION_SHORTCUT.copy()
     return {"version": 1, "buttons": bindings, "voiceFn": True,
             "doubleMilliseconds": timing["doubleClickMilliseconds"], "longMilliseconds": timing["longPressMilliseconds"]}
 
@@ -76,7 +77,13 @@ def main():
     args = parser.parse_args()
     profile = convert(plistlib.loads(args.source.read_bytes()))
     if args.output.exists():
-        if json.loads(args.output.read_bytes()) != profile:
+        existing = json.loads(args.output.read_bytes())
+        # Compare the old named preset without rewriting the user's file.
+        if isinstance(existing, dict) and isinstance(existing.get("buttons"), dict):
+            ok = existing["buttons"].get("ok")
+            if isinstance(ok, dict) and ok.get("single") == {"kind": "typeless"}:
+                ok["single"] = DICTATION_SHORTCUT
+        if existing != profile:
             parser.error("目标已有不同配置。请用 --output 选择另一个文件，不会覆盖已有编辑。")
     else:
         args.output.parent.mkdir(mode=0o700, parents=True, exist_ok=True)

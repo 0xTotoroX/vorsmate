@@ -5,8 +5,7 @@ extension RemoteAction.Kind {
     package var title: String {
         switch self {
         case .none: "无动作"
-        case .typeless: "切换 Typeless 听写"
-        case .shortcut: "自定义快捷键"
+        case .typeless, .shortcut: "自定义快捷键"
         case .openApplication: "打开应用…"
         case .volumeUp: "增大音量"
         case .volumeDown: "减小音量"
@@ -20,6 +19,7 @@ extension RemoteAction.Kind {
 extension RemoteAction {
     package var keycaps: [String] { RemoteModifier.keycaps(code: keyCode ?? 0, flags: flags ?? 0, label: label) }
     package var title: String {
+        if kind == .typeless { return editableAction.title }
         if kind == .openApplication { return label ?? "打开应用" }
         guard kind == .shortcut else { return kind.title }
         return RemoteModifier.display(code: keyCode ?? 0, flags: flags ?? 0, label: label)

@@ -66,6 +66,7 @@ public enum RemoteButton: String, CaseIterable, Codable, Sendable, Identifiable 
 public struct RemoteAction: Codable, Equatable, Sendable {
     public enum Kind: String, Codable, Sendable, CaseIterable {
         case none, typeless, shortcut, openApplication, volumeUp, volumeDown, mute, playPause, previousTrack, nextTrack
+        package static var choices: [Self] { allCases.filter { $0 != .typeless } }
     }
     public var kind: Kind
     public var keyCode: UInt16?
@@ -74,6 +75,17 @@ public struct RemoteAction: Codable, Equatable, Sendable {
     public var bundleID: String?
     public var path: String?
     public init(_ kind: Kind) { self.kind = kind }
+
+    package static let dictationShortcut: Self = {
+        var action = Self(.shortcut)
+        action.keyCode = 9
+        action.flags = RemoteModifier.flags(RemoteModifier.all.filter { [59, 58].contains($0.code) })
+        action.label = "V"
+        return action
+    }()
+
+    // Older profiles stored the Typeless shortcut as a named action.
+    package var editableAction: Self { kind == .typeless ? .dictationShortcut : self }
 }
 
 public enum RemoteGesture: String, Codable, CaseIterable, Identifiable, Sendable {
@@ -118,7 +130,7 @@ public struct RemoteProfile: Codable, Equatable, Sendable {
     public var voiceFn = false
     public init() {
         var ok = RemoteBinding()
-        ok.single = RemoteAction(.typeless)
+        ok.single = .dictationShortcut
         buttons[RemoteButton.ok.rawValue] = ok
     }
     public var deviceMap: [UInt64: UInt64] {

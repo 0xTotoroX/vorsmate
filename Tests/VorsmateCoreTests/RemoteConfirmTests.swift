@@ -109,3 +109,22 @@ func editFromMenuPanel() throws {
     }
     #expect(RemoteModifier.keycaps(code: 9, flags: chord.flags ?? 0, label: "V") == ["右⌃", "左⌥", "V"])
 }
+
+@Test("新确定键使用普通快捷键；旧版听写预设可以按原值重新录入")
+func editLegacyDictationShortcut() throws {
+    let legacy = try JSONDecoder().decode(RemoteAction.self, from: Data(#"{"kind":"typeless"}"#.utf8))
+    let shortcut = RemoteProfile().action(for: .ok, gesture: .single)
+    #expect(shortcut.kind == .shortcut)
+    #expect(shortcut.keyCode == 9 && shortcut.flags == 0xC0021 && shortcut.label == "V")
+    #expect(legacy.editableAction == shortcut)
+    #expect(!RemoteAction.Kind.choices.contains(.typeless))
+    var old = configured()
+    var binding = old.buttons[RemoteButton.ok.rawValue] ?? RemoteBinding()
+    binding.single = legacy
+    old.buttons[RemoteButton.ok.rawValue] = binding
+    let updated = try old.editing(.ok, gesture: .single, previous: legacy, action: shortcut)
+    #expect(updated.action(for: .ok, gesture: .single) == shortcut)
+    #expect(updated.action(for: .ok, gesture: .double) == binding.double)
+    #expect(updated.action(for: .ok, gesture: .long) == binding.long)
+    #expect(updated.deviceMap[0x7_0000_0028] == 0)
+}
