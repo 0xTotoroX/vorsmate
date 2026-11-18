@@ -1,5 +1,5 @@
 // [INPUT]: 已安装的本机虚拟键盘桥，固定单字节请求和回执。
-// [OUTPUT]: 一次左 Control + 左 Option + V。回执不代表听写状态。
+// [OUTPUT]: 一次左 Control + 左 Option + V、Q 或 T。回执不代表听写状态。
 // [POS]: 仅在遥控器所有权及回车屏蔽均已确认后调用。
 import Darwin
 import Foundation
@@ -13,8 +13,8 @@ enum TypelessBridge {
             && info.st_mode & 0o077 == 0
     }
 
-    static func toggle() -> Bool {
-        guard available else { return false }
+    static func post(_ command: UInt8) -> Bool {
+        guard [0x76, 0x71, 0x74].contains(command), available else { return false }
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else { return false }
         defer { close(fd) }
@@ -42,7 +42,7 @@ enum TypelessBridge {
         var uid: uid_t = 0
         var gid: gid_t = 0
         guard getpeereid(fd, &uid, &gid) == 0, uid == 0 else { return false }
-        var request: UInt8 = 0x76
+        var request = command
         var reply: UInt8 = 0
         return write(fd, &request, 1) == 1 && read(fd, &reply, 1) == 1 && reply == 0x31
     }

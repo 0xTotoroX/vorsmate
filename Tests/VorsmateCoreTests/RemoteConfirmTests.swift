@@ -1,20 +1,85 @@
+import Foundation
 import Testing
 import VorsmateCore
 
-@Test("每次中心键释放只切换一次，其他键、重复、错误与语音报告不触发")
-func remoteConfirmEdges() {
-    var key = RemoteConfirm()
-    func released(reportID: UInt32, bytes: [UInt8]) -> Bool { key.released(reportID: reportID, bytes: bytes) }
-    for prefix in [[], [UInt8(1)]] {
-        for _ in 0..<2 {
-            for _ in 0..<4 {
-                #expect(!released(reportID: 1, bytes: prefix + [0x50, 0, 0x28, 0, 0, 0]))
-            }
-            #expect(!released(reportID: 1, bytes: prefix + [1, 0, 0, 0, 0, 0]))
-            #expect(!released(reportID: 6, bytes: [0, 0, 0, 0, 0, 0]))
-            #expect(!released(reportID: 1, bytes: [0, 0]))
-            #expect(released(reportID: 1, bytes: prefix + [0x50, 0, 0, 0, 0, 0]))
-            #expect(!released(reportID: 1, bytes: prefix + [0, 0, 0, 0, 0, 0]))
-        }
+private func configured() -> RemoteProfile {
+    var p = RemoteProfile()
+    var binding = RemoteBinding()
+    binding.single = RemoteAction(.typeless)
+    binding.double = RemoteAction(.previousTrack)
+    binding.long = RemoteAction(.mute)
+    for key in RemoteButton.allCases where key != .voice { p.buttons[key.rawValue] = binding }
+    p.voiceFn = true
+    return p
+}
+
+@Test("三个小端键槽和两种报告长度，语音数据、错误报告不构成松开")
+func remoteReport() {
+    for key in RemoteButton.allCases {
+        let payload: [UInt8] = [0, 0, UInt8(key.usage), 0, 0, 0]
+        #expect(RemoteButton.pressed(reportID: 1, bytes: payload) == [key])
+        #expect(RemoteButton.pressed(reportID: 1, bytes: [1] + payload) == [key])
+        #expect(RemoteButton.pressed(reportID: 6, bytes: payload) == nil)
     }
+    #expect(RemoteButton.pressed(reportID: 1, bytes: [0, 0, 0, 0, 1, 0]) == nil)
+    #expect(RemoteButton.pressed(reportID: 1, bytes: [0]) == nil)
+    #expect(RemoteButton.pressed(reportID: 1, bytes: [0, 0, 0, 0, 0, 0]) == [])
+}
+
+@Test("每颗普通键的短按、双击和长按互斥，重复报告不会重发")
+func gestures() {
+    let p = configured()
+    for button in RemoteButton.allCases where button != .voice {
+        var engine = RemoteGestures()
+        func edge(_ down: Bool, _ t: Int) -> [RemoteStroke] { engine.ingest(down ? [button] : [], at: t, profile: p) }
+        func tick(_ t: Int) -> [RemoteStroke] { engine.advance(to: t) }
+        #expect(edge(true, 0).isEmpty)
+        #expect(edge(false, 80).isEmpty)
+        #expect(tick(379).isEmpty)
+        #expect(tick(380) == [RemoteStroke(button, .single)])
+        #expect(edge(true, 500).isEmpty)
+        #expect(edge(false, 550).isEmpty)
+        #expect(edge(true, 750).isEmpty)
+        #expect(edge(false, 800) == [RemoteStroke(button, .double)])
+        #expect(tick(1200).isEmpty)
+        #expect(edge(true, 1400).isEmpty)
+        #expect(edge(true, 1700).isEmpty)
+        #expect(tick(1950) == [RemoteStroke(button, .long)])
+        #expect(edge(false, 2100).isEmpty)
+        #expect(tick(3000).isEmpty)
+    }
+}
+@Test("默认只接管确定键，迁移后的 Fn 是设备本身的按下与松开")
+func keyLeaseAndPersistence() throws {
+    #expect(RemoteProfile().deviceMap == [0x7_0000_0028: 0])
+    let p = configured()
+    #expect(p.deviceMap.count == 13)
+    #expect(p.deviceMap[0x7_0000_003e] == 0xff_0000_0003)
+    let url = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: url) }
+    try p.save(replacing: RemoteProfile(), at: url)
+    #expect(try RemoteProfile.read(from: url) == p)
+    #expect(throws: (any Error).self) { try p.save(replacing: RemoteProfile(), at: url) }
+}
+
+@Test("初始松开不触发；旧版独立确定键连续短按仍可立即切换；取消会丢弃等待中的动作")
+func defaultAndCancellation() {
+    var p = RemoteProfile()
+    var engine = RemoteGestures()
+    func edge(_ keys: Set<RemoteButton>, _ time: Int) -> [RemoteStroke] {
+        engine.ingest(keys, at: time, profile: p)
+    }
+    #expect(edge([], 0).isEmpty)
+    for time in [100, 400] {
+        #expect(edge([.ok], time).isEmpty)
+        #expect(edge([.ok], time + 10).isEmpty)
+        #expect(edge([], time + 80) == [RemoteStroke(.ok, .single)])
+    }
+    p = configured()
+    #expect(edge([.ok, .up], 600).isEmpty)
+    #expect(edge([.up], 680).isEmpty)
+    #expect(engine.deadline == 980)
+    engine = RemoteGestures()
+    #expect(engine.deadline == nil)
+    #expect(edge([], 2000).isEmpty)
 }

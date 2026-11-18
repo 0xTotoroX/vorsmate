@@ -24,7 +24,7 @@ Swift 6 + Swift Package Manager + SwiftUI / AppKit + Sparkle + TIS + CoreAudio +
 
 - 更新在启动一分钟后及每 12 小时直接读取固定 updates 分支的签名 feed，不调用 GitHub API 或 /latest；Sparkle 必须验证 feed 与安装包的双重 Ed25519 签名。检查 20 秒截止，下载无进展 60 秒、准备 120 秒截止；取消与失败后可重试，旧会话回调不能覆盖新状态，实际安装阶段不强制中断；更新不修改 settings.json 或注销助手。安装前用户确认，所有反馈复用紧凑窗口。预览不启动网络更新。Release 只附 DMG、说明仅列英中功能变化；appcast.xml 单独发布到固定 updates 分支，见 docs/updates.md。
 
-- 小米遥控器是独立、默认关闭的可选插件。配套包与宿主同目录，拥有自己的输入权限；确定键显式映射、虚拟键盘依赖与实机验收见 [docs/remote.md](docs/remote.md)。
+- 小米遥控器是独立、默认关闭的可选插件。配套包与宿主同目录，拥有自己的输入权限；RC003 全键映射、配置导入、虚拟键盘依赖与实机验收见 [docs/remote.md](docs/remote.md)。
 
 ## 地图
 
@@ -44,6 +44,7 @@ Swift 6 + Swift Package Manager + SwiftUI / AppKit + Sparkle + TIS + CoreAudio +
 | scripts/build.sh / scripts/package.sh | 构建本机或 Universal 签名应用，打包 DMG；不安装、不上传 |
 | scripts/appcast.sh / Package.resolved | 签名更新描述与 Sparkle 依赖锁定；私钥留在钥匙串 |
 | scripts/make-icon.swift / Resources/AppIcon* / Resources/StatusIcon.pdf | “折影”母版、应用图标各尺寸导出和菜单栏单色矢量标记 |
+| Resources/Remote/ | 可选插件元数据、原创 RC003 Blender 模型及正面按键投影 |
 | Resources/Info.plist / Resources/Vorsmate.entitlements / Resources/Install.txt | 应用身份、最低系统、版本、系统动作回退声明与双语安装说明 |
 | Resources/LaunchDaemons/ | SMAppService 助手注册描述；注册不等于授权通过 |
 | THIRD_PARTY_NOTICES.md / LICENSES/ | 来源、修改边界与随应用分发的第三方许可 |

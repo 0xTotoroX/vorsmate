@@ -14,9 +14,49 @@ final class RemoteMonitor: ObservableObject {
     private let lease = ReturnLease()
     private var manager: IOHIDManager?
     private var sourceID: UInt64?
-    private var confirm = RemoteConfirm()
+    @Published private(set) var profile = RemoteProfile()
+    @Published var feedback: String?
+    private(set) var preview: Bool
+    private var profileError: String?
+    private var gestures = RemoteGestures()
+    private var pending: [(RemoteStroke, RemoteAction)] = []
+    private var sending = false
+    private var generation = 0
+    @Published private(set) var lastGesture: String?
+
+    private var deadlineTimer: Timer?
+    private var activeMap: [UInt64: UInt64] = [:]
+    private var now: Int { Int(ProcessInfo.processInfo.systemUptime * 1000) }
+
+    init(preview: Bool) {
+        self.preview = preview
+        if !preview {
+            do { profile = try RemoteProfile.read() } catch { profileError = error.localizedDescription }
+        }
+    }
+
+    func edit(_ button: RemoteButton, gesture: RemoteGesture, action: RemoteAction) {
+        var next = profile
+        var binding = next.buttons[button.rawValue] ?? RemoteBinding()
+        binding[gesture] = action
+        next.buttons[button.rawValue] = binding
+        do {
+            if !preview { try next.save(replacing: profile) }
+            cancelGestures()
+            profile = next
+            feedback = nil
+            if locked { tick() }
+        } catch { feedback = error.localizedDescription }
+    }
+
+    private func cancelGestures() {
+        generation &+= 1
+        pending.removeAll()
+        gestures = RemoteGestures()
+        deadlineTimer?.invalidate()
+        deadlineTimer = nil
+    }
     private var timer: Timer?
-    private var dispatchFailed = false
     private var locked = false
     private var sleeping = false
 
@@ -26,10 +66,6 @@ final class RemoteMonitor: ObservableObject {
             return id == "com.hd838a.RemoteMic" || id.hasPrefix("com.hd838a.RemoteMic.")
         }
     }
-    private var typelessRunning: Bool {
-        !NSRunningApplication.runningApplications(withBundleIdentifier: "now.typeless.desktop").isEmpty
-    }
-
     func start() {
         do {
             try lease.lock()
@@ -65,7 +101,7 @@ final class RemoteMonitor: ObservableObject {
 
     private func idle(_ message: String) {
         sourceID = nil
-        confirm = RemoteConfirm()
+        cancelGestures()
         if let manager {
             IOHIDManagerUnscheduleFromRunLoop(manager, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
             IOHIDManagerClose(manager, 0)
@@ -89,8 +125,12 @@ final class RemoteMonitor: ObservableObject {
 
     private func tick() {
         guard locked && !sleeping else { return }
+        if let profileError {
+            idle("无法读取按键配置：\(profileError)")
+            return
+        }
         if competing {
-            idle("请先退出 SayAll，再接管确定键")
+            idle("请先退出 SayAll，再接管遥控器")
             return
         }
         needsPermission = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) != kIOHIDAccessTypeGranted
@@ -98,17 +138,26 @@ final class RemoteMonitor: ObservableObject {
             idle("需要输入监控权限")
             return
         }
-        guard typelessRunning else {
-            idle("等待 Typeless 打开")
-            return
-        }
-        guard TypelessBridge.available else {
-            idle("虚拟键盘桥未就绪")
-            return
-        }
         if manager == nil {
             let hid = IOHIDManagerCreate(nil, 0)
             IOHIDManagerSetDeviceMatching(hid, ReturnLease.identity as CFDictionary)
+            IOHIDManagerRegisterDeviceRemovalCallback(
+                hid,
+                { context, _, _, device in
+                    guard let context else { return }
+                    let monitor = Unmanaged<RemoteMonitor>.fromOpaque(context).takeUnretainedValue()
+                    MainActor.assumeIsolated {
+                        guard let current = monitor.sourceID, RemoteMonitor.registryID(device) == current else {
+                            return
+                        }
+                        monitor.sourceID = nil
+                        monitor.cancelGestures()
+                        do {
+                            try monitor.lease.recover()
+                            monitor.update("等待遥控器连接")
+                        } catch { monitor.update(error.localizedDescription) }
+                    }
+                }, Unmanaged.passUnretained(self).toOpaque())
             IOHIDManagerRegisterInputReportCallback(
                 hid,
                 { context, result, sender, _, reportID, bytes, length in
@@ -137,7 +186,7 @@ final class RemoteMonitor: ObservableObject {
         let current = only.flatMap(Self.registryID)
         if sourceID != current || current == nil {
             sourceID = nil
-            confirm = RemoteConfirm()
+            cancelGestures()
             do { try lease.recover() } catch {
                 update(error.localizedDescription)
                 return
@@ -147,13 +196,24 @@ final class RemoteMonitor: ObservableObject {
             update(devices.isEmpty ? "等待遥控器连接" : "请只连接一只 RC003")
             return
         }
-        if sourceID == current && lease.isSuppressed() { return }
+        var desired = profile.deviceMap
+        if !CGPreflightPostEventAccess() {
+            for button in RemoteButton.allCases where button != .voice {
+                guard let binding = profile.buttons[button.rawValue] else { continue }
+                let canPerform = RemoteGesture.allCases.contains {
+                    [.typeless, .openApplication].contains(binding[$0].kind)
+                }
+                if !canPerform { desired.removeValue(forKey: UInt64(7) << 32 | UInt64(button.usage)) }
+            }
+        }
+        if sourceID == current && activeMap == desired && lease.isSuppressed() { return }
         sourceID = nil
-        confirm = RemoteConfirm()
+        cancelGestures()
         do {
-            try lease.acquire()
+            try lease.acquire(desired)
+            activeMap = desired
             sourceID = current
-            update(dispatchFailed ? "上次发送未获确认" : "确定键就绪")
+            update("遥控器就绪")
         } catch { update(error.localizedDescription) }
     }
 
@@ -164,16 +224,65 @@ final class RemoteMonitor: ObservableObject {
 
     private func receive(device: IOHIDDevice, id: UInt32, bytes: [UInt8]) {
         guard let sourceID, Self.registryID(device) == sourceID,
-            confirm.released(reportID: id, bytes: bytes)
+            let pressed = RemoteButton.pressed(reportID: id, bytes: bytes)
         else { return }
-        guard !competing, typelessRunning, lease.isSuppressed() else {
+        let claimed = pressed.filter { activeMap[UInt64(7) << 32 | UInt64($0.usage)] != nil }
+        let actions = gestures.ingest(claimed, at: now, profile: profile)
+        scheduleDeadline()
+        deliver(actions)
+    }
+
+    private func scheduleDeadline() {
+        deadlineTimer?.invalidate()
+        deadlineTimer = nil
+        guard let due = gestures.deadline else { return }
+        let timer = Timer(timeInterval: Double(max(0, due - now)) / 1000, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let actions = self.gestures.advance(to: self.now)
+                self.scheduleDeadline()
+                self.deliver(actions)
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        deadlineTimer = timer
+    }
+
+    private func deliver(_ strokes: [RemoteStroke]) {
+        guard !strokes.isEmpty else { return }
+        guard sourceID != nil, !competing, lease.isSuppressed() else {
+            cancelGestures()
             tick()
             return
         }
-        // One synchronous, bounded request. Never retry an ambiguous receipt or queue stale toggles.
-        dispatchFailed = !TypelessBridge.toggle()
-        if !dispatchFailed { sent += 1 }
-        update(dispatchFailed ? "发送未获确认" : "确定键就绪")
+        for stroke in strokes {
+            guard let action = profile.buttons[stroke.button.rawValue]?[stroke.gesture], action.kind != .none else {
+                continue
+            }
+            pending.append((stroke, action))
+        }
+        guard !sending, !pending.isEmpty else { return }
+        sending = true
+        Task {
+            defer { sending = false }
+            while !pending.isEmpty {
+                let (stroke, action) = pending.removeFirst()
+                let current = generation
+                guard sourceID != nil, !competing, lease.isSuppressed() else {
+                    cancelGestures()
+                    tick()
+                    return
+                }
+                do {
+                    try await ActionOutput.send(action)
+                    if current == generation {
+                        feedback = nil
+                        lastGesture = "\(stroke.button.name) · \(stroke.gesture.name)"
+                        sent += 1
+                    }
+                } catch { if current == generation { feedback = error.localizedDescription } }
+            }
+        }
     }
 
     func stop() {

@@ -2,6 +2,7 @@
 
 > L2 | 父级: ../AGENTS.md
 
+- import-remote.py：只读导入当前 RC003 的用户配置，已编辑的目标档案不会被覆盖。
 - build.sh 同时输出独立签名的 VorsmateRemote.app，主包记录临时签名时的配套插件哈希。
 - build.sh：Swift release 构建主应用与风扇助手，--universal 包含 arm64 / x86_64；临时目录嵌入并逐层签署 Sparkle，移除本机框架搜索路径，仅主应用附加 Apple Events entitlement，装配源码修订 / 完整许可并验证签名，再替换 dist/Vorsmate.app。VORSMATE_SIGN_IDENTITY 可指定现有 Apple 证书并加时间戳，默认临时签名仅监控；不安装或发布。
 - package.sh：验证应用及助手的两种架构、签名和许可，将应用、Applications 链接及安装说明打包为 Vorsmate-<版本>.dmg；不自动签名、公证或上传。

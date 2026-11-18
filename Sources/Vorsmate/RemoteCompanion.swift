@@ -137,7 +137,7 @@ struct RemoteRow: View {
                     expanded: expanded)
             }.buttonStyle(.plain)
             if expanded {
-                Button("查看确定键映射") { plugin.openEditor() }
+                Button("编辑按键映射") { plugin.openEditor() }
                     .padding(.horizontal, 20).padding(.bottom, 12)
             }
         }

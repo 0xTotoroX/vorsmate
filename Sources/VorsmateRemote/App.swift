@@ -7,7 +7,7 @@ import SwiftUI
 @main
 @MainActor
 final class RemoteApp: NSObject, NSApplicationDelegate {
-    private let monitor = RemoteMonitor()
+    private lazy var monitor = RemoteMonitor(preview: preview)
     private var window: NSWindow?
     private let hosted = CommandLine.arguments.contains("--host-v1")
     private let verify = CommandLine.arguments.contains("--verify")
