@@ -49,23 +49,65 @@ final class RemoteMonitor: ObservableObject {
         if CommandLine.arguments.contains("--verify") {
             voice.receipt = { [weak self] count, peak in self?.report("voiceSamples=\(count) peak=\(peak)") }
         }
-        if !preview {
-            do { profile = try RemoteProfile.read() } catch { profileError = error.localizedDescription }
+        if preview {
+            profile = .editorPreview
+        } else {
+            reloadProfile()
         }
     }
 
-    func edit(_ button: RemoteButton, gesture: RemoteGesture, action: RemoteAction) {
-        var next = profile
-        var binding = next.buttons[button.rawValue] ?? RemoteBinding()
-        binding[gesture] = action
-        next.buttons[button.rawValue] = binding
+    var editorState: RemoteEditorState {
+        RemoteEditorState(
+            profile: profile, status: preview ? "预览" : status, voice: preview ? "预览" : voiceStatus,
+            needsInput: !preview && needsPermission, needsPost: !preview && !CGPreflightPostEventAccess(),
+            problem: profileError, feedback: feedback)
+    }
+
+    func reloadProfile() {
+        guard !preview else { return }
         do {
+            let saved = try RemoteProfile.read()
+            let changed = saved != profile || profileError != nil
+            profileError = nil
+            if changed {
+                cancelGestures()
+                profile = saved
+                if locked { tick() }
+            }
+        } catch {
+            profileError = error.localizedDescription
+            if locked { tick() }
+        }
+    }
+
+    @discardableResult
+    func edit(_ button: RemoteButton, gesture: RemoteGesture, action: RemoteAction, previous: RemoteAction? = nil)
+        -> String?
+    {
+        if let profileError { return profileError }
+        do {
+            let next = try profile.editing(
+                button, gesture: gesture, previous: previous ?? profile.action(for: button, gesture: gesture),
+                action: action)
             if !preview { try next.save(replacing: profile) }
             cancelGestures()
             profile = next
             feedback = nil
             if locked { tick() }
-        } catch { feedback = error.localizedDescription }
+            return nil
+        } catch {
+            reloadProfile()
+            feedback = error.localizedDescription
+            return feedback
+        }
+    }
+
+    func requestPostAccess() {
+        guard !preview else { return }
+        _ = CGRequestPostEventAccess()
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     private func cancelGestures() {
@@ -111,6 +153,7 @@ final class RemoteMonitor: ObservableObject {
     }
 
     func requestAccess() {
+        guard !preview else { return }
         _ = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent") {
             NSWorkspace.shared.open(url)
@@ -318,5 +361,34 @@ final class RemoteMonitor: ObservableObject {
         timer?.invalidate()
         timer = nil
         if locked { idle("已停用") }
+    }
+}
+
+extension RemoteProfile {
+    fileprivate static var editorPreview: Self {
+        var profile = Self()
+        func shortcut(_ code: UInt16, _ label: String, flags: UInt64 = 0) -> RemoteAction {
+            var value = RemoteAction(.shortcut)
+            value.keyCode = code
+            value.flags = flags
+            value.label = label
+            return value
+        }
+        for (button, action) in [
+            (RemoteButton.power, shortcut(53, "Esc")), (.left, shortcut(123, "←")), (.right, shortcut(124, "→")),
+            (.up, shortcut(126, "↑")), (.down, shortcut(125, "↓")), (.back, shortcut(51, "退格")),
+            (.volumeUp, RemoteAction(.volumeUp)), (.volumeDown, RemoteAction(.volumeDown)),
+        ] {
+            var binding = RemoteBinding()
+            binding.single = action
+            profile.buttons[button.rawValue] = binding
+        }
+        var ok = RemoteBinding()
+        ok.single = shortcut(
+            9, "V", flags: RemoteModifier.flags(RemoteModifier.all.filter { [59, 58].contains($0.code) }))
+        ok.double = shortcut(87, "Numpad5")
+        ok.long = shortcut(36, "回车")
+        profile.buttons[RemoteButton.ok.rawValue] = ok
+        return profile
     }
 }

@@ -4,30 +4,7 @@
 import AppKit
 import SwiftUI
 import VorsmateCore
-
-extension RemoteAction.Kind {
-    var title: String {
-        switch self {
-        case .none: "无动作"
-        case .typeless: "切换 Typeless 听写"
-        case .shortcut: "录入快捷键…"
-        case .openApplication: "打开应用…"
-        case .volumeUp: "增大音量"
-        case .volumeDown: "减小音量"
-        case .mute: "静音"
-        case .playPause: "播放 / 暂停"
-        case .previousTrack: "上一首"
-        case .nextTrack: "下一首"
-        }
-    }
-}
-extension RemoteAction {
-    var title: String {
-        if kind == .openApplication { return label ?? "打开应用" }
-        guard kind == .shortcut else { return kind.title }
-        return RemoteModifier.display(code: keyCode ?? 0, flags: flags ?? 0, label: label)
-    }
-}
+import VorsmateRemoteUI
 
 struct RemoteWindow: View {
     @ObservedObject var monitor: RemoteMonitor
@@ -90,14 +67,7 @@ struct RemoteWindow: View {
                 Text(monitor.feedback ?? (preview ? "预览" : monitor.status)).foregroundStyle(.secondary)
                 if monitor.needsPermission && !preview { Button("打开输入监控设置") { monitor.requestAccess() } }
                 if !preview && !CGPreflightPostEventAccess() {
-                    Button("允许发送系统按键") {
-                        _ = CGRequestPostEventAccess()
-                        if let url = URL(
-                            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
-                        {
-                            NSWorkspace.shared.open(url)
-                        }
-                    }
+                    Button("允许发送系统按键") { monitor.requestPostAccess() }
                 }
                 if verify {
                     Text(monitor.voiceStatus).font(.callout)
@@ -123,67 +93,5 @@ struct RemoteWindow: View {
                 if verify { record("actionReceipts=\(count) \(monitor.lastGesture ?? "")") }
             }
             .onChange(of: draft.filter { $0 == "\n" }.count) { _, count in if verify { record("lineBreaks=\(count)") } }
-    }
-}
-
-private struct KeyRecorder: NSViewRepresentable {
-    let capture: (RemoteAction) -> Void
-    func makeNSView(context: Context) -> Field {
-        let field = Field(labelWithString: "请按下快捷键")
-        field.capture = capture
-        return field
-    }
-    func updateNSView(_ nsView: Field, context: Context) { nsView.capture = capture }
-    final class Field: NSTextField {
-        var capture: ((RemoteAction) -> Void)?
-        override var acceptsFirstResponder: Bool { true }
-        override func viewDidMoveToWindow() {
-            super.viewDidMoveToWindow()
-            if let window {
-                DispatchQueue.main.async { [weak self, weak window] in if let self { window?.makeFirstResponder(self) }
-                }
-            }
-        }
-        override func performKeyEquivalent(with event: NSEvent) -> Bool {
-            guard window?.firstResponder === self, event.type == .keyDown else {
-                return super.performKeyEquivalent(with: event)
-            }
-            keyDown(with: event)
-            return true
-        }
-        private var held = [RemoteModifier]()
-        private var chord = [RemoteModifier]()
-        private var completed = false
-        override func flagsChanged(with event: NSEvent) {
-            guard !completed, let key = RemoteModifier.all.first(where: { $0.code == event.keyCode }) else { return }
-            let bits = event.cgEvent?.flags.rawValue ?? UInt64(event.modifierFlags.rawValue)
-            if bits & key.bit != 0 {
-                if !held.contains(key) { held.append(key) }
-                chord = held
-            } else if held.contains(key) {
-                held.removeAll { $0 == key }
-                if held.isEmpty, let last = chord.last {
-                    var action = RemoteAction(.shortcut)
-                    action.keyCode = last.code
-                    action.flags = RemoteModifier.flags(Array(chord.dropLast()))
-                    action.label = last.title
-                    completed = true
-                    capture?(action)
-                }
-            }
-        }
-        override func keyDown(with event: NSEvent) {
-            guard !event.isARepeat, !completed else { return }
-            completed = true
-            var action = RemoteAction(.shortcut)
-            action.keyCode = event.keyCode
-            action.flags = (event.cgEvent?.flags.rawValue ?? UInt64(event.modifierFlags.rawValue)) & 0x00ff_ffff
-            let special: [UInt16: String] = [
-                36: "回车", 48: "Tab", 49: "空格", 51: "退格", 53: "Esc", 123: "←", 124: "→", 125: "↓", 126: "↑",
-            ]
-            let character = event.charactersIgnoringModifiers?.uppercased() ?? ""
-            action.label = special[event.keyCode] ?? (character.isEmpty ? "键码 \(event.keyCode)" : character)
-            capture?(action)
-        }
     }
 }

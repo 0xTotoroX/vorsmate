@@ -14,9 +14,15 @@ case "${1:-}" in
 esac
 swift build "${BUILD_ARGS[@]}"
 BIN_PATH="$(swift build "${BUILD_ARGS[@]}" --show-bin-path)"
-APP_PATH="$PROJECT_ROOT/dist/Vorsmate.app"
-mkdir -p "$PROJECT_ROOT/dist"
-STAGING_ROOT="$(mktemp -d "$PROJECT_ROOT/dist/.vorsmate-build.XXXXXX")"
+DIST_DIR="${VORSMATE_DIST_DIR:-$PROJECT_ROOT/dist}"
+mkdir -p "$DIST_DIR"
+DIST_DIR="$(cd "$DIST_DIR" && pwd -P)"
+if [[ "$DIST_DIR" == "/Applications" ]]; then
+    echo "Choose a build directory outside /Applications." >&2
+    exit 2
+fi
+APP_PATH="$DIST_DIR/Vorsmate.app"
+STAGING_ROOT="$(mktemp -d "$DIST_DIR/.vorsmate-build.XXXXXX")"
 trap 'rm -rf "$STAGING_ROOT"' EXIT
 STAGED_APP="$STAGING_ROOT/Vorsmate.app"
 mkdir -p "$STAGED_APP/Contents/MacOS" "$STAGED_APP/Contents/Resources/License/LICENSES" "$STAGED_APP/Contents/Library/LaunchDaemons" "$STAGED_APP/Contents/Frameworks"
@@ -76,6 +82,6 @@ codesign --verify --strict "$STAGED_APP"
 codesign --verify --deep --strict "$STAGED_APP"
 rm -rf "$APP_PATH"
 mv "$STAGED_APP" "$APP_PATH"
-rm -rf "$PROJECT_ROOT/dist/VorsmateRemote.app"
-mv "$REMOTE" "$PROJECT_ROOT/dist/VorsmateRemote.app"
+rm -rf "$DIST_DIR/VorsmateRemote.app"
+mv "$REMOTE" "$DIST_DIR/VorsmateRemote.app"
 printf '%s\n' "$APP_PATH"

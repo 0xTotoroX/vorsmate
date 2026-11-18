@@ -4,9 +4,15 @@
 import SwiftUI
 import VorsmateCore
 
-struct RemoteFace: View {
+package struct RemoteFace: View {
     @Binding var selected: RemoteButton
-    private let scale: CGFloat = 0.29
+    private let scale: CGFloat
+    private let image: NSImage?
+    package init(selected: Binding<RemoteButton>, image: NSImage? = NSImage(named: "RC003"), scale: CGFloat = 0.29) {
+        _selected = selected
+        self.image = image
+        self.scale = scale
+    }
     private func region(_ key: RemoteButton) -> Path {
         func circle(_ x: CGFloat, _ y: CGFloat, _ r: CGFloat) -> Path {
             Path(ellipseIn: CGRect(x: x - r, y: y - r, width: 2 * r, height: 2 * r))
@@ -45,11 +51,9 @@ struct RemoteFace: View {
         }
     }
 
-    var body: some View {
+    package var body: some View {
         ZStack {
-            if let url = Bundle.main.url(forResource: "RC003", withExtension: "png"),
-                let image = NSImage(contentsOf: url)
-            {
+            if let image {
                 Image(nsImage: image).resizable().interpolation(.high)
             }
             Canvas { context, _ in

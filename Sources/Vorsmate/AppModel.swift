@@ -67,6 +67,7 @@ final class AppModel: ObservableObject {
                 lockedID: "preview-offline"
             )
         }
+        if preview && CommandLine.arguments.contains("--preview-popover") { preferences.remoteEnabled = true }
         for channel in Channel.allCases {
             let driver: any SourceDriver = preview ? PreviewDriver(channel: channel) : Self.driver(for: channel)
             if channel == .audioInput, let input = driver as? AudioDeviceDriver {

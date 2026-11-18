@@ -83,3 +83,29 @@ func defaultAndCancellation() {
     #expect(engine.deadline == nil)
     #expect(edge([], 2000).isEmpty)
 }
+
+@Test("面板只修改所选手势，过期操作和语音键写入均拒绝")
+func editFromMenuPanel() throws {
+    let initial = configured()
+    let before = initial.action(for: .ok, gesture: .double)
+    var chord = RemoteAction(.shortcut)
+    chord.keyCode = 9
+    chord.label = "V"
+    chord.flags = RemoteModifier.flags(RemoteModifier.all.filter { $0.code == 62 || $0.code == 58 })
+    let request = RemoteEditorCommand.change(id: UUID(), button: .ok, gesture: .double, previous: before, action: chord)
+    let data = try JSONEncoder().encode(request)
+    #expect(!data.contains(0x0a))
+    #expect(try JSONDecoder().decode(RemoteEditorCommand.self, from: data) == request)
+    let changed = try initial.editing(.ok, gesture: .double, previous: before, action: chord)
+    #expect(changed.action(for: .ok, gesture: .single) == initial.action(for: .ok, gesture: .single))
+    #expect(changed.action(for: .ok, gesture: .long) == initial.action(for: .ok, gesture: .long))
+    #expect(changed.action(for: .ok, gesture: .double) == chord)
+    #expect(changed.deviceMap == initial.deviceMap)
+    #expect(throws: PreferenceError.self) {
+        try changed.editing(.ok, gesture: .double, previous: before, action: .init(.none))
+    }
+    #expect(throws: PreferenceError.self) {
+        try changed.editing(.voice, gesture: .single, previous: .init(.none), action: chord)
+    }
+    #expect(RemoteModifier.keycaps(code: 9, flags: chord.flags ?? 0, label: "V") == ["右⌃", "左⌥", "V"])
+}

@@ -2,12 +2,17 @@
 // [OUTPUT]: 可选插件进程，宿主管道断开后释放遥控器。
 // [POS]: 不注册登录项，不更改第三方偏好；裸开仅看预览。
 import AppKit
+import Combine
 import SwiftUI
+import VorsmateCore
 
 @main
 @MainActor
 final class RemoteApp: NSObject, NSApplicationDelegate {
     private lazy var monitor = RemoteMonitor(preview: preview)
+    private var observation: AnyCancellable?
+    private var lastState: RemoteEditorState?
+    private let embeddedEditor = CommandLine.arguments.contains("--editor-v1")
     private var window: NSWindow?
     private let hosted = CommandLine.arguments.contains("--host-v1")
     private let verify = CommandLine.arguments.contains("--verify")
@@ -37,7 +42,15 @@ final class RemoteApp: NSObject, NSApplicationDelegate {
             Task {
                 do {
                     for try await command in FileHandle.standardInput.bytes.lines {
-                        if command == "open" { show() }
+                        if embeddedEditor {
+                            if let request = try? JSONDecoder().decode(
+                                RemoteEditorCommand.self, from: Data(command.utf8))
+                            {
+                                handle(request)
+                            }
+                        } else if command == "open" {
+                            show()
+                        }
                     }
                 } catch {}
                 NSApp.terminate(nil)
@@ -45,6 +58,47 @@ final class RemoteApp: NSObject, NSApplicationDelegate {
         }
         if !preview { monitor.start() }
         if !hosted { show() }
+    }
+
+    private func reply(_ message: RemoteEditorReply) {
+        if let data = try? JSONEncoder().encode(message) {
+            monitor.report(String(decoding: data, as: UTF8.self))
+        }
+    }
+
+    private func publishState() {
+        guard observation != nil else { return }
+        let state = monitor.editorState
+        if state != lastState {
+            lastState = state
+            reply(.state(state))
+        }
+    }
+
+    private func handle(_ request: RemoteEditorCommand) {
+        switch request {
+        case .observe:
+            monitor.reloadProfile()
+            observation = monitor.objectWillChange.sink { [weak self] _ in
+                Task { @MainActor in self?.publishState() }
+            }
+            lastState = nil
+            publishState()
+        case .stopObserving:
+            observation = nil
+            lastState = nil
+        case .inputPermission:
+            monitor.requestAccess()
+            publishState()
+        case .postPermission:
+            monitor.requestPostAccess()
+            publishState()
+        case .change(let id, let button, let gesture, let previous, let action):
+            let error = monitor.edit(button, gesture: gesture, action: action, previous: previous)
+            let state = monitor.editorState
+            lastState = state
+            reply(.saved(id, state: state, error: error))
+        }
     }
 
     private func show() {

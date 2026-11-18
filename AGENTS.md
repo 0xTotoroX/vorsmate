@@ -30,7 +30,8 @@ Swift 6 + Swift Package Manager + SwiftUI / AppKit + Sparkle + TIS + CoreAudio +
 
 | 路径 | 职责 |
 | --- | --- |
-| [Sources/VorsmateRemote](Sources/VorsmateRemote/AGENTS.md) | 可选 RC003 插件、独立原生窗口与听写输出 |
+| [Sources/VorsmateRemote](Sources/VorsmateRemote/AGENTS.md) | 可选 RC003 插件、后台设备接入、配置写入与听写输出 |
+| [Sources/VorsmateRemoteUI](Sources/VorsmateRemoteUI/AGENTS.md) | 菜单栏和独立验收共用的模型、按键名称与快捷键录入 |
 | [Sources/VorsmateCore](Sources/VorsmateCore/AGENTS.md) | 数据、优先级、锁定、配置、重试预算与时间换算 |
 | [Sources/VorsmateSystem](Sources/VorsmateSystem/AGENTS.md) | 系统适配、通知、切换与回读控制器 |
 | [Sources/CAudioListeners](Sources/CAudioListeners/AGENTS.md) | CoreAudio 原生监听句柄，配对注册与移除 |

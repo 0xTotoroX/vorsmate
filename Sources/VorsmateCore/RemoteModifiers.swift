@@ -48,10 +48,13 @@ public struct RemoteModifier: Equatable, Sendable {
     public static func flags(_ keys: [Self]) -> UInt64 {
         keys.reduce(0) { $0 | $1.bit | $1.family }
     }
-    public static func display(code: UInt16, flags: UInt64, label: String?) -> String {
+    public static func keycaps(code: UInt16, flags: UInt64, label: String?) -> [String] {
         var parts = keys(flags).filter { $0.code != code }.map { flags & $0.bit != 0 ? $0.title : $0.genericTitle }
         parts.append(all.first { $0.code == code }?.title ?? label ?? "键码 \(code)")
-        return parts.joined()
+        return parts
+    }
+    public static func display(code: UInt16, flags: UInt64, label: String?) -> String {
+        keycaps(code: code, flags: flags, label: label).joined()
     }
 }
 

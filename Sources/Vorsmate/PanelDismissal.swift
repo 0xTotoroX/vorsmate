@@ -7,6 +7,7 @@ import OSLog
 
 @MainActor
 final class PanelDismissal: NSObject {
+    var editing = false { didSet { outsideSince = nil } }
     private weak var popover: NSPopover?
     private weak var anchor: NSView?
     private var timer: Timer?
@@ -72,7 +73,9 @@ final class PanelDismissal: NSObject {
     }
 
     private func checkPointer() {
-        guard let popover, popover.isShown, let window = popover.contentViewController?.view.window else { return }
+        guard !editing, let popover, popover.isShown, let window = popover.contentViewController?.view.window else {
+            return
+        }
         let pointer = NSEvent.mouseLocation
         if hypot(pointer.x - lastPointer.x, pointer.y - lastPointer.y) > 2 {
             keyboardActive = false

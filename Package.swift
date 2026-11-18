@@ -27,12 +27,15 @@ let package = Package(
             name: "CSMC", exclude: ["AGENTS.md"], publicHeadersPath: "include",
             linkerSettings: [.linkedFramework("IOKit")]),
         .target(name: "VorsmateFan", dependencies: ["VorsmateCore", "CSMC"], exclude: ["AGENTS.md"]),
-        .executableTarget(name: "VorsmateRemote", dependencies: ["VorsmateCore"], exclude: ["AGENTS.md"]),
+        .target(name: "VorsmateRemoteUI", dependencies: ["VorsmateCore"], exclude: ["AGENTS.md"]),
+        .executableTarget(
+            name: "VorsmateRemote", dependencies: ["VorsmateCore", "VorsmateRemoteUI"], exclude: ["AGENTS.md"]),
         .executableTarget(name: "VorsmateFanHelper", dependencies: ["VorsmateFan"], exclude: ["AGENTS.md"]),
         .executableTarget(
             name: "Vorsmate",
             dependencies: [
-                "VorsmateCore", "VorsmateSystem", "VorsmateFan", .product(name: "Sparkle", package: "Sparkle"),
+                "VorsmateCore", "VorsmateSystem", "VorsmateFan", "VorsmateRemoteUI",
+                .product(name: "Sparkle", package: "Sparkle"),
             ],
             exclude: ["AGENTS.md"],
             linkerSettings: [.unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])]),

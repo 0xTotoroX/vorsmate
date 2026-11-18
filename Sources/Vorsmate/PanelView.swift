@@ -10,19 +10,31 @@ import VorsmateSystem
 struct PanelView: View {
     @ObservedObject var model: AppModel
     let maximumHeight: CGFloat
+    var protectInteraction: (Bool) -> Void
     var onHeightChange: (CGFloat) -> Void
     @State private var expandedSection: PluginID?
+    @State private var remotePage = RemotePanelPage.home
+    @State private var remoteGesture = RemoteGesture.single
     @State private var contentHeight: CGFloat = 360
 
     var body: some View {
         ScrollView {
-            content
-                .fixedSize(horizontal: false, vertical: true)
-                .background(
-                    GeometryReader { geometry in
-                        Color.clear.preference(key: PanelHeightKey.self, value: geometry.size.height)
-                    })
+            Group {
+                if remotePage == .home {
+                    content
+                } else {
+                    RemotePanel(
+                        plugin: model.remote, page: $remotePage, gesture: $remoteGesture,
+                        protectInteraction: protectInteraction)
+                }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            .background(
+                GeometryReader { geometry in
+                    Color.clear.preference(key: PanelHeightKey.self, value: geometry.size.height)
+                })
         }
+        .id(remotePage.scrollID)
         .scrollIndicators(.automatic)
         .scrollDisabled(contentHeight <= maximumHeight)
         .frame(width: 386, height: min(contentHeight, maximumHeight))
@@ -35,10 +47,18 @@ struct PanelView: View {
             onHeightChange(min(height, maximumHeight))
         }
         .onChange(of: model.enabledPlugins) { _, enabled in
+            if !enabled.contains(.remote) { remotePage = .home }
             if let expandedSection, !enabled.contains(expandedSection) { self.expandedSection = nil }
         }
         .onChange(of: model.panelVisible) { _, visible in
-            if !visible { expandedSection = nil }
+            if !visible {
+                expandedSection = nil
+                remotePage = .home
+                remoteGesture = .single
+            }
+        }
+        .onChange(of: remotePage == .home) { _, home in
+            if home { model.remote.endEditing() } else { model.remote.beginEditing() }
         }
     }
 
@@ -107,7 +127,11 @@ struct PanelView: View {
                 ChannelView(controller: controller, expanded: expansion(for: id))
                     .disabled(model.configurationError != nil)
             }
-        case .remote: RemoteRow(plugin: model.remote, expanded: expansion(for: id))
+        case .remote:
+            RemoteRow(plugin: model.remote) {
+                expandedSection = nil
+                remotePage = .overview
+            }
         case .fan: FanView(model: model.fan, expanded: expansion(for: id))
         case .quickShutdown: QuickShutdownView(controller: model.shutdown, expanded: expansion(for: id))
         }

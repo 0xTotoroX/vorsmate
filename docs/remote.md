@@ -1,10 +1,10 @@
 # 小米遥控器
 
-VorsmateRemote 是独立的 macOS 插件。将配套的 VorsmateRemote.app 和 Vorsmate.app 放在同一目录，在宿主「更多 → 功能模块」开启「遥控器」，展开后点「编辑按键映射」。默认关闭。关闭键位窗口后映射继续工作，停用插件或退出宿主会释放设备。
+VorsmateRemote 是独立的 macOS 插件。将配套的 VorsmateRemote.app 和 Vorsmate.app 放在同一目录，在宿主「更多 → 功能模块」开启「遥控器」。插件默认关闭。点击菜单栏面板的「遥控器」行，切换单击、双击或长按即可查看当前映射。收起面板后映射继续工作，停用插件或退出宿主会释放设备。
 
 ## 按键与配置迁移
 
-支持小米蓝牙遥控器 2 Pro（RC003）的 12 个普通实体键、每键的单击 / 双击 / 长按，以及独立的语音键。点击模型上的按键，或用「实体键」菜单选择。每个手势可以录入快捷键、设置媒体动作、打开应用、切换 Typeless 或选择无动作。实际配置保存在当前用户的 Application Support/VorsmateRemote/buttons.json。预览编辑只在内存生效。
+支持小米蓝牙遥控器 2 Pro（RC003）的 12 个普通实体键、每键的单击 / 双击 / 长按，以及独立的语音键。点击总览中的按键，或从「按位置选键」进入模型，点击对应位置。在详情页顶部也可以用键盘选择实体键。「重新录入」在面板里接收一次快捷键，保存后显示插件回读的结果。每个手势可以录入快捷键、设置媒体动作、打开应用、切换 Typeless 或选择无动作。实际配置保存在当前用户的 Application Support/VorsmateRemote/buttons.json。预览编辑只在内存生效。
 
 未导入配置时，默认只把确定键单击设为 Typeless 听写。迁移本机 SayAll 2.0.8 当前选中的 RC003 档案：
 
@@ -31,6 +31,6 @@ python3 scripts/import-remote.py
 
 ## 开发验证
 
-`bash scripts/build.sh` 生成两个独立应用。临时签名构建核对配套代码签名哈希，正式签名构建校验同一 Apple 团队。主程序安装包可以独立分发。
+`bash scripts/build.sh` 生成两个独立应用。临时签名构建核对配套代码签名哈希，正式签名构建校验同一 Apple 团队。主程序安装包可以独立分发。需要和正在使用的构建共存时，可设置 VORSMATE_DIST_DIR 指定独立产物目录。开发预览使用 --preview --preview-popover --show，打开带虚构遥控器配置的原生菜单栏面板。
 
 直接打开插件显示隔离预览。运行 `dist/VorsmateRemote.app/Contents/MacOS/VorsmateRemote --verify` 进入单独的真机验收。用空白输入框检查确定键单击开始 / 结束、双击及长按；验收输出记录按键次数、换行计数以及语音段的采样数和峰值，不保存音频或输入内容。退出后回读设备级 UserKeyMapping 确认恢复。

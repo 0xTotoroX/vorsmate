@@ -24,6 +24,8 @@
 	<string>读取已配对的小米遥控器按键，用于执行自定义快捷键和切换听写。</string>
 	<key>VorsmateRemoteVoiceProtocol</key>
 	<integer>1</integer>
+	<key>VorsmateRemoteEditorProtocol</key>
+	<integer>1</integer>
 	<key>VorsmateRemoteProtocol</key>
 	<integer>1</integer>
 </dict>

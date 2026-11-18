@@ -70,11 +70,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         model.panelVisible = preview
         self.model = model
         let maximumHeight = min(650, max(300, (NSScreen.main?.visibleFrame.height ?? 800) - 80))
-        let view = PanelView(model: model, maximumHeight: maximumHeight) { [weak self] height in
-            self?.resizePanel(to: height)
-        }
+        let view = PanelView(
+            model: model, maximumHeight: maximumHeight,
+            protectInteraction: { [weak self] active in
+                self?.dismissal.editing = active
+                self?.popover.behavior = active ? .applicationDefined : .transient
+            },
+            onHeightChange: { [weak self] height in self?.resizePanel(to: height) })
         let host = NSHostingController(rootView: view)
-        if preview {
+        if preview && !CommandLine.arguments.contains("--preview-popover") {
             let window = NSWindow(contentViewController: host)
             window.title = "Vorsmate 预览"
             window.delegate = self
@@ -88,10 +92,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
             NSApp.activate(ignoringOtherApps: true)
             return
         }
-        item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        item = NSStatusBar.system.statusItem(
+            withLength: preview ? NSStatusItem.variableLength : NSStatusItem.squareLength)
         item?.button?.image = BrandIcon.template
-        item?.button?.setAccessibilityLabel("Vorsmate")
-        item?.button?.toolTip = "Vorsmate"
+        if preview {
+            item?.button?.title = "预览"
+            item?.button?.imagePosition = .imageLeading
+        }
+        let itemName = preview ? "Vorsmate 预览" : "Vorsmate"
+        item?.button?.setAccessibilityLabel(itemName)
+        item?.button?.toolTip = itemName
         item?.button?.target = self
         item?.button?.action = #selector(togglePanel)
         popover.behavior = .transient
