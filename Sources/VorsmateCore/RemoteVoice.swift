@@ -5,6 +5,12 @@ import Foundation
 public enum RemoteVoice {
     public static let deviceUID = "MiRemoteV2ch_UID"
 
+    package static func matchesPeripheral(_ id: UUID, name: String?, identity: UUID?) -> Bool {
+        if let identity { return id == identity }
+        let name = name?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return ["mi rc", "xiaomi bluetooth remote 2 pro", "小米蓝牙语音遥控器"].contains { $0 == name }
+    }
+
     public static func version16k(_ bytes: [UInt8]) -> UInt16? {
         guard bytes.count >= 7, bytes[0] == 0x0b else { return nil }
         let version = UInt16(bytes[1]) << 8 | UInt16(bytes[2])

@@ -95,3 +95,80 @@ func cancelHeldContext() throws {
     g.cancel(holding: [])
     #expect(g.advance(to: 2300).isEmpty)
 }
+
+@Test("应用禁用连发目标后，长按和松开都不触发另一个动作")
+func disabledRepeatTarget() throws {
+    let id = "example.editor"
+    for mode in [RemoteHoldMode.repeatSingle, .repeatLong] {
+        let target: RemoteGesture = mode == .repeatSingle ? .single : .long
+        let profile = try RemoteProfile()
+            .applying(.action(app: nil, button: .ok, gesture: .long, value: .init(.mute)))
+            .applying(.hold(app: nil, button: .ok, mode: mode))
+            .applying(.addApp(id: id, name: "编辑器"))
+            .applying(.action(app: id, button: .ok, gesture: target, value: .init(.none)))
+            .resolved(for: id)
+        var gestures = RemoteGestures()
+        _ = gestures.ingest([.ok], at: 0, profile: profile)
+        #expect(gestures.advance(to: 550).isEmpty)
+        #expect(gestures.deadline == nil)
+        #expect(gestures.ingest([], at: 800, profile: profile).isEmpty)
+    }
+}
+
+@Test("空白按键仅设置执行方式时保留原生按键，显式禁用时接管")
+func unassignedHoldMode() throws {
+    let id = "example.editor"
+    let original = RemoteProfile()
+    for mode in RemoteHoldMode.allCases {
+        #expect(try original.applying(.hold(app: nil, button: .left, mode: mode)) == original)
+    }
+    let profile = try original.applying(.addApp(id: id, name: "编辑器"))
+        .applying(.hold(app: id, button: .left, mode: .once))
+    #expect(profile.resolved(for: id).deviceMap == original.deviceMap)
+    let disabled = try profile.applying(.action(app: id, button: .left, gesture: .single, value: .init(.none)))
+    #expect(disabled.resolved(for: id).deviceMap[0x7_0000_0050] == 0)
+    #expect(disabled.resolved(for: id).deviceMap(canPost: false)[0x7_0000_0050] == 0)
+}
+
+@Test("同时编辑同一份旧配置只有一次保存成功，首次升级保留原件")
+func concurrentProfileUpgrade() async throws {
+    let dir = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let url = dir.appending(path: "buttons.json")
+    let original = RemoteProfile()
+    try original.save(replacing: original, at: url)
+    let before = try Data(contentsOf: url)
+    let winners = try await withThrowingTaskGroup(of: RemoteProfile?.self) { group in
+        for i in 0..<24 {
+            group.addTask {
+                let edited = try original.applying(.addApp(id: "test.app.\(i)", name: "App \(i)"))
+                do {
+                    try edited.save(replacing: original, at: url)
+                    return edited
+                } catch PreferenceError.changedOnDisk { return nil }
+            }
+        }
+        var saved: [RemoteProfile] = []
+        for try await result in group {
+            if let result { saved.append(result) }
+        }
+        return saved
+    }
+    #expect(winners == [try RemoteProfile.read(from: url)])
+    #expect(try Data(contentsOf: url) == before)
+}
+
+@Test("没有发送权限时，应用禁用确定键或只给它配双击也不会漏出回车")
+func confirmWithoutPostPermission() throws {
+    let id = "example.editor"
+    let profile = try RemoteProfile()
+        .applying(.addApp(id: id, name: "编辑器"))
+        .applying(.action(app: id, button: .ok, gesture: .single, value: .init(.none)))
+    #expect(profile.resolved(for: id).deviceMap(canPost: false)[0x7_0000_0028] == 0)
+    let double = try profile.applying(.action(app: id, button: .ok, gesture: .double, value: .dictationShortcut))
+        .applying(.action(app: nil, button: .left, gesture: .single, value: .dictationShortcut))
+        .resolved(for: id)
+    let map = double.deviceMap(canPost: false)
+    #expect(map[0x7_0000_0028] == 0)
+    #expect(map[0x7_0000_0050] == nil)
+}

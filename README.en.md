@@ -69,6 +69,8 @@ Quick Shutdown appears below Fans. Closing the panel, pressing Escape, or disabl
 
 The panel closes when the pointer leaves; background management continues. The top-right menu contains independent switches for all six modules, Launch at Login, Check for Updates, About, and Quit.
 
+The optional Xiaomi remote plugin is off by default. Place the built `VorsmateRemote.app` beside `Vorsmate.app` and enable the remote in the modules menu to configure per-app shortcuts and hold-to-repeat. Voice input requires an existing MiRemoteV 2ch virtual audio device. [Remote setup and key migration (Chinese)](docs/remote.md)
+
 Updates are checked one minute after startup and every 12 hours, or manually through the top-right menu. You confirm downloading and restarting. Checks time out after 20 seconds; downloads with no progress for 60 seconds and preparation exceeding 120 seconds stop waiting and offer a retry. Installation itself is never interrupted by a timer. Both the feed and installer require valid signatures. See [update behavior and publishing](docs/updates.md).
 
 ## Build from source

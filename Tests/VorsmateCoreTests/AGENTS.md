@@ -2,7 +2,7 @@
 
 > L2 | 父级: ../AGENTS.md
 
-- RemoteApplicationTests.swift：应用覆盖与继承、旧配置读写、连发节奏和切换时中止。
+- RemoteApplicationTests.swift：应用覆盖与继承、旧配置升级与并发写入、禁用动作与原生键、连发节奏和切换时中止。
 - RemoteConfirmTests.swift：13 个实体键报告、单击 / 双击 / 长按互斥、独立配置冲突保护、面板单手势修改和过期编辑拒绝。
 - PolicyTests.swift：优先级、拖动上下 / 批量 / 边界、锁定重连、输入源、重试预算及配置保护；ControllerTests 验证三通道拖动单次保存、生效、无效移动不保存及失败重试不改锁定。
 - ControllerTests.swift：FakeDriver 驱动的切换回读、冷却退避、无通知自动恢复、持续异常提示、成功后争抢限频、手动覆盖与取消复查；保留保存恢复、只读刷新、当前设备锁定与监听失败验证。

@@ -43,9 +43,7 @@ final class RemoteVoiceLink: NSObject, @preconcurrency CBCentralManagerDelegate,
             // Only peripherals already connected to macOS. Never connect to an advertising neighbour.
             let connected = central.retrieveConnectedPeripherals(withServices: [service, CBUUID(string: "1812")])
             let candidates = connected.filter {
-                if let identity, $0.identifier == identity { return true }
-                let name = $0.name?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
-                return ["mi rc", "xiaomi bluetooth remote 2 pro", "小米蓝牙语音遥控器"].contains(name)
+                RemoteVoice.matchesPeripheral($0.identifier, name: $0.name, identity: identity)
             }
             guard candidates.count == 1, let target = candidates.first else {
                 status(candidates.isEmpty ? "等待遥控器蓝牙语音服务" : "请只连接一只遥控器", false)

@@ -46,14 +46,9 @@ extension RemoteProfile {
     package func editing(_ button: RemoteButton, gesture: RemoteGesture, previous: RemoteAction, action: RemoteAction)
         throws -> Self
     {
-        guard button != .voice, self.action(for: button, gesture: gesture) == previous else {
+        guard self.action(for: button, gesture: gesture) == previous else {
             throw PreferenceError.changedOnDisk
         }
-        var copy = self
-        var binding = copy.buttons[button.rawValue] ?? RemoteBinding()
-        binding[gesture] = action
-        copy.buttons[button.rawValue] = binding
-        try copy.validate()
-        return copy
+        return try applying(.action(app: nil, button: button, gesture: gesture, value: action))
     }
 }

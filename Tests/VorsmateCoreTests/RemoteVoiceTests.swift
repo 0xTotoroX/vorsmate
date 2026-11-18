@@ -4,6 +4,15 @@ import VorsmateCore
 
 @testable import VorsmateSystem
 
+@Test("有硬件标识时只连接同一只遥控器；缺少标识才按已知名称查找")
+func remoteVoiceIdentity() {
+    let selected = UUID()
+    #expect(RemoteVoice.matchesPeripheral(selected, name: nil, identity: selected))
+    #expect(!RemoteVoice.matchesPeripheral(UUID(), name: "Mi RC", identity: selected))
+    #expect(RemoteVoice.matchesPeripheral(selected, name: " MI RC ", identity: nil))
+    #expect(!RemoteVoice.matchesPeripheral(selected, name: nil, identity: nil))
+}
+
 @Test("能力协商要求 16 kHz，兼容旧固件的编解码字段布局")
 func remoteVoiceCapabilities() {
     #expect(RemoteVoice.version16k([11, 1, 0, 2, 3, 0, 120]) == 0x100)

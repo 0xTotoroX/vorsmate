@@ -135,7 +135,9 @@ public struct RemoteProfile: Codable, Equatable, Sendable {
         ok.single = .dictationShortcut
         buttons[RemoteButton.ok.rawValue] = ok
     }
-    public var deviceMap: [UInt64: UInt64] {
+    public var deviceMap: [UInt64: UInt64] { deviceMap(canPost: true) }
+
+    package func deviceMap(canPost: Bool) -> [UInt64: UInt64] {
         var values: [UInt64: UInt64] = [:]
         for button in RemoteButton.allCases {
             let source = UInt64(7) << 32 | UInt64(button.usage)
@@ -147,9 +149,16 @@ public struct RemoteProfile: Codable, Equatable, Sendable {
                     let modifier = RemoteModifier.all.first(where: { $0.code == binding.single.keyCode })
                 {
                     values[source] = UInt64(7) << 32 | modifier.hidUsage
-                } else {
-                    values[source] = 0
+                    continue
                 }
+                // Keep configured Return and explicitly disabled keys suppressed even without posting access.
+                if !canPost && button != .ok {
+                    let actions = RemoteGesture.allCases.map { binding[$0].kind }.filter { $0 != .none }
+                    if !actions.isEmpty && !actions.contains(.openApplication) && !actions.contains(.typeless) {
+                        continue
+                    }
+                }
+                values[source] = 0
             }
         }
         return values
@@ -206,12 +215,14 @@ public struct RemoteProfile: Codable, Equatable, Sendable {
     }
     public func save(replacing previous: Self, at url: URL = location) throws {
         try validate()
-        guard try Self.read(from: url) == previous else { throw PreferenceError.changedOnDisk }
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        let advanced = Self.advancedLocation(for: url)
-        let destination = version >= 2 || FileManager.default.fileExists(atPath: advanced.path) ? advanced : url
-        try encoder.encode(self).write(to: destination, options: .atomic)
+        let data = try encoder.encode(self)
+        try withConfigurationWriteLock(at: url) {
+            guard try Self.read(from: url) == previous else { throw PreferenceError.changedOnDisk }
+            let advanced = Self.advancedLocation(for: url)
+            let destination = version >= 2 || FileManager.default.fileExists(atPath: advanced.path) ? advanced : url
+            try data.write(to: destination, options: .atomic)
+        }
     }
 }

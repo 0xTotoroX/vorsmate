@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Copy the selected SayAll RC003 key settings into a standalone Vorsmate profile."""
 import argparse
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -76,40 +77,54 @@ def convert(data):
             "doubleMilliseconds": timing["doubleClickMilliseconds"], "longMilliseconds": timing["longPressMilliseconds"]}
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source", type=Path, default=Path.home() / "Library/Preferences/com.hd838a.RemoteMic.plist")
-    parser.add_argument("--output", type=Path)
-    args = parser.parse_args()
-    profile = convert(plistlib.loads(args.source.read_bytes()))
-    if args.output is None:
-        base = Path.home() / "Library/Application Support/VorsmateRemote/buttons.json"
+def write_profile(profile, target, *, automatic):
+    if automatic:
+        base = target
         advanced = base.with_name("buttons-v2.json")
-        args.output = advanced if advanced.exists() or profile["version"] == 2 else base
+        target = advanced if advanced.exists() or profile["version"] == 2 else base
         if profile["version"] == 2 and base.exists() and not advanced.exists():
-            parser.error("目标已有键位配置。请用 --output 选择新文件，不会替换已有编辑。")
-    if args.output.exists():
-        existing = json.loads(args.output.read_bytes())
+            raise ValueError("目标已有键位配置。请用 --output 选择新文件，不会替换已有编辑。")
+    if target.exists():
+        existing = json.loads(target.read_bytes())
         # Compare the old named preset without rewriting the user's file.
         if isinstance(existing, dict) and isinstance(existing.get("buttons"), dict):
             ok = existing["buttons"].get("ok")
             if isinstance(ok, dict) and ok.get("single") == {"kind": "typeless"}:
                 ok["single"] = DICTATION_SHORTCUT
         if existing != profile:
-            parser.error("目标已有不同配置。请用 --output 选择另一个文件，不会覆盖已有编辑。")
+            raise ValueError("目标已有不同配置。请用 --output 选择另一个文件，不会覆盖已有编辑。")
     else:
-        args.output.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        with tempfile.NamedTemporaryFile(dir=args.output.parent, mode="w", encoding="utf8", delete=False) as file:
+        with tempfile.NamedTemporaryFile(dir=target.parent, mode="w", encoding="utf8", delete=False) as file:
             temp = Path(file.name)
             try:
                 json.dump(profile, file, ensure_ascii=False, indent=2, sort_keys=True)
                 file.write("\n")
                 file.flush()
                 os.fsync(file.fileno())
-                os.link(temp, args.output)
+                os.link(temp, target)
             finally:
                 temp.unlink(missing_ok=True)
-    print(f"已核对 12 个普通键、语音键和各键手势。配置位置 {args.output}")
+    return target
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--source", type=Path, default=Path.home() / "Library/Preferences/com.hd838a.RemoteMic.plist")
+    parser.add_argument("--output", type=Path)
+    args = parser.parse_args()
+    profile = convert(plistlib.loads(args.source.read_bytes()))
+    target = args.output or Path.home() / "Library/Application Support/VorsmateRemote/buttons.json"
+    target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    # Coordinate with the editor across both buttons.json and its v2 sibling.
+    directory = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        fcntl.flock(directory, fcntl.LOCK_EX)
+        output = write_profile(profile, target, automatic=args.output is None)
+    except ValueError as error:
+        parser.error(str(error))
+    finally:
+        os.close(directory)
+    print(f"已核对 12 个普通键、语音键和各键手势。配置位置 {output}")
 
 
 if __name__ == "__main__":

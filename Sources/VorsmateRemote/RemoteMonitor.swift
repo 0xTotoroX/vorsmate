@@ -321,19 +321,7 @@ final class RemoteMonitor: ObservableObject {
         }
         let unique = IOHIDDeviceGetProperty(only, "PhysicalDeviceUniqueID" as CFString) as? String
         voice.poll(identity: unique.flatMap(UUID.init(uuidString:)))
-        var desired = effective.deviceMap
-        if !CGPreflightPostEventAccess() {
-            for button in RemoteButton.allCases where button != .voice {
-                guard let binding = effective.buttons[button.rawValue] else { continue }
-                // A mapped confirm shortcut must never fall through as a physical Return.
-                if button == .ok && binding.single.kind == .shortcut { continue }
-                let canPerform = RemoteGesture.allCases.contains {
-                    [.typeless, .openApplication].contains(binding[$0].kind)
-                }
-                let key = UInt64(7) << 32 | UInt64(button.usage)
-                if !canPerform && desired[key] == 0 { desired.removeValue(forKey: key) }
-            }
-        }
+        let desired = effective.deviceMap(canPost: CGPreflightPostEventAccess())
         if sourceID == current && lease.isSuppressed() {
             if activeMap == desired {
                 remapAfterRelease = false

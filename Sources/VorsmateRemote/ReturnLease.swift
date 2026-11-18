@@ -77,10 +77,13 @@ final class ReturnLease {
     }
 
     func acquire(_ desired: [UInt64: UInt64]) throws {
-        try recover()
         let matches = services()
         guard matches.count == 1, let service = matches.first else { throw RemoteError.message("等待唯一的 RC003 键盘服务") }
-        let map = try mappings(service)
+        let replacing = active.map { token($0) == token(service) } ?? false
+        if !replacing { try recover() }
+        let previous = try mappings(service)
+        // Switch profiles on the same device in one HID write; the shared Return suppression stays in place.
+        let map = replacing ? previous.filter { $0[owner] != 1 } : previous
         let claimed = Set(desired.keys.map { NSNumber(value: $0) })
         guard !map.contains(where: { $0[source].map(claimed.contains) == true }) else {
             throw RemoteError.message("遥控器已有冲突的设备映射，请先释放")
@@ -89,12 +92,14 @@ final class ReturnLease {
         let entries: Map = desired.keys.sorted().map {
             [source: NSNumber(value: $0), destination: NSNumber(value: desired[$0]!), owner: 1]
         }
-        try token(service).write(to: journal, atomically: true, encoding: .utf8)
-        do { try write(map + entries, to: service) } catch {
-            if try mappings(service) == map + entries.map({ $0.filter { $0.key != owner } }) {
-                try write(map, to: service)
+        if !replacing { try token(service).write(to: journal, atomically: true, encoding: .utf8) }
+        if previous != map + entries {
+            do { try write(map + entries, to: service) } catch {
+                if try mappings(service) == map + entries.map({ $0.filter { $0.key != owner } }) {
+                    try write(map, to: service)
+                }
+                throw error
             }
-            throw error
         }
         active = service
         expected = entries

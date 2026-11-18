@@ -18,7 +18,7 @@ public struct RemoteGestures: Sendable {
         var second = false
         var releasedAt: Int?
         var holdAt: Int?
-        var holdGesture = RemoteGesture.long
+        var holdGesture: RemoteGesture?
         var repeats = false
         var singleAt: Int?
     }
@@ -36,7 +36,9 @@ public struct RemoteGestures: Sendable {
         for key in RemoteButton.allCases {
             guard var state = states[key] else { continue }
             if let due = state.holdAt, due <= now {
-                result.append(RemoteStroke(key, state.holdGesture, repeated: state.fired))
+                if let gesture = state.holdGesture {
+                    result.append(RemoteStroke(key, gesture, repeated: state.fired))
+                }
                 state.holdAt = state.repeats ? now + Self.repeatInterval : nil
                 state.fired = true
             }
@@ -70,9 +72,11 @@ public struct RemoteGestures: Sendable {
                 if !bounced {
                     state.singleAt = nil
                     let mode = binding.hold ?? .once
-                    state.holdGesture = mode == .repeatSingle && binding.single.kind != .none ? .single : .long
-                    state.repeats = mode == .repeatLong || state.holdGesture == .single
-                    if binding[state.holdGesture].kind != .none { state.holdAt = now + profile.longMilliseconds }
+                    let target: RemoteGesture = mode == .repeatSingle ? .single : .long
+                    state.holdGesture = binding[target].kind == .none ? nil : target
+                    state.repeats = mode != .once && state.holdGesture != nil
+                    // Even a disabled repeat target consumes the hold, so release cannot emit another action.
+                    if mode != .once || state.holdGesture != nil { state.holdAt = now + profile.longMilliseconds }
                 }
             } else {
                 state.releasedAt = now

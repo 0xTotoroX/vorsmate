@@ -36,6 +36,7 @@ extension RemoteProfile {
         result.applications = nil
         guard let app, let map = applications?[app] else { return result }
         for (key, override) in map.buttons {
+            guard result.buttons[key] != nil || !override.actions.isEmpty else { continue }
             var binding = result.buttons[key] ?? RemoteBinding()
             for gesture in RemoteGesture.allCases {
                 if let value = override.actions[gesture.rawValue] { binding[gesture] = value }
@@ -68,8 +69,8 @@ extension RemoteProfile {
             guard button != .voice else { throw PreferenceError.changedOnDisk }
             if let app {
                 try next.changeOverride(app, button) { $0.hold = mode }
-            } else {
-                next.buttons[button.rawValue, default: RemoteBinding()].hold = mode == .once ? nil : mode
+            } else if next.buttons[button.rawValue] != nil {
+                next.buttons[button.rawValue]?.hold = mode == .once ? nil : mode
             }
         }
         if next.applications?.isEmpty == true { next.applications = nil }

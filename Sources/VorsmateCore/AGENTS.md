@@ -10,7 +10,7 @@
 - RemoteModifiers.swift / RemoteVoice.swift：左右修饰键解析、16 kHz 能力识别、独立 IMA ADPCM 解码与既有音频 UID。
 - PluginID.swift：内置与可选模块顺序、标题、图标与通道映射。
 - ShutdownPolicy.swift：关机 / 重启动作、强制退出 / 窗口恢复偏好与按 Bundle ID 聚合的应用条目。
-- Preferences.swift：兼容 version 1 的插件禁用、风扇档位、关机偏好与 PreferencesStore；配置版本检查、保存前核对会话预期值、JSON 原子保存。
+- Preferences.swift：兼容 version 1 的插件禁用、风扇档位、关机偏好与 PreferencesStore；配置版本检查、目录锁内核对预期值并原子写入 JSON；遥控器配置与导入工具沿用同一锁约定。
 - SwitchBudget.swift：切换间隔与竞争次数上限；由外部单调时钟驱动。
 - FanPolicy.swift：模式、读数、控制配置、温度与硬件范围校验；旧阈值仍作线性配置读取，保留字段和模式编码。
 - FanCurvePreset.swift：均衡 / 强冷的分段曲线与响应参数唯一来源；不访问硬件，不替代系统压力保护。

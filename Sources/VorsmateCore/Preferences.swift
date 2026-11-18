@@ -1,8 +1,22 @@
 // [INPUT]: Foundation 文件系统、SelectionPolicy、插件 / 风扇 / 关机配置。
-// [OUTPUT]: 带版本的 Preferences、核对预期值后原子写入的 PreferencesStore。
+// [OUTPUT]: 带版本的 Preferences；在目录锁内核对预期值并原子写入配置。
 // [POS]: 唯一配置持久化入口；损坏或未来版本不自动覆盖。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+import Darwin
 import Foundation
+
+// The directory stays in place when an atomic write replaces the file or promotes a v1 profile to v2.
+func withConfigurationWriteLock(at url: URL, _ write: () throws -> Void) throws {
+    let directory = url.deletingLastPathComponent()
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let fd = open(directory.path, O_RDONLY | O_DIRECTORY | O_CLOEXEC)
+    guard fd >= 0 else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno)) }
+    defer { close(fd) }
+    while flock(fd, LOCK_EX) != 0 {
+        if errno != EINTR { throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno)) }
+    }
+    try write()
+}
 
 public struct Preferences: Codable, Equatable, Sendable {
     public var version = 1
@@ -52,12 +66,13 @@ public struct PreferencesStore: Sendable {
         return value
     }
     public func save(_ value: Preferences, replacing expected: Preferences? = nil) throws {
-        if let expected, try load() != expected { throw PreferenceError.changedOnDisk }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(value)
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try data.write(to: url, options: .atomic)
+        try withConfigurationWriteLock(at: url) {
+            if let expected, try load() != expected { throw PreferenceError.changedOnDisk }
+            try data.write(to: url, options: .atomic)
+        }
     }
 }
 
