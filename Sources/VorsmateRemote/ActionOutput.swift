@@ -6,6 +6,9 @@ import VorsmateCore
 
 @MainActor
 enum ActionOutput {
+    private static let modifierSettleTime: TimeInterval = 0.008
+    private static let chordKeyHoldTime: TimeInterval = 0.045
+
     static func send(_ action: RemoteAction) async throws {
         switch action.kind {
         case .none: return
@@ -34,7 +37,8 @@ enum ActionOutput {
     private static func sendShortcut(code: UInt16, raw: UInt64) throws {
         try requirePostAccess()
         let source = CGEventSource(stateID: .privateState)
-        let events = try RemoteKeyEvent.sequence(code: code, flags: raw).map { stroke in
+        let strokes = RemoteKeyEvent.sequence(code: code, flags: raw)
+        let events = try strokes.map { stroke in
             guard let event = CGEvent(keyboardEventSource: source, virtualKey: stroke.code, keyDown: stroke.down) else {
                 throw RemoteError.message("无法创建快捷键事件")
             }
@@ -42,7 +46,15 @@ enum ActionOutput {
             event.flags = CGEventFlags(rawValue: stroke.flags)
             return event
         }
-        for event in events { event.post(tap: .cghidEventTap) }
+        let chord = strokes.contains(where: { $0.modifier }) && strokes.contains(where: { !$0.modifier })
+        // 按发送时刻标记事件，让接收方有时间处理修饰键和主键按下。整组串行发完，避免中途漏发松开。
+        for (stroke, event) in zip(strokes, events) {
+            event.timestamp = DispatchTime.now().uptimeNanoseconds
+            event.post(tap: .cghidEventTap)
+            if chord && stroke.down {
+                Thread.sleep(forTimeInterval: stroke.modifier ? modifierSettleTime : chordKeyHoldTime)
+            }
+        }
     }
     private static var typelessRunning: Bool {
         !NSRunningApplication.runningApplications(withBundleIdentifier: "now.typeless.desktop").isEmpty
