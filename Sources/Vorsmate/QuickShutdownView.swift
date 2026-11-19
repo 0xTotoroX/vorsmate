@@ -16,7 +16,7 @@ struct ShutdownSummary: View {
             Button(action: open) {
                 PanelSummaryRow(
                     title: "一键下班", symbol: "sunset", status: controller.status,
-                    value: "\(controller.appCount) 个应用", expanded: false, pending: controller.executing)
+                    value: "\(controller.appCount) 个应用", navigation: .detail, pending: controller.executing)
             }.buttonStyle(.plain).accessibilityIdentifier("shutdown.summary")
             if let message = controller.error ?? controller.message {
                 Text(message).font(.callout).foregroundStyle(controller.error == nil ? Color.secondary : .red)
@@ -101,8 +101,11 @@ struct QuickShutdownView: View {
             }.font(.callout)
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(title).font(.system(size: 25, weight: .semibold)).monospacedDigit()
-                        .contentTransition(reduceMotion ? .identity : .numericText())
+                    Text(title).font(
+                        controller.countdown == nil ? .title2.weight(.semibold) : .system(size: 25, weight: .semibold)
+                    )
+                    .monospacedDigit()
+                    .contentTransition(reduceMotion ? .identity : .numericText())
                     if !options {
                         Text(subtitle).font(.callout).foregroundStyle(.secondary)
                     }

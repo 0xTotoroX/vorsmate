@@ -104,7 +104,11 @@ final class RemoteCompanion: ObservableObject, VorsmatePlugin {
             editorError = "请使用与 Vorsmate 配套的遥控器插件。"
             return
         }
-        if child == nil { launch() } else { send(.observe) }
+        if child == nil {
+            launch()
+        } else if !stopping {
+            send(.observe)
+        }
     }
 
     func endEditing() {
@@ -179,11 +183,12 @@ final class RemoteCompanion: ObservableObject, VorsmatePlugin {
                 try? self.control?.close()
                 self.control = nil
                 self.stopping = false
-                if self.wanted {
+                if restart {
+                    self.launch()
+                } else if self.wanted && self.available {
                     self.status = "插件已退出"
-                    self.voiceReadiness(self.available && self.managesVoice ? false : nil)
+                    self.voiceReadiness(self.managesVoice ? false : nil)
                 }
-                if restart { self.launch() }
             }
         }
         do { try process.run() } catch {
@@ -228,7 +233,7 @@ struct RemoteRow: View {
         Button(action: open) {
             PanelSummaryRow(
                 title: "遥控器", symbol: PluginID.remote.symbol, status: plugin.status, value: "小米 2 Pro",
-                expanded: false)
+                navigation: .detail)
         }.buttonStyle(.plain).accessibilityIdentifier("remote.open")
     }
 }

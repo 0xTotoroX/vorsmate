@@ -109,19 +109,18 @@ public final class ShutdownController: ObservableObject {
                 self.executing = true
                 // The driver checks the original PIDs and bundle identity again before each quit.
                 let targets = planned.filter { self.driver.isRunning($0) }
-                if policy.disableReopenWindows { try self.driver.disableReopenWindows() }
                 for app in targets { self.driver.terminate(app, force: false) }
                 if !targets.isEmpty { try await sleep(.milliseconds(1500)) }
                 try Task.checkCancellation()
                 guard self.generation == token else { return }
                 let remaining = targets.filter { self.driver.isRunning($0) }
-                if policy.forceCloseApps {
-                    for app in remaining { self.driver.terminate(app, force: true) }
-                } else if !remaining.isEmpty {
+                if !policy.forceCloseApps && !remaining.isEmpty {
                     let names = remaining.prefix(2).map { "「" + $0.name + "」" }.joined(separator: "、")
                     let rest = remaining.count > 2 ? "等 \(remaining.count) 个应用" : ""
                     throw ShutdownFailure.message("\(names)\(rest)仍在运行，已停止\(action.title)。")
                 }
+                if policy.disableReopenWindows { try self.driver.disableReopenWindows() }
+                for app in remaining { self.driver.terminate(app, force: true) }
                 self.submitted = true
                 try await self.driver.execute(action)
                 guard self.generation == token else { return }

@@ -37,7 +37,7 @@ struct ChannelView: View {
                     status: status,
                     statusSymbol: controller.mode == "locked" && !controller.recovering && !controller.suspended
                         ? "lock.fill" : nil,
-                    value: currentName, expanded: expanded, pending: controller.pending)
+                    value: currentName, navigation: .disclosure(expanded: expanded), pending: controller.pending)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(controller.channel.title)

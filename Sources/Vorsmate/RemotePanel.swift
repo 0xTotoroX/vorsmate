@@ -39,7 +39,7 @@ struct RemotePanel: View {
                 page = page == .overview ? .home : .overview
             } label: {
                 Label(page == .overview ? "Vorsmate" : "遥控器", systemImage: "chevron.left")
-            }.buttonStyle(.plain).foregroundStyle(.tint).accessibilityIdentifier("remote.back")
+            }.buttonStyle(.plain).font(.callout).foregroundStyle(.secondary).accessibilityIdentifier("remote.back")
 
             if let state = plugin.editor {
                 switch page {

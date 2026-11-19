@@ -10,9 +10,21 @@ struct PanelSummaryRow: View {
     let status: String
     var statusSymbol: String? = nil
     let value: String
-    let expanded: Bool
+    let navigation: Navigation
     var pending = false
     @State private var hovering = false
+
+    enum Navigation {
+        case disclosure(expanded: Bool)
+        case detail
+
+        var symbol: String {
+            switch self {
+            case .disclosure(let expanded): expanded ? "chevron.up" : "chevron.down"
+            case .detail: "chevron.right"
+            }
+        }
+    }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -32,7 +44,7 @@ struct PanelSummaryRow: View {
             if pending {
                 ProgressView().controlSize(.mini).frame(width: 10)
             } else {
-                Image(systemName: expanded ? "chevron.up" : "chevron.right")
+                Image(systemName: navigation.symbol)
                     .font(.system(size: 10, weight: .medium)).foregroundStyle(hovering ? .primary : .secondary)
                     .frame(width: 10).accessibilityHidden(true)
             }

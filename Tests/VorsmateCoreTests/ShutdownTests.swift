@@ -26,11 +26,11 @@ struct ShutdownTests {
             await clock.advance()
             if remaining > 0 { #expect(controller.countdown == remaining) }
         }
-        #expect(driver.events == ["preference", "quit:close"])
+        #expect(driver.events == ["quit:close"])
         #expect(controller.executing)
         await clock.advance()
         await settle()
-        #expect(driver.events == ["preference", "quit:close", "force:close", action.rawValue])
+        #expect(driver.events == ["quit:close", "preference", "force:close", action.rawValue])
         #expect(controller.message == "已完成模拟\(action.title)")
         #expect(controller.pendingAction == nil)
         controller.deactivate()
@@ -53,12 +53,12 @@ struct ShutdownTests {
         #expect(controller.countdown == nil)
         controller.deactivate()
     }
-    @Test("关闭强制退出保留未保存应用并停止系统动作；关闭窗口偏好不写系统")
-    func gentle() async {
+    @Test("应用拒绝退出时停止系统动作并保留窗口恢复设置", arguments: [false, true])
+    func gentle(disableReopenWindows: Bool) async {
         let driver = ShutdownMock()
         var policy = ShutdownPolicy()
         policy.forceCloseApps = false
-        policy.disableReopenWindows = false
+        policy.disableReopenWindows = disableReopenWindows
         let controller = ShutdownController(driver: driver, policy: policy, sleep: { _ in })
         controller.activate()
         controller.panelDidChangeVisibility(true)

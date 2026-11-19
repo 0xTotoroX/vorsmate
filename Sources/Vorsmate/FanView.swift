@@ -64,7 +64,7 @@ struct FanView: View {
             } label: {
                 PanelSummaryRow(
                     title: "风扇", symbol: "fan", status: status,
-                    value: reading, expanded: expanded, pending: model.busy)
+                    value: reading, navigation: .disclosure(expanded: expanded), pending: model.busy)
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("fans.expand")
