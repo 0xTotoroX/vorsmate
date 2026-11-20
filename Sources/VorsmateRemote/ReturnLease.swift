@@ -3,6 +3,7 @@
 // [POS]: 读取回验后才允许派发；异常退出后按启动会话和服务 ID 收回本插件的条目。
 import Foundation
 import IOKit.hidsystem
+import VorsmateCore
 
 enum RemoteError: LocalizedError {
     case message(String)
@@ -15,15 +16,12 @@ enum RemoteError: LocalizedError {
 
 @MainActor
 final class ReturnLease {
-    static let identity: [String: Any] = [
-        "VendorID": 0x2717, "ProductID": 0x32b8, "Transport": "Bluetooth Low Energy",
-        "PrimaryUsagePage": 1, "PrimaryUsage": 6,
-    ]
+    static let identity = RemoteDeviceIdentity.keyboard
     private typealias Map = [[String: NSNumber]]
-    private let key = "UserKeyMapping" as CFString
+    private let key = RemoteDeviceIdentity.mapping as CFString
     private let source = "HIDKeyboardModifierMappingSrc"
     private let destination = "HIDKeyboardModifierMappingDst"
-    private let owner = "VorsmateRemoteLease"
+    private let owner = RemoteDeviceIdentity.mappingOwner
     private var expected: Map = []
     private let directory = URL.applicationSupportDirectory.appending(path: "VorsmateRemote")
     private var journal: URL { directory.appending(path: "return-lease") }

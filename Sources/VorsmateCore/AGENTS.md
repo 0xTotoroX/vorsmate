@@ -5,6 +5,7 @@
 - SelectionPolicy.swift：Channel、Source、Snapshot、SelectionPolicy；单次及 IndexSet 批量插入排序、锁定与未就绪回退，运行时就绪状态独立于持久优先级。
 - ReceiverStatus.swift：无线连接状态帧的流式校验、版本与记录识别、连接 / 断连确认和过期；不读取音量判断就绪。
 - RemoteProfile.swift / RemoteGestures.swift：RC003 三槽报告、独立键位存储、手势截止时间与互斥触发。
+- RemoteDeviceIdentity.swift：键位接管与只读诊断共用的 RC003 HID 匹配条件与映射标记。
 - RemoteApplicationMaps.swift：前台应用的逐手势覆盖、默认继承、按住模式与配置编辑。
 - RemoteEditor.swift：宿主与插件的按键编辑消息、实体键反馈、配置校验与单手势更新。
 - RemoteModifiers.swift / RemoteVoice.swift：左右修饰键解析、16 kHz 能力识别、独立 IMA ADPCM 解码与既有音频 UID。

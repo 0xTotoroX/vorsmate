@@ -10,6 +10,7 @@
 
 - ShutdownController.swift：五秒倒计时、批量选择保存、开始时固定待退出进程、显隐取消与系统动作等待回执。
 - ShutdownDriver.swift：常规应用枚举 / 身份复核、CFPreferences 窗口恢复设置、优雅 / 强制退出、系统动作回调与纯内存预览。
+- TypelessRecovery.swift：系统进程、事件监听、修饰键与遥控接管回读；保存诊断快照并提供 Typeless 的正常退出和打开操作。
 
 适配器不录音、不监听按键；测试通过 SourceDriver 替身驱动控制器。
 

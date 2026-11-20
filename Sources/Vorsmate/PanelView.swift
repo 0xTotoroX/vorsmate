@@ -16,6 +16,7 @@ struct PanelView: View {
     @State private var remotePage = RemotePanelPage.home
     @State private var remoteAppID: String?
     @State private var remoteGesture = RemoteGesture.single
+    @State private var showingTypelessRecovery = false
     @State private var contentHeight: CGFloat = 360
 
     var body: some View {
@@ -50,6 +51,7 @@ struct PanelView: View {
                 expandedSection = nil
                 remotePage = .home
                 remoteGesture = .single
+                showingTypelessRecovery = false
                 remoteAppID = nil
             }
         }
@@ -61,7 +63,11 @@ struct PanelView: View {
     private var overviewScroll: some View {
         ScrollView {
             Group {
-                if remotePage == .home {
+                if showingTypelessRecovery {
+                    TypelessRecoveryPanel(model: model.typelessRecovery, preview: model.preview) {
+                        showingTypelessRecovery = false
+                    }
+                } else if remotePage == .home {
                     content
                 } else {
                     RemotePanel(
@@ -75,7 +81,7 @@ struct PanelView: View {
                     Color.clear.preference(key: PanelHeightKey.self, value: geometry.size.height)
                 })
         }
-        .id(remotePage.scrollID)
+        .id(showingTypelessRecovery ? -1 : remotePage.scrollID)
         .scrollIndicators(.automatic)
         .scrollDisabled(contentHeight <= maximumHeight)
         .frame(width: 386, height: min(contentHeight, maximumHeight))
@@ -104,6 +110,11 @@ struct PanelView: View {
                         Toggle("登录时启动", isOn: Binding(get: { model.loginEnabled }, set: { model.setLogin($0) }))
                         UpdateMenuItem(model: model.updates)
                     }
+                    Button("Typeless 诊断与恢复") {
+                        expandedSection = nil
+                        model.typelessRecovery.refresh()
+                        showingTypelessRecovery = true
+                    }.accessibilityIdentifier("typeless.open")
                     Button("关于 Vorsmate") {
                         NSApp.orderFrontStandardAboutPanel(options: [
                             .applicationName: "Vorsmate",

@@ -16,6 +16,7 @@
 - FanModelDriver.swift：真实 SMC / XPC / SMAppService 与内存预览的可替换边界，支持无硬件模型测试。
 - RemotePanel.swift：同一菜单栏面板的全键列表、模型点选与按手势编辑。
 - RemoteCompanion.swift：发现并验证同目录配套应用，按开关管理子进程、控制管道及配置回执，传递遥控器语音的就绪状态。
+- TypelessRecoveryPanel.swift：菜单栏内的诊断详情、保存后确认及有时限的正常退出流程；预览用内存替身。
 - PluginHost.swift：六插件生命周期协议、注册表、幂等启停、刷新 / 显隐分发与开关持久化失败保护；时间资源随视图启停。
 - QuickShutdownView.swift：菜单栏下班详情、应用勾选和搜索、退出选项、固定操作区及五秒日落倒计时。
 - FanView.swift：摘要显示自动 / 均衡 / 增强 / 自定义与实测值；展开为四个并列选项，自定义显示固定转速滑杆，兼容原有档位和旧自定义曲线；悬停区分热点与参考温度，临时保护与确认失败明确显示。

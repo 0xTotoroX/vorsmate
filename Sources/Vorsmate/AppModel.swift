@@ -31,6 +31,21 @@ final class AppModel: ObservableObject {
             }), policy: preferences.shutdownPolicy,
         persist: { [weak self] policy in try self?.save { $0.shutdownPolicy = policy } })
     lazy var remote = RemoteCompanion(preview: preview)
+    lazy var typelessRecovery: TypelessRecoveryModel = {
+        if preview {
+            return .preview(
+                remoteFault: CommandLine.arguments.contains("--preview-typeless-remote"),
+                timesOut: CommandLine.arguments.contains("--preview-typeless-timeout"))
+        }
+        return TypelessRecoveryModel(
+            read: { [weak self] in
+                TypelessSystem.diagnose(
+                    companionPresent: self?.remote.available == true,
+                    companionEnabled: self?.enabledPlugins.contains(.remote) == true,
+                    companionReady: self?.remote.status == "遥控器就绪")
+            },
+            save: TypelessSystem.save, target: TypelessSystem.restartTarget)
+    }()
     lazy var plugins = PluginHost(plugins: builtinPlugins(), disabled: preferences.disabledAtRuntime) {
         [weak self] disabled in
         try self?.save { $0.disabledAtRuntime = disabled }
