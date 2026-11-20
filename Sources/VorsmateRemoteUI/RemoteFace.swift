@@ -53,26 +53,25 @@ package struct RemoteFaceArtwork: View {
     let image: NSImage?
     let scale: CGFloat
     let selected: RemoteButton?
-    let pressed: RemoteButton?
-    package init(image: NSImage?, scale: CGFloat, selected: RemoteButton? = nil, pressed: RemoteButton? = nil) {
+    let highlighted: Set<RemoteButton>
+    package init(image: NSImage?, scale: CGFloat, selected: RemoteButton? = nil, highlighted: Set<RemoteButton> = []) {
         self.image = image
         self.scale = scale
         self.selected = selected
-        self.pressed = pressed
+        self.highlighted = highlighted
     }
     package var body: some View {
         ZStack {
             if let image { Image(nsImage: image).resizable().interpolation(.high) }
             Canvas { context, _ in
                 context.scaleBy(x: scale, y: scale)
-                if pressed != nil {
-                    let body = Path(roundedRect: CGRect(x: 55, y: 28, width: 350, height: 1384), cornerRadius: 18)
-                    context.stroke(body, with: .color(.blue.opacity(0.75)), lineWidth: 1.2 / scale)
+                if let selected, !highlighted.contains(selected) {
+                    context.stroke(RemoteFaceLayout.region(selected), with: .color(.blue), lineWidth: 1.6 / scale)
                 }
-                if let key = pressed ?? selected {
+                for key in highlighted {
                     let path = RemoteFaceLayout.region(key)
-                    if pressed != nil { context.fill(path, with: .color(.blue.opacity(0.18))) }
-                    context.stroke(path, with: .color(.blue), lineWidth: (pressed == nil ? 1.6 : 2.4) / scale)
+                    context.fill(path, with: .color(.blue.opacity(0.28)))
+                    context.stroke(path, with: .color(.blue), lineWidth: 2.4 / scale)
                 }
             }
         }.frame(width: 460 * scale, height: 1440 * scale).accessibilityHidden(true)
@@ -82,23 +81,47 @@ package struct RemoteFaceArtwork: View {
 package struct RemoteFace: View {
     @Binding var selected: RemoteButton
     @GestureState private var pressed: RemoteButton?
+    @State private var click: Click?
+    private struct Click {
+        let key: RemoteButton
+        let id = UUID()
+    }
     private let scale: CGFloat
     private let image: NSImage?
-    package init(selected: Binding<RemoteButton>, image: NSImage? = NSImage(named: "RC003"), scale: CGFloat = 0.29) {
+    private let highlighted: Set<RemoteButton>
+    package init(
+        selected: Binding<RemoteButton>, image: NSImage? = NSImage(named: "RC003"), scale: CGFloat = 0.29,
+        highlighted: Set<RemoteButton> = []
+    ) {
         _selected = selected
         self.image = image
         self.scale = scale
+        self.highlighted = highlighted
     }
     private func hit(_ drag: DragGesture.Value) -> RemoteButton? {
         let key = RemoteFaceLayout.key(at: drag.startLocation, scale: scale)
         return key == RemoteFaceLayout.key(at: drag.location, scale: scale) ? key : nil
     }
     package var body: some View {
-        RemoteFaceArtwork(image: image, scale: scale, selected: selected, pressed: pressed)
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .updating($pressed) { drag, state, _ in state = hit(drag) }
-                    .onEnded { drag in if let key = hit(drag) { selected = key } })
+        let mouseKey = pressed ?? click?.key
+        RemoteFaceArtwork(
+            image: image, scale: scale, selected: selected, highlighted: highlighted.union(mouseKey.map { [$0] } ?? [])
+        )
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .updating($pressed) { drag, state, _ in state = hit(drag) }
+                .onEnded { drag in
+                    if let key = hit(drag) {
+                        click = Click(key: key)
+                        selected = key
+                    }
+                }
+        )
+        .task(id: click?.id) {
+            guard click != nil else { return }
+            do { try await Task.sleep(for: .milliseconds(200)) } catch { return }
+            click = nil
+        }
     }
 }

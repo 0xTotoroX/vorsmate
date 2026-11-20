@@ -39,7 +39,7 @@ struct RemoteWindow: View {
     }
     var body: some View {
         HStack(spacing: 0) {
-            RemoteFace(selected: $button).padding(.horizontal, 36)
+            RemoteFace(selected: $button, highlighted: monitor.highlightedButtons).padding(.horizontal, 36)
             Divider()
             VStack(alignment: .leading, spacing: 14) {
                 Text("小米蓝牙遥控器 2 Pro").foregroundStyle(.secondary)

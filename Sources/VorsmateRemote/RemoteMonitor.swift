@@ -39,7 +39,10 @@ final class RemoteMonitor: ObservableObject {
     private var generation = 0
     private var revision = UUID()
     @Published private(set) var frontApp: String?
+    @Published private(set) var highlightedButtons: Set<RemoteButton> = []
     private var rawPressed: Set<RemoteButton> = []
+    private var voicePressed = false
+    private var clearHighlight: Task<Void, Never>?
     private var effective = RemoteProfile()
 
     @Published private(set) var lastGesture: String?
@@ -52,6 +55,10 @@ final class RemoteMonitor: ObservableObject {
     init(preview: Bool) {
         self.preview = preview
         voice.status = { [weak self] message, ready in self?.voiceState(message, ready ? "ready" : "offline") }
+        voice.keyPressed = { [weak self] down in
+            self?.voicePressed = down
+            self?.updateHighlight()
+        }
         if CommandLine.arguments.contains("--verify") {
             voice.receipt = { [weak self] count, peak in self?.report("voiceSamples=\(count) peak=\(peak)") }
         }
@@ -70,7 +77,29 @@ final class RemoteMonitor: ObservableObject {
             problem: profileError, feedback: feedback)
         state.revision = revision
         state.frontApp = frontApp
+        state.highlightedButtons = RemoteButton.allCases.filter(highlightedButtons.contains)
         return state
+    }
+
+    private func updateHighlight() {
+        var pressed = rawPressed
+        if voicePressed { pressed.insert(.voice) }
+        clearHighlight?.cancel()
+        if !pressed.isEmpty {
+            if highlightedButtons != pressed { highlightedButtons = pressed }
+        } else if !highlightedButtons.isEmpty {
+            clearHighlight = Task { [weak self] in
+                do { try await Task.sleep(for: .milliseconds(160)) } catch { return }
+                self?.highlightedButtons = []
+            }
+        }
+    }
+
+    private func resetPressed() {
+        rawPressed = []
+        voicePressed = false
+        clearHighlight?.cancel()
+        if !highlightedButtons.isEmpty { highlightedButtons = [] }
     }
 
     func reloadProfile() {
@@ -195,7 +224,7 @@ final class RemoteMonitor: ObservableObject {
         voice.stop()
         voiceState(message, external ? "external" : "offline")
         sourceID = nil
-        rawPressed = []
+        resetPressed()
         cancelGestures()
         if let manager {
             IOHIDManagerUnscheduleFromRunLoop(manager, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
@@ -270,7 +299,7 @@ final class RemoteMonitor: ObservableObject {
                         monitor.voice.stop()
                         monitor.voiceState("遥控器麦克风已断开", "offline")
                         monitor.sourceID = nil
-                        monitor.rawPressed = []
+                        monitor.resetPressed()
                         monitor.cancelGestures()
                         do {
                             try monitor.lease.recover()
@@ -305,7 +334,7 @@ final class RemoteMonitor: ObservableObject {
         let only = devices.count == 1 ? devices.first : nil
         let current = only.flatMap(Self.registryID)
         if sourceID != current || current == nil {
-            rawPressed = []
+            resetPressed()
             sourceID = nil
             cancelGestures()
             do { try lease.recover() } catch {
@@ -355,7 +384,10 @@ final class RemoteMonitor: ObservableObject {
         else { return }
         if refreshFrontmost() { tick() }
         guard self.sourceID == sourceID else { return }
-        rawPressed = pressed
+        if rawPressed != pressed {
+            rawPressed = pressed
+            updateHighlight()
+        }
         if remapAfterRelease {
             gestures.cancel(holding: pressed)
             if pressed.isEmpty { tick() }

@@ -107,13 +107,16 @@ struct RemotePanel: View {
     }
 
     private func overview(_ state: RemoteEditorState) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let highlighted = Set(state.highlightedButtons ?? [])
+        return VStack(alignment: .leading, spacing: 10) {
             Button {
                 page = .detail(.ok)
             } label: {
                 HStack(spacing: 12) {
                     if let face = plugin.face {
-                        RemoteFaceArtwork(image: face, scale: 65 / 1440, pressed: pressedRow).frame(width: 32)
+                        RemoteFaceArtwork(
+                            image: face, scale: 65 / 1440, highlighted: highlighted.union(pressedRow.map { [$0] } ?? [])
+                        ).frame(width: 32)
                     }
                     VStack(alignment: .leading, spacing: 2) {
                         Text("遥控器").font(.title2.weight(.semibold))
@@ -142,7 +145,9 @@ struct RemotePanel: View {
                             Spacer(minLength: 6)
                             Text(value).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                             Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
-                        }.frame(minHeight: 28).contentShape(Rectangle())
+                        }
+                        .frame(minHeight: 28).contentShape(Rectangle())
+                        .background(highlighted.contains(key) ? Color.blue.opacity(0.12) : .clear)
                     }.buttonStyle(
                         RemoteRowPressStyle { down in
                             if down { pressedRow = key } else if pressedRow == key { pressedRow = nil }
@@ -168,8 +173,10 @@ struct RemotePanel: View {
         } label: {
             Text(key.name).font(.title2.weight(.semibold))
         }.menuStyle(.borderlessButton).fixedSize().accessibilityLabel("选择实体键，\(key.name)")
-        RemoteFace(selected: selection, image: plugin.face, scale: 0.22)
-            .frame(maxWidth: .infinity).padding(.vertical, 2)
+        RemoteFace(
+            selected: selection, image: plugin.face, scale: 0.22, highlighted: Set(state.highlightedButtons ?? [])
+        )
+        .frame(maxWidth: .infinity).padding(.vertical, 2)
         if key == .voice {
             LabeledContent("按住说话", value: "MiRemoteV 2ch")
             Text(state.voice).font(.callout).foregroundStyle(.secondary)

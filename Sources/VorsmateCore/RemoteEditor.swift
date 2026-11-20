@@ -14,6 +14,7 @@ package struct RemoteEditorState: Codable, Equatable {
     package var voice: String
     package var revision: UUID?
     package var frontApp: String?
+    package var highlightedButtons: [RemoteButton]?
     package var needsInput: Bool
     package var needsPost: Bool
     package var feedback: String?

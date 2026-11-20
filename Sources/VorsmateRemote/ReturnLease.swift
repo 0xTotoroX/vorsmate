@@ -20,7 +20,6 @@ final class ReturnLease {
         "PrimaryUsagePage": 1, "PrimaryUsage": 6,
     ]
     private typealias Map = [[String: NSNumber]]
-    private let client = IOHIDEventSystemClientCreateSimpleClient(nil)
     private let key = "UserKeyMapping" as CFString
     private let source = "HIDKeyboardModifierMappingSrc"
     private let destination = "HIDKeyboardModifierMappingDst"
@@ -29,7 +28,7 @@ final class ReturnLease {
     private let directory = URL.applicationSupportDirectory.appending(path: "VorsmateRemote")
     private var journal: URL { directory.appending(path: "return-lease") }
     private var lockFD: Int32 = -1
-    private var active: IOHIDServiceClient?
+    private var active: (client: IOHIDEventSystemClient, service: IOHIDServiceClient)?
     private let boot: String = {
         var size = 0
         guard sysctlbyname("kern.bootsessionuuid", nil, &size, nil, 0) == 0 else { return "" }
@@ -51,7 +50,7 @@ final class ReturnLease {
 
     deinit { if lockFD >= 0 { close(lockFD) } }
 
-    private func services() -> [IOHIDServiceClient] {
+    private func services(using client: IOHIDEventSystemClient) -> [IOHIDServiceClient] {
         let all = IOHIDEventSystemClientCopyServices(client) as? [IOHIDServiceClient] ?? []
         return all.filter { service in
             Self.identity.allSatisfy { name, expected in
@@ -77,9 +76,11 @@ final class ReturnLease {
     }
 
     func acquire(_ desired: [UInt64: UInt64]) throws {
-        let matches = services()
+        // 登录早期建立的客户端可能一直看不到稍后出现的蓝牙服务。每次接管用新的服务列表。
+        let client = IOHIDEventSystemClientCreateSimpleClient(nil)
+        let matches = services(using: client)
         guard matches.count == 1, let service = matches.first else { throw RemoteError.message("等待唯一的 RC003 键盘服务") }
-        let replacing = active.map { token($0) == token(service) } ?? false
+        let replacing = active.map { token($0.service) == token(service) } ?? false
         if !replacing { try recover() }
         let previous = try mappings(service)
         // Switch profiles on the same device in one HID write; the shared Return suppression stays in place.
@@ -101,12 +102,12 @@ final class ReturnLease {
                 throw error
             }
         }
-        active = service
+        active = (client, service)
         expected = entries
     }
 
     func isSuppressed() -> Bool {
-        guard let active, let map = try? mappings(active) else { return false }
+        guard let active, let map = try? mappings(active.service) else { return false }
         let claimed = Set(expected.compactMap { $0[source] })
         let readback = map.filter { $0[source].map(claimed.contains) == true }
         return readback.count == expected.count && expected.allSatisfy(readback.contains)
@@ -117,7 +118,9 @@ final class ReturnLease {
         expected = []
         guard lockFD >= 0, FileManager.default.fileExists(atPath: journal.path) else { return }
         let saved = try String(contentsOf: journal, encoding: .utf8)
-        if let target = services().first(where: { token($0) == saved }) {
+        let client = IOHIDEventSystemClientCreateSimpleClient(nil)
+        defer { withExtendedLifetime(client) {} }
+        if let target = services(using: client).first(where: { token($0) == saved }) {
             let map = try mappings(target)
             let remaining = map.filter { $0[owner] != 1 }
             if remaining.count != map.count { try write(remaining, to: target) }
