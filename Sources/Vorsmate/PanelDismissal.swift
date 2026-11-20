@@ -60,6 +60,13 @@ final class PanelDismissal: NSObject {
         anchor = nil
     }
 
+    func resumeOutsideDismissal() {
+        // 后台打开时物理指针可能从未进入面板。结束保持后仍需检测它是否在面板外。
+        guard popover?.isShown == true else { return }
+        pointerEntered = true
+        outsideSince = nil
+    }
+
     @objc private func menuBegan(_ notification: Notification) {
         guard let menu = notification.object as? NSMenu else { return }
         menus.append(menu)

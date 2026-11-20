@@ -130,7 +130,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     }
     private func automationDidChange() {
         updateDismissalBehavior()
-        if panelAutomation.isActive && !popover.isShown { showPanel(makeKey: false) }
+        if panelAutomation.isActive {
+            if !popover.isShown { showPanel(makeKey: false) }
+        } else {
+            dismissal.resumeOutsideDismissal()
+        }
     }
     private func resizePanel(to height: CGFloat) {
         guard abs(panelHeight - height) > 0.5 else { return }
