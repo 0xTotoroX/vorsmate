@@ -1,5 +1,5 @@
 // [INPUT]: NSPopover、菜单栏按钮、鼠标位置与本应用的原生菜单跟踪通知。
-// [OUTPUT]: 离开操作区域后的延迟收起；菜单、拖动与键盘操作期间不误关。
+// [OUTPUT]: 离开操作区域后的延迟收起；菜单、拖动、键盘与自动化操作期间不误关。
 // [POS]: 只管理面板显隐，不停止设备管理或风扇续期；关闭后移除全部观察者。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import AppKit
@@ -7,7 +7,7 @@ import OSLog
 
 @MainActor
 final class PanelDismissal: NSObject {
-    var editing = false { didSet { outsideSince = nil } }
+    var suspended = false { didSet { outsideSince = nil } }
     private weak var popover: NSPopover?
     private weak var anchor: NSView?
     private var timer: Timer?
@@ -73,7 +73,7 @@ final class PanelDismissal: NSObject {
     }
 
     private func checkPointer() {
-        guard !editing, let popover, popover.isShown, let window = popover.contentViewController?.view.window else {
+        guard !suspended, let popover, popover.isShown, let window = popover.contentViewController?.view.window else {
             return
         }
         let pointer = NSEvent.mouseLocation

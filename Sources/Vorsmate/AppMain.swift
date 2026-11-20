@@ -1,5 +1,5 @@
-// [INPUT]: AppKit 生命周期、PanelView、AppModel、BrandIcon；--inspect / --preview 开发入口。
-// [OUTPUT]: 原生菜单栏应用、随内容伸缩并离开自动收起的面板 / 预览、只读 JSON 检查。
+// [INPUT]: AppKit 生命周期、PanelView、AppModel、BrandIcon、PanelAutomation。
+// [OUTPUT]: 原生菜单栏弹层、限时自动化保持、独立预览与只读 JSON 检查。
 // [POS]: 可执行入口，.app 由 scripts/build.sh 打包。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import AppKit
@@ -11,6 +11,10 @@ import VorsmateFan
 @MainActor
 enum VorsmateMain {
     static func main() {
+        if CommandLine.arguments.dropFirst().first == "--computer-use-panel" {
+            PanelAutomation.send(CommandLine.arguments.dropFirst(2))
+            return
+        }
         if CommandLine.arguments.contains("--inspect") {
             inspect()
             return
@@ -61,6 +65,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     private var previewWindow: NSWindow?
     private var panelHeight: CGFloat = 360
     private let dismissal = PanelDismissal()
+    private var panelEditing = false
+    private lazy var panelAutomation = PanelAutomation { [weak self] in
+        self?.automationDidChange()
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let preview = CommandLine.arguments.contains("--preview")
@@ -77,8 +85,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         let view = PanelView(
             model: model, maximumHeight: maximumHeight,
             protectInteraction: { [weak self] active in
-                self?.dismissal.editing = active
-                self?.popover.behavior = active ? .applicationDefined : .transient
+                self?.panelEditing = active
+                self?.updateDismissalBehavior()
             },
             onHeightChange: { [weak self] height in self?.resizePanel(to: height) })
         let host = NSHostingController(rootView: view)
@@ -112,7 +120,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         popover.delegate = self
         popover.contentSize = NSSize(width: 386, height: panelHeight)
         popover.contentViewController = host
+        panelAutomation.start()
         if CommandLine.arguments.contains("--show") { showPanel() }
+    }
+    private func updateDismissalBehavior() {
+        let protected = panelEditing || panelAutomation.isActive
+        popover.behavior = protected ? .applicationDefined : .transient
+        dismissal.suspended = protected
+    }
+    private func automationDidChange() {
+        updateDismissalBehavior()
+        if panelAutomation.isActive && !popover.isShown { showPanel(makeKey: false) }
     }
     private func resizePanel(to height: CGFloat) {
         guard abs(panelHeight - height) > 0.5 else { return }
@@ -128,12 +146,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     @objc private func togglePanel() {
         if popover.isShown { popover.performClose(nil) } else { showPanel() }
     }
-    private func showPanel() {
+    private func showPanel(makeKey: Bool = true) {
         guard let button = item?.button else { return }
         model?.refresh()
         model?.panelVisible = true
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-        popover.contentViewController?.view.window?.makeKey()
+        if makeKey { popover.contentViewController?.view.window?.makeKey() }
         popover.contentViewController?.view.window?.makeFirstResponder(nil)
         dismissal.start(popover: popover, anchor: button)
     }
@@ -142,12 +160,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         return true
     }
     func applicationWillTerminate(_ notification: Notification) {
+        panelAutomation.stop()
         dismissal.stop()
         model?.stop()
     }
     func windowWillClose(_ notification: Notification) { model?.panelVisible = false }
     func popoverDidClose(_ notification: Notification) {
         dismissal.stop()
+        panelAutomation.reset()
         model?.panelVisible = false
     }
 }

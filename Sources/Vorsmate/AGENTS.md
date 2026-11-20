@@ -2,8 +2,9 @@
 
 > L2 | 父级: ../AGENTS.md
 
-- AppMain.swift：NSApplication、NSStatusItem / NSPopover、按内容伸缩、显隐通知与实例检查；`--inspect` / `--preview` / `--show` 入口。
-- PanelDismissal.swift：鼠标离开约半秒收起，原生菜单范围 / 拖动 / 键盘保护；仅面板可见时观察，不影响后台管理。
+- AppMain.swift：NSApplication、NSStatusItem / NSPopover、按内容伸缩、显隐通知与实例检查；`--inspect` / `--preview` / `--show` / `--computer-use-panel` 入口。
+- PanelAutomation.swift：向同一路径的运行实例发送开始 / 结束命令，管理自动化保持和两分钟超时。
+- PanelDismissal.swift：鼠标离开约半秒收起，原生菜单范围 / 拖动 / 键盘 / 自动化保护；仅面板可见时观察，不影响后台管理。
 - BrandIcon.swift：加载包内单色矢量 V，菜单栏和面板标题共用 18 点模板图像；开发裸程序无资源时回退到字母符号。
 - AppModel.swift：六模块 PluginHost 装配、兼容配置和模块开关保存、配置冲突保护与恢复、登录状态、面板可见性、无品牌演示设备与内存预览（`--preview-long-list` 扩展滚动验收数据）、显式 `--maintenance` 标记。
 - PanelView.swift：动态插件列表与无首尾 / 重复分隔线、单项展开和功能模块二级菜单；内容超过屏幕适配上限后滚动，登录授权入口仅在需要时出现。

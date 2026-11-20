@@ -59,6 +59,6 @@ Swift 6 + Swift Package Manager + SwiftUI / AppKit + Sparkle + TIS + CoreAudio +
 
 Swift 改动运行仓库 `.swift-format` 对应的格式检查；规则与系统控制变化运行 `swift test`；应用变化运行 `bash scripts/build.sh`。`--inspect` 只读检查真实设备；`--preview` 只用虚构设备。界面修改须观察原生界面，编译不能代替验收。真实插拔、睡眠唤醒、登录启动与签名分发分别记录，不能用模拟测试冒充。
 
-验收真实菜单栏时，先确认正在运行的构建。弹层收起后，用 `open -g "$app_bundle"` 向该 App 包请求重新打开，再读取新的辅助功能状态并继续操作。系统鼠标由用户控制。需要验证状态栏实际点按或物理指针移出时，请用户配合执行该动作。
+验收真实菜单栏时，先确认正在运行的 App 包。用其 `Contents/MacOS/Vorsmate` 可执行文件调用 `--computer-use-panel begin "$session_id"` 打开并保持弹层，其中 `session_id` 由 `uuidgen` 生成。读取最新辅助功能状态后操作，完成或中止时用同一标识调用 `--computer-use-panel end "$session_id"`。保持两分钟后自动结束，同一标识再次开始可以续期。旧构建的后台重开入口是 `open -g "$app_bundle"`。系统鼠标由用户控制，状态栏实际点按或物理指针移出的验收由用户配合执行。
 
 实际系统切换应先识别是否有其他管理工具运行，保留当前选择与配置；不把关停其他软件作为默认测试步骤。用户设备 UID、个人配置与本机诊断输出留在忽略的 `artifacts/`，不提交。
