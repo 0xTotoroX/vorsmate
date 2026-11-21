@@ -6,6 +6,7 @@ import VorsmateCore
 
 @MainActor
 enum ActionOutput {
+    private static let shortcutSource = CGEventSource(stateID: .privateState)
     private static let modifierSettleTime: TimeInterval = 0.008
     private static let chordKeyHoldTime: TimeInterval = 0.045
 
@@ -36,10 +37,12 @@ enum ActionOutput {
 
     private static func sendShortcut(code: UInt16, raw: UInt64) throws {
         try requirePostAccess()
-        let source = CGEventSource(stateID: .privateState)
         let strokes = RemoteKeyEvent.sequence(code: code, flags: raw)
         let events = try strokes.map { stroke in
-            guard let event = CGEvent(keyboardEventSource: source, virtualKey: stroke.code, keyDown: stroke.down) else {
+            guard
+                let event = CGEvent(
+                    keyboardEventSource: shortcutSource, virtualKey: stroke.code, keyDown: stroke.down)
+            else {
                 throw RemoteError.message("无法创建快捷键事件")
             }
             if stroke.modifier { event.type = .flagsChanged }
@@ -47,12 +50,12 @@ enum ActionOutput {
             return event
         }
         let chord = strokes.contains(where: { $0.modifier }) && strokes.contains(where: { !$0.modifier })
-        // 按发送时刻标记事件，让接收方有时间处理修饰键和主键按下。整组串行发完，避免中途漏发松开。
+        // 复用同一事件源，并在整个组合键期间给接收方留出处理按下和松开的时间。
         for (stroke, event) in zip(strokes, events) {
             event.timestamp = DispatchTime.now().uptimeNanoseconds
             event.post(tap: .cghidEventTap)
-            if chord && stroke.down {
-                Thread.sleep(forTimeInterval: stroke.modifier ? modifierSettleTime : chordKeyHoldTime)
+            if chord {
+                Thread.sleep(forTimeInterval: stroke.down && !stroke.modifier ? chordKeyHoldTime : modifierSettleTime)
             }
         }
     }
