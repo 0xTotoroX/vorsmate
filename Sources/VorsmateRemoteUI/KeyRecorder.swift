@@ -59,7 +59,11 @@ package struct KeyRecorder: NSViewRepresentable {
                 36: "回车", 48: "Tab", 49: "空格", 51: "退格", 53: "Esc", 123: "←", 124: "→", 125: "↓", 126: "↑",
             ]
             let character = event.charactersIgnoringModifiers?.uppercased() ?? ""
-            action.label = special[event.keyCode] ?? (character.isEmpty ? "键码 \(event.keyCode)" : character)
+            if let index = RemoteAction.nativeFunctionKeys.firstIndex(of: event.keyCode) {
+                action.label = "F\(13 + index)"
+            } else {
+                action.label = special[event.keyCode] ?? (character.isEmpty ? "键码 \(event.keyCode)" : character)
+            }
             capture?(action)
         }
     }

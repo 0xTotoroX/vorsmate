@@ -86,6 +86,19 @@ public struct RemoteAction: Codable, Equatable, Sendable {
 
     // Older profiles stored the Typeless shortcut as a named action.
     package var editableAction: Self { kind == .typeless ? .dictationShortcut : self }
+
+    // macOS virtual key codes in USB keyboard usage order, F13 through F20.
+    package static let nativeFunctionKeys: [UInt16] = [105, 107, 113, 106, 64, 79, 80, 90]
+
+    fileprivate var nativeKeyboardUsage: UInt64? {
+        guard kind == .shortcut, let keyCode else { return nil }
+        // Function and non-coalesced event flags can be present on a standalone F-key.
+        if let index = Self.nativeFunctionKeys.firstIndex(of: keyCode), (flags ?? 0) & ~UInt64(0x0080_0100) == 0 {
+            return UInt64(0x68 + index)
+        }
+        guard (flags ?? 0) == 0 else { return nil }
+        return RemoteModifier.all.first(where: { $0.code == keyCode })?.hidUsage
+    }
 }
 
 public enum RemoteGesture: String, Codable, CaseIterable, Identifiable, Sendable {
@@ -144,11 +157,11 @@ public struct RemoteProfile: Codable, Equatable, Sendable {
             if button == .voice {
                 if voiceFn { values[source] = 0xff_0000_0003 }
             } else if let binding = buttons[button.rawValue] {
-                if (binding.hold ?? .once) == .once, binding.single.kind == .shortcut, (binding.single.flags ?? 0) == 0,
+                if (binding.hold ?? .once) == .once,
                     binding.double.kind == .none, binding.long.kind == .none,
-                    let modifier = RemoteModifier.all.first(where: { $0.code == binding.single.keyCode })
+                    let usage = binding.single.nativeKeyboardUsage
                 {
-                    values[source] = UInt64(7) << 32 | modifier.hidUsage
+                    values[source] = UInt64(7) << 32 | usage
                     continue
                 }
                 // Keep configured Return and explicitly disabled keys suppressed even without posting access.

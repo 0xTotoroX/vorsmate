@@ -393,6 +393,7 @@ final class RemoteMonitor: ObservableObject {
         if refreshFrontmost() { tick() }
         guard self.sourceID == sourceID else { return }
         if rawPressed != pressed {
+            voice.physicalKeyChanged(down: pressed.contains(.voice))
             rawPressed = pressed
             updateHighlight()
         }

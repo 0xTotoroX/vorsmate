@@ -2,6 +2,7 @@
 // [OUTPUT]: 语音键按住期间的 PCM、设备就绪状态；所有会话在主队列串行处理。
 import CoreBluetooth
 import Foundation
+import OSLog
 import VorsmateCore
 
 @MainActor
@@ -9,6 +10,7 @@ final class RemoteVoiceLink: NSObject, @preconcurrency CBCentralManagerDelegate,
     private static func uuid(_ field: Int) -> CBUUID {
         CBUUID(string: String(format: "AB5E%04X-5A21-4F05-BC7D-AF01F617B664", field))
     }
+    private let log = Logger(subsystem: "app.vorsmate.remote", category: "voice")
     private let service = uuid(1), txID = uuid(2), audioID = uuid(3), controlID = uuid(4)
     private var central: CBCentralManager?
     private var peer: CBPeripheral?
@@ -18,6 +20,9 @@ final class RemoteVoiceLink: NSObject, @preconcurrency CBCentralManagerDelegate,
     private var version: UInt16?
     private var opening = false
     private var receiving = false
+    private var physicalDown = false
+    private var openedForPress = false
+    private var keyFallback: Task<Void, Never>?
     private var session: UInt8 = 0
     private var decoder = RemoteVoiceDecoder()
     private let output = RemoteAudioOutput()
@@ -80,9 +85,13 @@ final class RemoteVoiceLink: NSObject, @preconcurrency CBCentralManagerDelegate,
         central = nil
         deviceIdentity = nil
         retryAfter = 0
+        physicalDown = false
+        openedForPress = false
     }
 
     private func clearPeer() {
+        keyFallback?.cancel()
+        keyFallback = nil
         if opening || receiving {
             closeRemoteMic()
             keyPressed(false)
@@ -106,6 +115,7 @@ final class RemoteVoiceLink: NSObject, @preconcurrency CBCentralManagerDelegate,
         peak = 0
     }
     private func reset(_ message: String) {
+        log.notice("Reset: \(message, privacy: .public); samples=\(self.samples)")
         clearPeer()
         retryAfter = now + 3
         status(message, false)
@@ -174,7 +184,10 @@ final class RemoteVoiceLink: NSObject, @preconcurrency CBCentralManagerDelegate,
     }
     private func write(_ bytes: [UInt8]) {
         guard let tx, let peer, peer.state == .connected else { return }
-        let type: CBCharacteristicWriteType = tx.properties.contains(.write) ? .withResponse : .withoutResponse
+        let type: CBCharacteristicWriteType =
+            tx.properties.contains(.writeWithoutResponse)
+                && (peer.canSendWriteWithoutResponse || !tx.properties.contains(.write))
+            ? .withoutResponse : .withResponse
         peer.writeValue(Data(bytes), for: tx, type: type)
     }
     func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
@@ -183,6 +196,40 @@ final class RemoteVoiceLink: NSObject, @preconcurrency CBCentralManagerDelegate,
     private func closeRemoteMic() {
         guard let version else { return }
         write(version >= 0x0100 ? [0x0d, session] : [0x0d])
+    }
+
+    func physicalKeyChanged(down: Bool) {
+        guard physicalDown != down else { return }
+        physicalDown = down
+        keyFallback?.cancel()
+        log.notice("Voice key: down=\(down) ready=\(self.version != nil)")
+        if down {
+            openedForPress = voiceDeadline != nil
+            keyFallback = Task { [weak self] in
+                do { try await Task.sleep(for: .milliseconds(120)) } catch { return }
+                guard let self, self.physicalDown, !self.openedForPress else { return }
+                self.openMicrophone(from: "HID")
+            }
+        } else {
+            keyFallback = Task { [weak self] in
+                do { try await Task.sleep(for: .milliseconds(350)) } catch { return }
+                guard let self, !self.physicalDown, self.voiceDeadline != nil else { return }
+                self.closeRemoteMic()
+                self.finish()
+            }
+        }
+    }
+
+    private func openMicrophone(from source: String) {
+        guard let version, voiceDeadline == nil else { return }
+        if physicalDown { openedForPress = true }
+        keyPressed(true)
+        opening = true
+        session = 0
+        voiceDeadline = RemoteVoiceDeadline(openedAt: now)
+        decoder = RemoteVoiceDecoder()
+        log.notice("MIC_OPEN: source=\(source, privacy: .public)")
+        write(version >= 0x0100 ? [0x0c, 0] : [0x0c, 0, 2])
     }
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
         guard peripheral === peer else { return }
@@ -198,11 +245,12 @@ final class RemoteVoiceLink: NSObject, @preconcurrency CBCentralManagerDelegate,
             do {
                 try output.write(pcm)
                 if samples == 0 {
+                    log.notice("First PCM delivered to the audio queue")
                     status("遥控器麦克风正在收音", true)
                 }
                 voiceDeadline?.receivedPacket(at: now)
                 samples += pcm.count
-                if receipt != nil { peak = max(peak, pcm.reduce(0) { max($0, abs(Int($1))) }) }
+                peak = max(peak, pcm.reduce(0) { max($0, abs(Int($1))) })
             } catch { reset(error.localizedDescription) }
         }
     }
@@ -211,6 +259,23 @@ final class RemoteVoiceLink: NSObject, @preconcurrency CBCentralManagerDelegate,
         opening = false
         status("等待遥控器语音数据", true)
     }
+
+    private func finish() {
+        keyPressed(false)
+        output.end()
+        log.notice("Voice ended: samples=\(self.samples) peak=\(self.peak)")
+        let count = samples
+        let level = peak
+        receiving = false
+        opening = false
+        voiceDeadline = nil
+        decoder = RemoteVoiceDecoder()
+        samples = 0
+        peak = 0
+        status("遥控器麦克风就绪", true)
+        receipt?(count, level)
+    }
+
     private func handleControl(_ bytes: [UInt8]) {
         guard let opcode = bytes.first else { return }
         if opcode == 0x0b && requestedCaps && version == nil {
@@ -224,19 +289,16 @@ final class RemoteVoiceLink: NSObject, @preconcurrency CBCentralManagerDelegate,
             }
             version = accepted
             deadline = 0
+            log.notice("ATVV ready: version=\(accepted)")
             status("遥控器麦克风就绪", true)
+            if physicalDown && !openedForPress { openMicrophone(from: "HID") }
             return
         }
-        guard let version else { return }
+        guard version != nil else { return }
         switch opcode {
-        case 8 where !receiving && !opening:
-            // START_SEARCH is generated by the physical voice key.
-            keyPressed(true)
-            opening = true
-            session = 0
-            voiceDeadline = RemoteVoiceDeadline(openedAt: now)
-            decoder = RemoteVoiceDecoder()
-            write(version >= 0x0100 ? [0x0c, 0] : [0x0c, 0, 2])
+        case 8:
+            log.notice("ATVV START_SEARCH")
+            if !physicalDown || !openedForPress { openMicrophone(from: "ATVV") }
         case 4 where voiceDeadline != nil:
             guard bytes.count < 3 || bytes[2] == 2 else {
                 reset("遥控器切换到了不支持的语音格式")
@@ -245,18 +307,7 @@ final class RemoteVoiceLink: NSObject, @preconcurrency CBCentralManagerDelegate,
             session = bytes.count > 3 ? bytes[3] : 0
             if !receiving { begin() }
         case 0 where receiving || opening:
-            keyPressed(false)
-            output.end()
-            let count = samples
-            let level = peak
-            receiving = false
-            opening = false
-            voiceDeadline = nil
-            decoder = RemoteVoiceDecoder()
-            samples = 0
-            peak = 0
-            status("遥控器麦克风就绪", true)
-            receipt?(count, level)
+            finish()
         case 0x0a where bytes.count >= 7:
             let seed = Int16(bitPattern: UInt16(bytes[4]) << 8 | UInt16(bytes[5]))
             decoder = RemoteVoiceDecoder(predictor: seed, index: bytes[6])

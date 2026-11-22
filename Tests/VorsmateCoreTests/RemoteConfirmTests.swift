@@ -79,6 +79,27 @@ func gesturesAtReportDeadlines() {
     #expect(state.ingest([], at: 2499, profile: profile) == [RemoteStroke(.ok, .double)])
 }
 
+@Test("单独的 F18 由设备直接产生，组合键或配置了其他手势时仍使用派发")
+func physicalFunctionKey() {
+    var profile = RemoteProfile()
+    var binding = RemoteBinding()
+    binding.single = RemoteAction(.shortcut)
+    binding.single.keyCode = 79
+    binding.single.flags = 0x0080_0100
+    let source: UInt64 = 0x7_0000_0028
+    profile.buttons[RemoteButton.ok.rawValue] = binding
+    #expect(profile.deviceMap(canPost: false)[source] == 0x7_0000_006d)
+
+    binding.double = .dictationShortcut
+    profile.buttons[RemoteButton.ok.rawValue] = binding
+    #expect(profile.deviceMap[source] == 0)
+
+    binding.double = RemoteAction(.none)
+    binding.single.flags = 0x0084_0000
+    profile.buttons[RemoteButton.ok.rawValue] = binding
+    #expect(profile.deviceMap[source] == 0)
+}
+
 @Test("初始松开不触发；旧版独立确定键连续短按仍可立即切换；取消会丢弃等待中的动作")
 func defaultAndCancellation() {
     var p = RemoteProfile()
