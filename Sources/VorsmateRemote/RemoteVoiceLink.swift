@@ -22,6 +22,7 @@ final class RemoteVoiceLink: NSObject, @preconcurrency CBCentralManagerDelegate,
     private var decoder = RemoteVoiceDecoder()
     private let output = RemoteAudioOutput()
     private var deadline: TimeInterval = 0
+    private var voiceDeadline: RemoteVoiceDeadline?
     private var retryAfter: TimeInterval = 0
     private var samples = 0
     private var peak: Int = 0
@@ -29,6 +30,11 @@ final class RemoteVoiceLink: NSObject, @preconcurrency CBCentralManagerDelegate,
     var status: (String, Bool) -> Void = { _, _ in }
     var keyPressed: (Bool) -> Void = { _ in }
     var receipt: ((Int, Int) -> Void)?
+
+    override init() {
+        super.init()
+        output.onFailure = { [weak self] error in self?.reset(error.localizedDescription) }
+    }
 
     func poll(identity: UUID?) {
         if deviceIdentity != identity {
@@ -57,8 +63,14 @@ final class RemoteVoiceLink: NSObject, @preconcurrency CBCentralManagerDelegate,
             central.connect(target)
         } else if version != nil && !output.isBound {
             reset("虚拟麦克风已断开")
+        } else if let expiry = voiceDeadline?.expiry(at: now) {
+            switch expiry {
+            case .firstPacket: reset("未收到遥控器语音，正在重连")
+            case .interrupted: reset("遥控器语音已中断，正在重连")
+            case .maximumDuration: reset("遥控器语音会话已超时")
+            }
         } else if deadline > 0 && now >= deadline {
-            reset(opening || receiving ? "遥控器语音会话已超时" : "遥控器语音连接超时")
+            reset("遥控器语音连接超时")
         }
     }
 
@@ -89,6 +101,7 @@ final class RemoteVoiceLink: NSObject, @preconcurrency CBCentralManagerDelegate,
         receiving = false
         opening = false
         deadline = 0
+        voiceDeadline = nil
         samples = 0
         peak = 0
     }
@@ -179,15 +192,15 @@ final class RemoteVoiceLink: NSObject, @preconcurrency CBCentralManagerDelegate,
         }
         if characteristic === control {
             handleControl(Array(value))
-        } else if characteristic === audio, version != nil, opening || receiving, !value.isEmpty, value.count <= 512 {
+        } else if characteristic === audio, voiceDeadline != nil, !value.isEmpty, value.count <= 512 {
             if !receiving { begin() }
             let pcm = decoder.decode(value)
             do {
                 try output.write(pcm)
                 if samples == 0 {
-                    deadline = now + 75
                     status("遥控器麦克风正在收音", true)
                 }
+                voiceDeadline?.receivedPacket(at: now)
                 samples += pcm.count
                 if receipt != nil { peak = max(peak, pcm.reduce(0) { max($0, abs(Int($1))) }) }
             } catch { reset(error.localizedDescription) }
@@ -196,7 +209,6 @@ final class RemoteVoiceLink: NSObject, @preconcurrency CBCentralManagerDelegate,
     private func begin() {
         receiving = true
         opening = false
-        deadline = now + 3
         status("等待遥控器语音数据", true)
     }
     private func handleControl(_ bytes: [UInt8]) {
@@ -222,10 +234,10 @@ final class RemoteVoiceLink: NSObject, @preconcurrency CBCentralManagerDelegate,
             keyPressed(true)
             opening = true
             session = 0
-            deadline = now + 3
+            voiceDeadline = RemoteVoiceDeadline(openedAt: now)
             decoder = RemoteVoiceDecoder()
             write(version >= 0x0100 ? [0x0c, 0] : [0x0c, 0, 2])
-        case 4:
+        case 4 where voiceDeadline != nil:
             guard bytes.count < 3 || bytes[2] == 2 else {
                 reset("遥控器切换到了不支持的语音格式")
                 return
@@ -239,7 +251,7 @@ final class RemoteVoiceLink: NSObject, @preconcurrency CBCentralManagerDelegate,
             let level = peak
             receiving = false
             opening = false
-            deadline = 0
+            voiceDeadline = nil
             decoder = RemoteVoiceDecoder()
             samples = 0
             peak = 0

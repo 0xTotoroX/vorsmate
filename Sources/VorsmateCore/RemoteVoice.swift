@@ -2,6 +2,25 @@
 // [OUTPUT]: 16 kHz 单声道 PCM；输入排序沿用现有虚拟设备 UID。
 import Foundation
 
+package struct RemoteVoiceDeadline {
+    package enum Expiry: Equatable { case firstPacket, interrupted, maximumDuration }
+
+    private let openedAt: TimeInterval
+    private var lastPacketAt: TimeInterval?
+
+    package init(openedAt: TimeInterval) {
+        self.openedAt = openedAt
+    }
+
+    package mutating func receivedPacket(at now: TimeInterval) { lastPacketAt = now }
+
+    package func expiry(at now: TimeInterval) -> Expiry? {
+        guard let lastPacketAt else { return now - openedAt >= 3 ? .firstPacket : nil }
+        if now - openedAt >= 75 { return .maximumDuration }
+        return now - lastPacketAt >= 1 ? .interrupted : nil
+    }
+}
+
 public enum RemoteVoice {
     public static let deviceUID = "MiRemoteV2ch_UID"
 

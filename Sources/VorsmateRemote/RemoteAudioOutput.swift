@@ -12,8 +12,11 @@ final class RemoteAudioOutput {
     private var free: [AudioQueueBufferRef] = []
     private var running = false
     private var draining = false
+    private var stopTask: Task<Void, Never>?
+    private var waitingForStop: [[Int16]] = []
     private static let capacity: UInt32 = 4096
     private static let count = 32
+    var onFailure: (Error) -> Void = { _ in }
 
     func prepare() throws {
         if queue != nil { return }
@@ -28,7 +31,7 @@ final class RemoteAudioOutput {
             MainActor.assumeIsolated {
                 guard let self, self.generation == generation, self.queue == output else { return }
                 self.free.append(buffer)
-                if self.draining && self.free.count == Self.count { self.finish() }
+                self.stopIfDrained()
             }
         }
         guard status == noErr, let created else { throw RemoteError.message("无法创建遥控器音频通道") }
@@ -74,15 +77,26 @@ final class RemoteAudioOutput {
     }
 
     func write(_ pcm: [Int16]) throws {
-        guard let queue, !pcm.isEmpty, pcm.count <= Int(Self.capacity / 2), let buffer = free.popLast() else {
+        guard !pcm.isEmpty, pcm.count <= Int(Self.capacity / 2) else {
             throw RemoteError.message("遥控器音频缓冲不可用")
         }
-        if !running && !isBound { throw RemoteError.message("虚拟麦克风已断开") }
         draining = false
+        if stopTask != nil {
+            guard waitingForStop.count < Self.count else { throw RemoteError.message("虚拟麦克风未能及时停止") }
+            waitingForStop.append(pcm)
+            return
+        }
+        try enqueue(pcm)
+    }
+
+    private func enqueue(_ pcm: [Int16]) throws {
+        guard let queue, let buffer = free.last else { throw RemoteError.message("遥控器音频缓冲不可用") }
+        if !running && !isBound { throw RemoteError.message("虚拟麦克风已断开") }
         let bytes = pcm.count * 2
         pcm.withUnsafeBytes { buffer.pointee.mAudioData.copyMemory(from: $0.baseAddress!, byteCount: bytes) }
         buffer.pointee.mAudioDataByteSize = UInt32(bytes)
         guard AudioQueueEnqueueBuffer(queue, buffer, 0, nil) == noErr else { throw RemoteError.message("虚拟麦克风写入失败") }
+        free.removeLast()
         if !running {
             guard AudioQueueStart(queue, nil) == noErr else { throw RemoteError.message("虚拟麦克风启动失败") }
             running = true
@@ -90,14 +104,50 @@ final class RemoteAudioOutput {
     }
     func end() {
         draining = true
-        if free.count == Self.count { finish() }
+        stopIfDrained()
     }
-    private func finish() {
-        if running, let queue { AudioQueueStop(queue, false) }
-        draining = false
-        running = false
+
+    private func stopIfDrained() {
+        guard draining, running, free.count == Self.count, stopTask == nil else { return }
+        stopTask = Task { [weak self] in await self?.waitUntilStopped() }
     }
+
+    private func waitUntilStopped() async {
+        guard !Task.isCancelled, let queue else { return }
+        do {
+            guard AudioQueueStop(queue, false) == noErr else { throw RemoteError.message("虚拟麦克风关闭失败") }
+            let deadline = ContinuousClock.now + .seconds(1)
+            while try queueIsRunning(queue) {
+                guard ContinuousClock.now < deadline else { throw RemoteError.message("虚拟麦克风未能及时停止") }
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            running = false
+            stopTask = nil
+            let buffered = waitingForStop
+            waitingForStop.removeAll(keepingCapacity: true)
+            for pcm in buffered { try enqueue(pcm) }
+            stopIfDrained()
+        } catch is CancellationError {
+            return
+        } catch {
+            close()
+            onFailure(error)
+        }
+    }
+
+    private func queueIsRunning(_ queue: AudioQueueRef) throws -> Bool {
+        var active: UInt32 = 0
+        var size = UInt32(MemoryLayout.size(ofValue: active))
+        guard AudioQueueGetProperty(queue, kAudioQueueProperty_IsRunning, &active, &size) == noErr else {
+            throw RemoteError.message("无法读取虚拟麦克风状态")
+        }
+        return active != 0
+    }
+
     func close() {
+        stopTask?.cancel()
+        stopTask = nil
+        waitingForStop.removeAll()
         generation &+= 1
         let old = queue
         queue = nil

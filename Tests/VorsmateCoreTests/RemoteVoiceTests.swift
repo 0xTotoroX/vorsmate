@@ -4,6 +4,23 @@ import VorsmateCore
 
 @testable import VorsmateSystem
 
+@Test("语音首包、断流和会话上限分别超时，连续静音数据仍视为在线")
+func voiceSessionDeadlines() {
+    var session = RemoteVoiceDeadline(openedAt: 100)
+    #expect(session.expiry(at: 102.99) == nil)
+    #expect(session.expiry(at: 103) == .firstPacket)
+    session.receivedPacket(at: 101)
+    #expect(session.expiry(at: 101.99) == nil)
+    #expect(session.expiry(at: 102) == .interrupted)
+    session.receivedPacket(at: 101.75)
+    #expect(session.expiry(at: 102) == nil)
+    for time in stride(from: 102.0, to: 175, by: 0.5) {
+        #expect(session.expiry(at: time) == nil)
+        session.receivedPacket(at: time)
+    }
+    #expect(session.expiry(at: 175) == .maximumDuration)
+}
+
 @Test("有硬件标识时只连接同一只遥控器；缺少标识才按已知名称查找")
 func remoteVoiceIdentity() {
     let selected = UUID()

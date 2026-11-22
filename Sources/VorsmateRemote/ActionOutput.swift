@@ -7,8 +7,8 @@ import VorsmateCore
 @MainActor
 enum ActionOutput {
     private static let shortcutSource = CGEventSource(stateID: .privateState)
-    private static let modifierSettleTime: TimeInterval = 0.008
-    private static let chordKeyHoldTime: TimeInterval = 0.045
+    private static let modifierSettleTime = Duration.milliseconds(8)
+    private static let chordKeyHoldTime = Duration.milliseconds(45)
 
     static func send(_ action: RemoteAction) async throws {
         switch action.kind {
@@ -25,7 +25,7 @@ enum ActionOutput {
             if action.kind == .typeless && !typelessRunning { throw RemoteError.message("请先打开 Typeless") }
             let shortcut = action.editableAction
             guard let code = shortcut.keyCode else { throw RemoteError.message("快捷键缺少键码") }
-            try sendShortcut(code: code, raw: shortcut.flags ?? 0)
+            try await sendShortcut(code: code, raw: shortcut.flags ?? 0)
         case .volumeUp: try media(0)
         case .volumeDown: try media(1)
         case .mute: try media(7)
@@ -35,8 +35,9 @@ enum ActionOutput {
         }
     }
 
-    private static func sendShortcut(code: UInt16, raw: UInt64) throws {
+    private static func sendShortcut(code: UInt16, raw: UInt64) async throws {
         try requirePostAccess()
+        try Task.checkCancellation()
         let strokes = RemoteKeyEvent.sequence(code: code, flags: raw)
         let events = try strokes.map { stroke in
             guard
@@ -50,12 +51,12 @@ enum ActionOutput {
             return event
         }
         let chord = strokes.contains(where: { $0.modifier }) && strokes.contains(where: { !$0.modifier })
-        // 复用同一事件源，并在整个组合键期间给接收方留出处理按下和松开的时间。
+        // 已按下的组合键完整释放；定时等待期间主线程仍可接收 HID 和语音报告。
         for (stroke, event) in zip(strokes, events) {
             event.timestamp = DispatchTime.now().uptimeNanoseconds
             event.post(tap: .cghidEventTap)
             if chord {
-                Thread.sleep(forTimeInterval: stroke.down && !stroke.modifier ? chordKeyHoldTime : modifierSettleTime)
+                try? await Task.sleep(for: stroke.down && !stroke.modifier ? chordKeyHoldTime : modifierSettleTime)
             }
         }
     }

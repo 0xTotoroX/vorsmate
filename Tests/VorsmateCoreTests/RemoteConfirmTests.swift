@@ -62,6 +62,23 @@ func keyLeaseAndPersistence() throws {
     #expect(throws: (any Error).self) { try p.save(replacing: RemoteProfile(), at: url) }
 }
 
+@Test("按报告时刻区分临界双击和长按")
+func gesturesAtReportDeadlines() {
+    let profile = configured()
+    var state = RemoteGestures()
+    _ = state.ingest([.ok], at: 0, profile: profile)
+    #expect(state.ingest([], at: 549, profile: profile).isEmpty)
+    #expect(state.advance(to: 849) == [RemoteStroke(.ok, .single)])
+
+    _ = state.ingest([.ok], at: 1000, profile: profile)
+    #expect(state.ingest([], at: 1550, profile: profile) == [RemoteStroke(.ok, .long)])
+
+    _ = state.ingest([.ok], at: 2000, profile: profile)
+    _ = state.ingest([], at: 2100, profile: profile)
+    #expect(state.ingest([.ok], at: 2399, profile: profile).isEmpty)
+    #expect(state.ingest([], at: 2499, profile: profile) == [RemoteStroke(.ok, .double)])
+}
+
 @Test("初始松开不触发；旧版独立确定键连续短按仍可立即切换；取消会丢弃等待中的动作")
 func defaultAndCancellation() {
     var p = RemoteProfile()

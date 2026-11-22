@@ -50,7 +50,13 @@ final class RemoteMonitor: ObservableObject {
     private var deadlineTimer: Timer?
     private var remapAfterRelease = false
     private var activeMap: [UInt64: UInt64] = [:]
-    private var now: Int { Int(ProcessInfo.processInfo.systemUptime * 1000) }
+    private static let nanosecondsPerTick: Double = {
+        var timebase = mach_timebase_info_data_t()
+        mach_timebase_info(&timebase)
+        return Double(timebase.numer) / Double(timebase.denom)
+    }()
+    private static let reportDeliveryMargin = 20
+    private var now: Int { Int(DispatchTime.now().uptimeNanoseconds / 1_000_000) }
 
     init(preview: Bool) {
         self.preview = preview
@@ -307,9 +313,9 @@ final class RemoteMonitor: ObservableObject {
                         } catch { monitor.update(error.localizedDescription) }
                     }
                 }, Unmanaged.passUnretained(self).toOpaque())
-            IOHIDManagerRegisterInputReportCallback(
+            IOHIDManagerRegisterInputReportWithTimeStampCallback(
                 hid,
-                { context, result, sender, _, reportID, bytes, length in
+                { context, result, sender, _, reportID, bytes, length, timestamp in
                     guard result == kIOReturnSuccess, reportID == 1, length == 6 || length == 7,
                         let context, let sender
                     else { return }
@@ -320,7 +326,9 @@ final class RemoteMonitor: ObservableObject {
                     else { return }
                     let device = Unmanaged<IOHIDDevice>.fromOpaque(sender).takeUnretainedValue()
                     let payload = Array(UnsafeBufferPointer(start: bytes, count: length))
-                    MainActor.assumeIsolated { monitor.receive(device: device, id: reportID, bytes: payload) }
+                    MainActor.assumeIsolated {
+                        monitor.receive(device: device, id: reportID, bytes: payload, timestamp: timestamp)
+                    }
                 }, Unmanaged.passUnretained(self).toOpaque())
             IOHIDManagerScheduleWithRunLoop(hid, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
             manager = hid
@@ -378,7 +386,7 @@ final class RemoteMonitor: ObservableObject {
         return IORegistryEntryGetRegistryEntryID(IOHIDDeviceGetService(device), &id) == KERN_SUCCESS ? id : nil
     }
 
-    private func receive(device: IOHIDDevice, id: UInt32, bytes: [UInt8]) {
+    private func receive(device: IOHIDDevice, id: UInt32, bytes: [UInt8], timestamp: UInt64) {
         guard let sourceID, Self.registryID(device) == sourceID,
             let pressed = RemoteButton.pressed(reportID: id, bytes: bytes)
         else { return }
@@ -395,7 +403,8 @@ final class RemoteMonitor: ObservableObject {
         }
         pending.removeAll { $0.0.repeated && !pressed.contains($0.0.button) }
         let claimed = pressed.filter { activeMap[UInt64(7) << 32 | UInt64($0.usage)] == 0 }
-        let actions = gestures.ingest(claimed, at: now, profile: effective)
+        let reportTime = timestamp > 0 ? Int(Double(timestamp) * Self.nanosecondsPerTick / 1_000_000) : now
+        let actions = gestures.ingest(claimed, at: min(reportTime, now), profile: effective)
         scheduleDeadline()
         deliver(actions)
     }
@@ -404,14 +413,16 @@ final class RemoteMonitor: ObservableObject {
         deadlineTimer?.invalidate()
         deadlineTimer = nil
         guard let due = gestures.deadline else { return }
-        let timer = Timer(timeInterval: Double(max(0, due - now)) / 1000, repeats: false) { [weak self] _ in
+        // 给截止前到达 HID 层的报告留出交付时间，手势窗口仍按其原始时间戳计算。
+        let delay = max(0, due + Self.reportDeliveryMargin - now)
+        let timer = Timer(timeInterval: Double(delay) / 1000, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
                 if self.refreshFrontmost() {
                     self.tick()
                     return
                 }
-                let actions = self.gestures.advance(to: self.now)
+                let actions = self.gestures.advance(to: self.now - Self.reportDeliveryMargin)
                 self.scheduleDeadline()
                 self.deliver(actions)
             }

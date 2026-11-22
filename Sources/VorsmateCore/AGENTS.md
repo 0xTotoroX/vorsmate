@@ -8,7 +8,7 @@
 - RemoteDeviceIdentity.swift：键位接管与只读诊断共用的 RC003 HID 匹配条件与映射标记。
 - RemoteApplicationMaps.swift：前台应用的逐手势覆盖、默认继承、按住模式与配置编辑。
 - RemoteEditor.swift：宿主与插件的按键编辑消息、实体键反馈、配置校验与单手势更新。
-- RemoteModifiers.swift / RemoteVoice.swift：左右修饰键解析、16 kHz 能力识别、独立 IMA ADPCM 解码与既有音频 UID。
+- RemoteModifiers.swift / RemoteVoice.swift：左右修饰键解析、16 kHz 能力识别、独立 IMA ADPCM 解码、语音包超时与既有音频 UID。
 - PluginID.swift：内置与可选模块顺序、标题、图标与通道映射。
 - ShutdownPolicy.swift：关机 / 重启动作、强制退出 / 窗口恢复偏好与按 Bundle ID 聚合的应用条目。
 - Preferences.swift：兼容 version 1 的插件禁用、风扇档位、关机偏好与 PreferencesStore；配置版本检查、目录锁内核对预期值并原子写入 JSON；遥控器配置与导入工具沿用同一锁约定。
