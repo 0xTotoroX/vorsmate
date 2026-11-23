@@ -1,5 +1,5 @@
 // [INPUT]: 签名 XPC、SMAppService、SMC 与内存风扇运行时。
-// [OUTPUT]: 可替换的风扇模型驱动；真实授权入口与无硬件预览。
+// [OUTPUT]: 可替换的风扇模型驱动；真实授权入口、开发监控与无硬件预览。
 // [POS]: FanModel 的系统边界，测试不创建真实 SMC 或 XPC 连接。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import AppKit
@@ -24,8 +24,10 @@ final class SystemFanModelDriver: FanModelDriver {
     private let hardware = SMCFanDriver()
     private let client = FanConnection()
     private let service = SMAppService.daemon(plistName: FanServiceIdentity.plist)
-    var helperEnabled: Bool { service.status == .enabled }
-    var needsApproval: Bool { service.status == .requiresApproval }
+    private let canUseHelper: Bool
+    init(canUseHelper: Bool = true) { self.canUseHelper = canUseHelper }
+    var helperEnabled: Bool { canUseHelper && service.status == .enabled }
+    var needsApproval: Bool { canUseHelper && service.status == .requiresApproval }
     var competingApp: String? {
         let names = [
             "com.crystalidea.macsfancontrol": "Macs Fan Control", "com.tunabellysoftware.TG-Pro": "TG Pro",

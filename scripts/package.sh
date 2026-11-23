@@ -6,6 +6,10 @@
 set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP_PATH="$PROJECT_ROOT/dist/Vorsmate.app"
+if [[ "$(/usr/libexec/PlistBuddy -c 'Print :VorsmateDevelopmentBuild' "$APP_PATH/Contents/Info.plist" 2>/dev/null)" == true ]]; then
+    printf 'Build a release app before packaging.\n' >&2
+    exit 1
+fi
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Contents/Info.plist")"
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { printf 'Invalid app version\n' >&2; exit 1; }
 for BINARY in Vorsmate VorsmateFanHelper; do

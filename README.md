@@ -81,8 +81,7 @@
 git clone https://github.com/0xTotoroX/vorsmate.git
 cd vorsmate
 swift test
-bash scripts/build.sh
-open dist/Vorsmate.app
+bash scripts/dev.sh
 ```
 
 默认构建本机架构并使用临时签名，支持输入法、音频与风扇监控。自行启用风扇调速，需要自己的 Apple 签名证书；正式分发还需要 Developer ID 与 Apple 公证。
@@ -92,7 +91,7 @@ VORSMATE_SIGN_IDENTITY='证书名称或指纹' bash scripts/build.sh --universal
 bash scripts/package.sh
 ```
 
-产物位于 `dist/`，脚本不会安装或发布。开发时可用 `open -n dist/Vorsmate.app --args --preview` 打开只使用演示数据的隔离预览。
+正式构建产物位于 `dist/`。首次切入开发版前，先退出旧实例。之后每轮开发使用同一条启动命令。开发版沿用现有配置和真实设备，也可单独构建模拟预览。用法与签名差异见[本地开发](CONTRIBUTING.md#本地开发)。
 
 欢迎提交 Issue 和 PR。开发约定见[贡献说明](CONTRIBUTING.md)，安全问题见[安全报告](SECURITY.md)。
 

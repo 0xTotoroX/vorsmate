@@ -40,6 +40,7 @@ enum FanControlChoice: CaseIterable, Hashable {
 struct FanView: View {
     @ObservedObject var model: FanModel
     @Binding var expanded: Bool
+    var enablesHelperInstallation = true
 
     private var status: String {
         if model.needsApproval { return "等待授权" }
@@ -79,7 +80,9 @@ struct FanView: View {
                         HStack {
                             Text(model.needsApproval ? "等待系统授权" : "监控中").foregroundStyle(.secondary)
                             Spacer()
-                            Button(model.needsApproval ? "打开授权设置" : "启用调速") { model.installHelper() }
+                            if enablesHelperInstallation {
+                                Button(model.needsApproval ? "打开授权设置" : "启用调速") { model.installHelper() }
+                            }
                         }
                     }
                     if let competitor = model.competingApp {

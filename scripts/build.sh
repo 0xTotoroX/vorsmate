@@ -1,5 +1,5 @@
 #!/bin/bash
-# [INPUT]: Swift Package Manager、Sparkle 二进制框架、Resources 元数据、可选 --universal 与签名身份。
+# [INPUT]: Swift Package Manager、Sparkle、Resources、开发或 Universal 构建选项与签名身份。
 # [OUTPUT]: 带源码修订、完整许可与签名的主应用和独立遥控器插件；不安装、不注册登录项。
 # [POS]: 先在临时目录装配并验证，再替换构建产物，不保留旧包残留。
 # [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
@@ -7,11 +7,16 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$PROJECT_ROOT"
 BUILD_ARGS=(-c release)
-case "${1:-}" in
+DEVELOPMENT=false
+case "$*" in
     --universal) BUILD_ARGS+=(--arch arm64 --arch x86_64) ;;
+    --development) BUILD_ARGS=(-c debug); DEVELOPMENT=true ;;
     "") ;;
-    *) printf 'Usage: bash scripts/build.sh [--universal]\n' >&2; exit 2 ;;
+    *) printf 'Usage: bash scripts/build.sh [--universal | --development]\n' >&2; exit 2 ;;
 esac
+if "$DEVELOPMENT" && [[ -z "${VORSMATE_DIST_DIR:-}" ]]; then
+    VORSMATE_DIST_DIR="$PROJECT_ROOT/artifacts/dev/build"
+fi
 swift build "${BUILD_ARGS[@]}"
 BIN_PATH="$(swift build "${BUILD_ARGS[@]}" --show-bin-path)"
 DIST_DIR="${VORSMATE_DIST_DIR:-$PROJECT_ROOT/dist}"
@@ -29,6 +34,9 @@ mkdir -p "$STAGED_APP/Contents/MacOS" "$STAGED_APP/Contents/Resources/License/LI
 cp "$BIN_PATH/Vorsmate" "$STAGED_APP/Contents/MacOS/Vorsmate"
 cp "$BIN_PATH/VorsmateFanHelper" "$STAGED_APP/Contents/MacOS/VorsmateFanHelper"
 cp "$PROJECT_ROOT/Resources/Info.plist" "$STAGED_APP/Contents/Info.plist"
+if "$DEVELOPMENT"; then
+    /usr/libexec/PlistBuddy -c 'Add :VorsmateDevelopmentBuild bool true' "$STAGED_APP/Contents/Info.plist"
+fi
 if REVISION="$(git rev-parse HEAD 2>/dev/null)"; then
     if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then REVISION="$REVISION-dirty"; fi
     /usr/libexec/PlistBuddy -c "Add :VorsmateSourceRevision string $REVISION" "$STAGED_APP/Contents/Info.plist"
@@ -54,7 +62,10 @@ PY
 VORSMATE_SIGN_IDENTITY="${VORSMATE_SIGN_IDENTITY:--}"
 SIGN_ARGS=(--force --sign "$VORSMATE_SIGN_IDENTITY")
 # 临时签名仅供本地开发；已签名发行包使用 hardened runtime，嵌套框架采用同一身份。
-if [[ "$VORSMATE_SIGN_IDENTITY" != "-" ]]; then SIGN_ARGS+=(--options runtime --timestamp); fi
+if [[ "$VORSMATE_SIGN_IDENTITY" != "-" ]]; then
+    SIGN_ARGS+=(--options runtime)
+    if "$DEVELOPMENT"; then SIGN_ARGS+=(--timestamp=none); else SIGN_ARGS+=(--timestamp); fi
+fi
 # 可选插件只放在主应用旁，主应用的 DMG 不隐式安装它。
 REMOTE="$STAGING_ROOT/VorsmateRemote.app"
 mkdir -p "$REMOTE/Contents/MacOS" "$REMOTE/Contents/Resources"

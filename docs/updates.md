@@ -22,21 +22,27 @@ v0.3.2 起，更新器在启动一分钟后、之后每 12 小时检查一次，
 
 Sparkle 锁定于 `Package.resolved`。更新私钥保存在登录钥匙串，账户为 `app.vorsmate.mac`；包内 `SUPublicEDKey` 仅为公钥。私钥不入仓库或资产。独立 Fork 需创建自己的密钥，并更换仓库与固定 feed 地址。
 
+确认待发布功能后，更新版本号并递增构建号，将变更提交并验收。给这次提交打上与应用版本相同的 `vX.Y.Z` 标签。此后可继续修改本地源码。发行脚本签出标签对应的独立工作树，构建 Universal 应用、制作 DMG、签署更新清单，用包内公钥回验后一次性保存到 `artifacts/releases/<标签>/`。已有同名产物会保留。
+
 ```sh
-VORSMATE_SIGN_IDENTITY='证书名称或指纹' bash scripts/build.sh --universal
-bash scripts/package.sh
-bash scripts/appcast.sh
-swift scripts/verify-update.swift dist/updates/appcast.xml dist/Vorsmate.app dist/release/Vorsmate-<版本>.dmg
+# 将示例替换为已验收的版本标签
+tag=vX.Y.Z
+bash scripts/prepare-release.sh "$tag"
 ```
+
+脚本读取本机仓库设置 `vorsmate.signIdentity`，也接受 `VORSMATE_SIGN_IDENTITY`。日常使用的应用、当前分支及未提交的工作可继续使用。
 
 发布标题使用 `Vorsmate v<版本>`，设为常规发布；最新版本标记为 Latest。发布说明先完整英文、再完整中文，两个语言区块不交叉；仅列功能变化，不加入安装步骤、升级指引、测试数量、验收记录、签名 / 公证提示或机型限制段落。
 
-Release 仅上传 `Vorsmate-<版本>.dmg`，首字母大写，不添加架构后缀。双重签名的 appcast.xml 生成在 dist/updates/，回验后单独发布到固定 updates 分支，不作为 Release 附件。所有版本、构建号、最低系统、地址与签名来自实际应用和载荷；先提交最终源码再构建，不覆盖既有安装包。钥匙串公钥不匹配时生成失败，不发布不完整更新。
+Release 仅上传 `Vorsmate-<版本>.dmg`，首字母大写，不添加架构后缀。同目录的双重签名 appcast.xml 单独发布到固定 updates 分支。所有版本、构建号、最低系统、地址与签名来自实际应用和载荷；先提交最终源码再构建，不覆盖既有安装包。钥匙串公钥不匹配时生成失败，不发布不完整更新。
 
-Release 公开、资产下载回验通过后，显式更新固定源：
+审核发布说明并推送已确认的版本标签后，使用同一份产物创建 Release。下面的 `notes` 为已审核的双语说明文件。Release 公开后，再发布该包对应的更新清单。
 
 ```sh
-bash scripts/publish-appcast.sh
+release_dir="artifacts/releases/$tag"
+dmg="$release_dir/Vorsmate-${tag#v}.dmg"
+gh release create "$tag" "$dmg" --verify-tag --title "Vorsmate $tag" --notes-file "$notes" --latest
+bash scripts/publish-appcast.sh "$release_dir/appcast.xml" "$release_dir/Vorsmate.app" "$dmg"
 ```
 
 该脚本先只用公钥检查 feed / 载荷签名、长度和版本，再核对公开 Release 的载荷摘要，最后用独立索引提交并推送 updates 分支。它不修改主分支，不创建 Release，不强推；并发更新被拒绝时先核对远端，不覆盖他人的 feed。上传后还需匿名下载固定源，确认字节与已验证文件一致。

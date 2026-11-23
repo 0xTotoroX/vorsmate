@@ -1,5 +1,5 @@
 // [INPUT]: 系统驱动、PreferencesStore、SMAppService 与更新模型。
-// [OUTPUT]: 内置与外置插件装配、兼容配置与开关保存、可见性分发、隔离预览与显式维护入口。
+// [OUTPUT]: 插件装配、配置与开关、可见性分发、开发版与隔离预览和维护入口。
 // [POS]: 应用组合入口；通过 PluginHost 控制各模块资源；关机执行选择已授权助手或系统回退。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import AppKit
@@ -12,15 +12,20 @@ import VorsmateSystem
 @MainActor
 final class AppModel: ObservableObject {
     let preview: Bool
+    let development: Bool
     let maintenance: Bool
-    lazy var fan = FanModel(preview: preview, savedProfiles: preferences.fanProfiles) { [weak self] profiles in
+    private let canUseFanHelper: Bool
+    lazy var fan = FanModel(
+        preview: preview, savedProfiles: preferences.fanProfiles,
+        driver: preview ? nil : SystemFanModelDriver(canUseHelper: canUseFanHelper)
+    ) { [weak self] profiles in
         try self?.save { $0.fanProfiles = profiles }
     }
     lazy var shutdown = ShutdownController(
         driver: preview
             ? PreviewShutdownDriver(longList: CommandLine.arguments.contains("--preview-long-list"))
-            : SystemShutdownDriver(systemAction: { action in
-                if SMAppService.daemon(plistName: FanServiceIdentity.plist).status == .enabled {
+            : SystemShutdownDriver(systemAction: { [canUseFanHelper] action in
+                if canUseFanHelper && SMAppService.daemon(plistName: FanServiceIdentity.plist).status == .enabled {
                     let client = FanConnection()
                     defer { client.invalidate() }
                     // A lost reply does not mean the helper failed to submit the system request.
@@ -62,12 +67,14 @@ final class AppModel: ObservableObject {
     private let store = PreferencesStore.standard
     private var canSave = true
 
-    init(preview: Bool) {
+    init(preview: Bool, development: Bool = false) {
         self.preview = preview
-        self.maintenance = !preview && CommandLine.arguments.contains("--maintenance")
-        self.updates = UpdateModel(enabled: !preview)
+        self.development = development
+        self.canUseFanHelper = !development || FanServiceIdentity.teamID() != nil
+        self.maintenance = !preview && !development && CommandLine.arguments.contains("--maintenance")
+        self.updates = UpdateModel(enabled: !preview && !development)
         if !preview {
-            refreshLoginStatus()
+            if !development { refreshLoginStatus() }
             do { preferences = try store.load() } catch {
                 configurationError = "无法读取配置：\(error.localizedDescription)"
                 canSave = false
@@ -143,7 +150,7 @@ final class AppModel: ObservableObject {
     func refresh() {
         remote.discover()
         objectWillChange.send()
-        if !preview { refreshLoginStatus() }
+        if !preview && !development { refreshLoginStatus() }
         if !canSave {
             do {
                 preferences = try store.load()
@@ -166,6 +173,7 @@ final class AppModel: ObservableObject {
         plugins.stop()
     }
     func setLogin(_ enabled: Bool) {
+        guard !development else { return }
         guard !preview else {
             loginEnabled = enabled
             return

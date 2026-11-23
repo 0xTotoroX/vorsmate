@@ -1,5 +1,5 @@
 // [INPUT]: AppKit 生命周期、PanelView、AppModel、BrandIcon、PanelAutomation。
-// [OUTPUT]: 原生菜单栏弹层、限时自动化保持、独立预览与只读 JSON 检查。
+// [OUTPUT]: 原生菜单栏弹层、开发实例交接、限时自动化保持、独立预览与只读 JSON 检查。
 // [POS]: 可执行入口，.app 由 scripts/build.sh 打包。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import AppKit
@@ -11,6 +11,9 @@ import VorsmateFan
 @MainActor
 enum VorsmateMain {
     static func main() {
+        if CommandLine.arguments.dropFirst().first == "--development-stop" {
+            exit(DevelopmentBuild.stopForReload())
+        }
         if CommandLine.arguments.dropFirst().first == "--computer-use-panel" {
             PanelAutomation.send(CommandLine.arguments.dropFirst(2))
             return
@@ -58,6 +61,42 @@ enum VorsmateMain {
 }
 
 @MainActor
+private enum DevelopmentBuild {
+    static let enabled = Bundle.main.object(forInfoDictionaryKey: "VorsmateDevelopmentBuild") as? Bool == true
+
+    static func stopForReload() -> Int32 {
+        guard enabled, CommandLine.arguments.count == 2, let bundleID = Bundle.main.bundleIdentifier else {
+            fputs("此命令只用于重载 Vorsmate 开发版。\n", stderr)
+            return 2
+        }
+        let bundlePath = Bundle.main.bundleURL.resolvingSymlinksInPath().path
+        let ownPID = ProcessInfo.processInfo.processIdentifier
+        let running = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).filter {
+            !$0.isTerminated && $0.processIdentifier != ownPID
+        }
+        guard running.allSatisfy({ $0.bundleURL?.resolvingSymlinksInPath().path == bundlePath }) else {
+            fputs("请先通过菜单退出正在运行的其他 Vorsmate，再启动开发版。\n", stderr)
+            return 1
+        }
+        guard let instance = running.first else { return 0 }
+        guard running.count == 1 else {
+            fputs("发现多个开发实例，请先退出后再运行重载。\n", stderr)
+            return 1
+        }
+        _ = instance.terminate()
+        let deadline = ProcessInfo.processInfo.systemUptime + 15
+        while !instance.isTerminated && ProcessInfo.processInfo.systemUptime < deadline {
+            RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
+        }
+        guard instance.isTerminated else {
+            fputs("开发版尚未退出，已保留当前构建。\n", stderr)
+            return 1
+        }
+        return 0
+    }
+}
+
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSWindowDelegate {
     private var item: NSStatusItem?
     private let popover = NSPopover()
@@ -78,7 +117,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
             NSApp.terminate(nil)
             return
         }
-        let model = AppModel(preview: preview)
+        let model = AppModel(preview: preview, development: DevelopmentBuild.enabled)
         model.panelVisible = preview
         self.model = model
         let maximumHeight = min(650, max(300, (NSScreen.main?.visibleFrame.height ?? 800) - 80))
@@ -104,14 +143,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
             NSApp.activate(ignoringOtherApps: true)
             return
         }
+        let badge = model.development ? "开发" : nil
         item = NSStatusBar.system.statusItem(
-            withLength: preview ? NSStatusItem.variableLength : NSStatusItem.squareLength)
+            withLength: preview || badge != nil ? NSStatusItem.variableLength : NSStatusItem.squareLength)
         item?.button?.image = BrandIcon.template
-        if preview {
-            item?.button?.title = "预览"
+        if let title = preview ? "预览" : badge {
+            item?.button?.title = title
             item?.button?.imagePosition = .imageLeading
         }
-        let itemName = preview ? "Vorsmate 预览" : "Vorsmate"
+        let itemName = preview ? "Vorsmate 预览" : (badge.map { "Vorsmate \($0)" } ?? "Vorsmate")
         item?.button?.setAccessibilityLabel(itemName)
         item?.button?.toolTip = itemName
         item?.button?.target = self

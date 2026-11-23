@@ -95,7 +95,11 @@ struct PanelView: View {
                     .frame(width: 18, height: 18).accessibilityHidden(true)
                 Text("Vorsmate").font(.title3.weight(.semibold))
                 Spacer()
-                if model.preview { Text("预览").font(.caption).foregroundStyle(.secondary) }
+                if model.preview {
+                    Text("预览").font(.caption).foregroundStyle(.secondary)
+                } else if model.development {
+                    Text("开发版").font(.caption).foregroundStyle(.secondary)
+                }
                 Menu {
                     Menu("功能模块") {
                         ForEach(model.availablePlugins) { id in
@@ -106,7 +110,7 @@ struct PanelView: View {
                                     set: { model.setPlugin(id, enabled: $0) }))
                         }
                     }
-                    if !model.preview {
+                    if !model.preview && !model.development {
                         Toggle("登录时启动", isOn: Binding(get: { model.loginEnabled }, set: { model.setLogin($0) }))
                         UpdateMenuItem(model: model.updates)
                     }
@@ -163,7 +167,8 @@ struct PanelView: View {
                 expandedSection = nil
                 remotePage = .overview
             }
-        case .fan: FanView(model: model.fan, expanded: expansion(for: id))
+        case .fan:
+            FanView(model: model.fan, expanded: expansion(for: id), enablesHelperInstallation: !model.development)
         case .quickShutdown: ShutdownSummary(controller: model.shutdown) { expandedSection = .quickShutdown }
         }
     }

@@ -81,8 +81,7 @@ Requires Xcode 26+ and the Swift 6 / macOS SDK.
 git clone https://github.com/0xTotoroX/vorsmate.git
 cd vorsmate
 swift test
-bash scripts/build.sh
-open dist/Vorsmate.app
+bash scripts/dev.sh
 ```
 
 The default build targets the host architecture and uses an ad-hoc signature. Input source and audio management work; fans are monitored without control. To enable fan control in your own build, use an Apple signing certificate. General distribution also requires Developer ID signing and Apple notarization.
@@ -92,7 +91,7 @@ VORSMATE_SIGN_IDENTITY='certificate name or fingerprint' bash scripts/build.sh -
 bash scripts/package.sh
 ```
 
-Outputs are saved under `dist/`. These scripts do not install or publish the app. Run `open -n dist/Vorsmate.app --args --preview` for an isolated preview using sample data.
+The release build goes to `dist/`. For daily use, quit any previous copy once. Each `bash scripts/dev.sh` then rebuilds and relaunches the development app with your existing preferences. To package an approved version tag separately, run `bash scripts/prepare-release.sh vX.Y.Z`. See the [development guide](CONTRIBUTING.md#本地开发).
 
 Issues and pull requests are welcome. Read the [contribution guide](CONTRIBUTING.md) and report security issues through the [security policy](SECURITY.md).
 

@@ -6,11 +6,27 @@
 
 使用 macOS、Xcode 26+ 与 Swift 6 / macOS SDK。应用目标系统为 macOS 14+，具体实测范围见[验证范围](docs/verification.md)。
 
+### 日常开发版
+
+首次从日常版切换时，先从菜单退出原 Vorsmate。之后每次修改源码，运行：
+
+```sh
+bash scripts/dev.sh
+```
+
+脚本增量编译，验证包成功后才退出并重开同一路径的开发实例。菜单栏标为「开发」，应用沿用现有偏好和真实设备。开发版不检查更新，不注册登录项，也不替换 `/Applications` 里的安装。构建失败时，正在运行的开发版继续工作。要回日常版，先退出开发版，再打开已安装的应用。
+
+日常使用风扇调速时，先运行 `git config --local vorsmate.signIdentity '证书名称或指纹'`，选择原签名团队的 Apple 证书。后续重载自动沿用它，也可用 `VORSMATE_SIGN_IDENTITY` 单次指定。未指定时使用临时签名，风扇只读，关机走 System Events。开发版沿用已授权且可连接的助手，修改助手源码后需单独验证签名升级。
+
+### 隔离验收与发版
+
 ```sh
 swift test
-bash scripts/build.sh
-open -n dist/Vorsmate.app --args --preview
+bash scripts/dev.sh --build-only
+open -n artifacts/dev/build/Vorsmate.app --args --preview
 ```
+
+`--build-only` 生成独立验收包，预览只使用模拟设备。日常使用固定路径 `artifacts/dev/run/Vorsmate.app`。决定发布时，给验收过、已设置正式版本号与构建号的提交打标签，再用 `bash scripts/prepare-release.sh vX.Y.Z` 独立构建该版本。发布步骤见[应用更新](docs/updates.md)。
 
 使用仓库的 `.swift-format`：
 
