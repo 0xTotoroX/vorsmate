@@ -48,6 +48,7 @@ git worktree add --detach "$checkout" "$revision"
         exit 1
     fi
     export VORSMATE_SIGN_IDENTITY="$identity" VORSMATE_DIST_DIR="$checkout/dist"
+    swift package resolve --only-use-versions-from-resolved-file
     bash scripts/build.sh --universal
     app=dist/Vorsmate.app
     if [[ "$(/usr/libexec/PlistBuddy -c 'Print :VorsmateSourceRevision' "$app/Contents/Info.plist")" != "$revision" ]]; then

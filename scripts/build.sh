@@ -38,7 +38,7 @@ if "$DEVELOPMENT"; then
     /usr/libexec/PlistBuddy -c 'Add :VorsmateDevelopmentBuild bool true' "$STAGED_APP/Contents/Info.plist"
 fi
 if REVISION="$(git rev-parse HEAD 2>/dev/null)"; then
-    if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then REVISION="$REVISION-dirty"; fi
+    if [[ -n "$(git status --porcelain)" ]]; then REVISION="$REVISION-dirty"; fi
     /usr/libexec/PlistBuddy -c "Add :VorsmateSourceRevision string $REVISION" "$STAGED_APP/Contents/Info.plist"
 fi
 cp "$PROJECT_ROOT/Resources/AppIcon.icns" "$STAGED_APP/Contents/Resources/"
