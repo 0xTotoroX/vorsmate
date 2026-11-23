@@ -11,6 +11,9 @@ import VorsmateFan
 @MainActor
 enum VorsmateMain {
     static func main() {
+        if CommandLine.arguments.dropFirst().first == "--development-fan-helper" {
+            DevelopmentFanHelper.run()
+        }
         if CommandLine.arguments.dropFirst().first == "--development-stop" {
             exit(DevelopmentBuild.stopForReload())
         }

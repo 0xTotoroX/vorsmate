@@ -87,6 +87,11 @@ codesign "${SIGN_ARGS[@]}" "$SPARKLE/Versions/B/Autoupdate"
 codesign "${SIGN_ARGS[@]}" "$SPARKLE/Versions/B/Updater.app"
 codesign "${SIGN_ARGS[@]}" "$SPARKLE"
 codesign "${SIGN_ARGS[@]}" --identifier app.vorsmate.fan-helper "$STAGED_APP/Contents/MacOS/VorsmateFanHelper"
+if "$DEVELOPMENT" && [[ "${VORSMATE_FOLLOW_FAN_HELPER:-false}" == true ]]; then
+    helper_hash="$(codesign -dvvv "$STAGED_APP/Contents/MacOS/VorsmateFanHelper" 2>&1 | sed -n 's/^CDHash=//p')"
+    [[ "$helper_hash" =~ ^[[:xdigit:]]{40}$ ]]
+    /usr/libexec/PlistBuddy -c "Add :VorsmateDevelopmentFanHelperHash string $helper_hash" "$STAGED_APP/Contents/Info.plist"
+fi
 codesign "${SIGN_ARGS[@]}" --entitlements "$PROJECT_ROOT/Resources/Vorsmate.entitlements" "$STAGED_APP"
 codesign --verify --strict "$STAGED_APP/Contents/MacOS/VorsmateFanHelper"
 codesign --verify --strict "$STAGED_APP"

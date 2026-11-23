@@ -1,5 +1,5 @@
 // [INPUT]: Foundation XPC、Security 签名身份、Codable 风扇命令。
-// [OUTPUT]: 固定风扇 / 关机 / 重启能力协议、双向签名要求、超时且仅完成一次的调用，保留助手的具体错误。
+// [OUTPUT]: 固定风扇 / 关机 / 重启协议、双向验签与开发助手哈希、应答 PID、单次完成与超时。
 // [POS]: UI 与 root 助手的窄边界；不接受任意文件、进程、命令或 SMC 键。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import Foundation
@@ -57,10 +57,28 @@ public struct FanCommand: Codable, Sendable {
 public final class FanConnection {
     private var connection: NSXPCConnection?
     private var connectionID: UUID?
-    public init() {}
+    public var peerPID: pid_t? { connection?.processIdentifier }
+    private let developmentHash: String?
+    private init(developmentHash: String?) { self.developmentHash = developmentHash }
+    public convenience init() {
+        self.init(
+            developmentHash: Bundle.main.object(forInfoDictionaryKey: "VorsmateDevelopmentFanHelperHash") as? String)
+    }
+    public static func releaseRegisteredHelperForReload() async throws {
+        // 移交时旧助手的哈希可以不同；同团队与服务标识校验仍适用，唯一请求是交回系统控制。
+        let previous = FanConnection(developmentHash: nil)
+        defer { previous.invalidate() }
+        _ = try await previous.request(FanCommand(action: .release))
+    }
     private func connected() throws -> NSXPCConnection {
         if let connection { return connection }
-        let requirement = try FanServiceIdentity.requirement(identifier: FanServiceIdentity.name)
+        var requirement = try FanServiceIdentity.requirement(identifier: FanServiceIdentity.name)
+        if let developmentHash {
+            guard developmentHash.range(of: "^[0-9a-fA-F]{40}$", options: .regularExpression) != nil else {
+                throw FanFailure.notAuthorized
+            }
+            requirement += " and cdhash H\"\(developmentHash)\""
+        }
         let value = NSXPCConnection(machServiceName: FanServiceIdentity.name, options: .privileged)
         let id = UUID()
         value.remoteObjectInterface = NSXPCInterface(with: FanHelperProtocol.self)

@@ -16,7 +16,14 @@ bash scripts/dev.sh
 
 脚本增量编译，验证包成功后才退出并重开同一路径的开发实例。菜单栏标为「开发」，应用沿用现有偏好和真实设备。开发版不检查更新，不注册登录项，也不替换 `/Applications` 里的安装。构建失败时，正在运行的开发版继续工作。要回日常版，先退出开发版，再打开已安装的应用。
 
-日常使用风扇调速时，先运行 `git config --local vorsmate.signIdentity '证书名称或指纹'`，选择原签名团队的 Apple 证书。后续重载自动沿用它，也可用 `VORSMATE_SIGN_IDENTITY` 单次指定。未指定时使用临时签名，风扇只读，关机走 System Events。开发版沿用已授权且可连接的助手，修改助手源码后需单独验证签名升级。
+要让风扇助手随开发版更新，在仓库根目录运行以下两条命令。
+
+```sh
+git config --local vorsmate.signIdentity '证书名称或指纹'
+git config --local vorsmate.followFanHelper true
+```
+
+使用原签名团队的 Apple 证书。之后照常运行 `bash scripts/dev.sh`。助手或服务描述有变化，或应答来自旧包时，脚本先交回系统调速，通过 macOS 重新登记开发包中的助手，再核对应答进程的签名和路径。若 macOS 要求批准，在「系统设置 → 通用 → 登录项与扩展」允许 Vorsmate 的后台服务。应用可先运行，脚本会报告助手仍在等待。开发包只向本次构建签名匹配的助手发送日常控制请求。仅需预览时使用下方的 `--build-only`。未配置跟随时保留原有助手策略，临时签名仅供风扇监控。
 
 ### 隔离验收与发版
 
