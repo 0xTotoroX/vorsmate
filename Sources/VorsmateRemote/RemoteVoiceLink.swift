@@ -20,8 +20,7 @@ final class RemoteVoiceLink: NSObject, @preconcurrency CBCentralManagerDelegate,
     private var version: UInt16?
     private var opening = false
     private var receiving = false
-    private var physicalDown = false
-    private var openedForPress = false
+    private var press = RemoteVoicePress()
     private var keyFallback: Task<Void, Never>?
     private var session: UInt8 = 0
     private var decoder = RemoteVoiceDecoder()
@@ -85,8 +84,7 @@ final class RemoteVoiceLink: NSObject, @preconcurrency CBCentralManagerDelegate,
         central = nil
         deviceIdentity = nil
         retryAfter = 0
-        physicalDown = false
-        openedForPress = false
+        press = RemoteVoicePress()
     }
 
     private func clearPeer() {
@@ -111,6 +109,7 @@ final class RemoteVoiceLink: NSObject, @preconcurrency CBCentralManagerDelegate,
         opening = false
         deadline = 0
         voiceDeadline = nil
+        press.didEndSession()
         samples = 0
         peak = 0
     }
@@ -199,21 +198,22 @@ final class RemoteVoiceLink: NSObject, @preconcurrency CBCentralManagerDelegate,
     }
 
     func physicalKeyChanged(down: Bool) {
-        guard physicalDown != down else { return }
-        physicalDown = down
+        guard press.setDown(down, sessionActive: voiceDeadline != nil) else { return }
         keyFallback?.cancel()
         log.notice("Voice key: down=\(down) ready=\(self.version != nil)")
         if down {
-            openedForPress = voiceDeadline != nil
             keyFallback = Task { [weak self] in
                 do { try await Task.sleep(for: .milliseconds(120)) } catch { return }
-                guard let self, self.physicalDown, !self.openedForPress else { return }
-                self.openMicrophone(from: "HID")
+                guard let self, !Task.isCancelled else { return }
+                self.keyFallback = nil
+                if self.press.needsOpen { self.openMicrophone(from: "HID") }
             }
         } else {
             keyFallback = Task { [weak self] in
                 do { try await Task.sleep(for: .milliseconds(350)) } catch { return }
-                guard let self, !self.physicalDown, self.voiceDeadline != nil else { return }
+                guard let self, !Task.isCancelled else { return }
+                self.keyFallback = nil
+                guard !self.press.isDown, self.voiceDeadline != nil else { return }
                 self.closeRemoteMic()
                 self.finish()
             }
@@ -222,7 +222,7 @@ final class RemoteVoiceLink: NSObject, @preconcurrency CBCentralManagerDelegate,
 
     private func openMicrophone(from source: String) {
         guard let version, voiceDeadline == nil else { return }
-        if physicalDown { openedForPress = true }
+        press.didOpenSession()
         keyPressed(true)
         opening = true
         session = 0
@@ -269,6 +269,7 @@ final class RemoteVoiceLink: NSObject, @preconcurrency CBCentralManagerDelegate,
         receiving = false
         opening = false
         voiceDeadline = nil
+        press.didEndSession()
         decoder = RemoteVoiceDecoder()
         samples = 0
         peak = 0
@@ -291,14 +292,14 @@ final class RemoteVoiceLink: NSObject, @preconcurrency CBCentralManagerDelegate,
             deadline = 0
             log.notice("ATVV ready: version=\(accepted)")
             status("遥控器麦克风就绪", true)
-            if physicalDown && !openedForPress { openMicrophone(from: "HID") }
+            if press.needsOpen { openMicrophone(from: "HID") }
             return
         }
         guard version != nil else { return }
         switch opcode {
         case 8:
             log.notice("ATVV START_SEARCH")
-            if !physicalDown || !openedForPress { openMicrophone(from: "ATVV") }
+            if !press.isDown || press.needsOpen { openMicrophone(from: "ATVV") }
         case 4 where voiceDeadline != nil:
             guard bytes.count < 3 || bytes[2] == 2 else {
                 reset("遥控器切换到了不支持的语音格式")
@@ -308,6 +309,8 @@ final class RemoteVoiceLink: NSObject, @preconcurrency CBCentralManagerDelegate,
             if !receiving { begin() }
         case 0 where receiving || opening:
             finish()
+            // The second press may have reached its fallback while the previous session was still active.
+            if press.needsOpen && keyFallback == nil { openMicrophone(from: "HID") }
         case 0x0a where bytes.count >= 7:
             let seed = Int16(bitPattern: UInt16(bytes[4]) << 8 | UInt16(bytes[5]))
             decoder = RemoteVoiceDecoder(predictor: seed, index: bytes[6])

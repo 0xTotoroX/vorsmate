@@ -2,6 +2,34 @@
 // [OUTPUT]: 16 kHz 单声道 PCM；输入排序沿用现有虚拟设备 UID。
 import Foundation
 
+package struct RemoteVoicePress {
+    package private(set) var isDown = false
+    private var openedForPress = false
+    private var releasedSession = false
+
+    package init() {}
+
+    package var needsOpen: Bool { isDown && !openedForPress }
+
+    @discardableResult
+    package mutating func setDown(_ down: Bool, sessionActive: Bool) -> Bool {
+        guard isDown != down else { return false }
+        isDown = down
+        if down {
+            openedForPress = sessionActive && !releasedSession
+        } else {
+            releasedSession = sessionActive
+        }
+        return true
+    }
+
+    package mutating func didOpenSession() {
+        if isDown { openedForPress = true }
+    }
+
+    package mutating func didEndSession() { releasedSession = false }
+}
+
 package struct RemoteVoiceDeadline {
     package enum Expiry: Equatable { case firstPacket, interrupted, maximumDuration }
 

@@ -4,6 +4,35 @@ import VorsmateCore
 
 @testable import VorsmateSystem
 
+@Test("上一段停麦晚到时，第二次按住仍须开麦，每次按住只开一次")
+func voicePressAfterPreviousStop() {
+    var press = RemoteVoicePress()
+    press.setDown(true, sessionActive: false)
+    #expect(press.needsOpen)
+    press.didOpenSession()
+    #expect(!press.needsOpen)
+
+    press.setDown(false, sessionActive: true)
+    press.setDown(true, sessionActive: true)
+    press.didEndSession()
+    #expect(press.needsOpen)
+    press.didOpenSession()
+    press.didEndSession()
+    #expect(!press.needsOpen)
+}
+
+@Test("蓝牙先开麦时，随后到达的同一次实体按下不重复开麦")
+func voicePressAdoptsBluetoothSession() {
+    var press = RemoteVoicePress()
+    press.didOpenSession()
+    press.setDown(true, sessionActive: true)
+    #expect(!press.needsOpen)
+    let changed = press.setDown(true, sessionActive: true)
+    #expect(!changed)
+    press.didEndSession()
+    #expect(!press.needsOpen)
+}
+
 @Test("语音首包、断流和会话上限分别超时，连续静音数据仍视为在线")
 func voiceSessionDeadlines() {
     var session = RemoteVoiceDeadline(openedAt: 100)
