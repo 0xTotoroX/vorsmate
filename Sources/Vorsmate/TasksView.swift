@@ -1,5 +1,5 @@
 // [INPUT]: TasksModel、PanelSummaryRow、面板最大高度与交互保护回调。
-// [OUTPUT]: 总览「待办」摘要行与同宽详情页（项目清单、勾选完成与一行速记）。
+// [OUTPUT]: 总览「待办」摘要行与同宽详情页（项目内新增、标题原位编辑和独立的勾选按钮）。
 // [POS]: PanelView 内可选「待办」子视图；遵循 DESIGN.md 同宽详情导航与 0.5 秒离开保护约定。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import SwiftUI
@@ -33,16 +33,20 @@ struct TasksDetailView: View {
     var protectInteraction: (Bool) -> Void = { _ in }
     let back: () -> Void
 
-    @State private var draftTitle = ""
-    @State private var headerHeight: CGFloat = 120
-    @State private var bodyHeight: CGFloat = 180
-    @FocusState private var quickAddFocused: Bool
-
-    private var canSubmitDraft: Bool {
-        !draftTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !model.mutating
-            && !model.projection.projectLists.isEmpty
+    private enum Target: Hashable {
+        case list(String)
+        case item(String)
     }
+    private struct Draft {
+        var text: String
+        var original: ReminderItem?
+        var notice: String?
+    }
+
+    @State private var drafts: [Target: Draft] = [:]
+    @State private var headerHeight: CGFloat = 90
+    @State private var bodyHeight: CGFloat = 180
+    @FocusState private var focused: Target?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -68,11 +72,11 @@ struct TasksDetailView: View {
             .scrollIndicators(.never)
             .frame(height: min(bodyHeight, max(64, maximumHeight - headerHeight)))
         }
-        .onChange(of: quickAddFocused) { _, focused in
-            protectInteraction(focused)
+        .onChange(of: focused) { _, target in
+            protectInteraction(target != nil)
         }
         .onDisappear {
-            quickAddFocused = false
+            focused = nil
             protectInteraction(false)
         }
     }
@@ -105,11 +109,6 @@ struct TasksDetailView: View {
             .padding(.horizontal, 20)
             .padding(.top, 14)
 
-            if model.connectionState == .connected && !model.projection.projectLists.isEmpty {
-                quickAddBar
-                    .padding(.horizontal, 20)
-            }
-
             if let error = model.actionError, model.connectionState == .connected {
                 PanelInlineNotice(text: error, symbol: "exclamationmark.triangle.fill", isError: true)
                     .padding(.horizontal, 20)
@@ -117,46 +116,6 @@ struct TasksDetailView: View {
             }
         }
         .padding(.bottom, 10)
-    }
-
-    private var quickAddBar: some View {
-        HStack(spacing: 8) {
-            TextField("记一条待办…", text: $draftTitle)
-                .textFieldStyle(.plain)
-                .font(.callout)
-                .focused($quickAddFocused)
-                .onSubmit(submitDraft)
-                .accessibilityLabel("待办标题")
-                .accessibilityIdentifier("tasks.addInput")
-
-            Picker("存入列表", selection: $model.selectedQuickAddListID) {
-                ForEach(model.projection.projectLists) { list in
-                    Text(list.title).tag(list.id)
-                }
-            }
-            .pickerStyle(.menu)
-            .labelsHidden()
-            .controlSize(.small)
-            .frame(maxWidth: 112, alignment: .trailing)
-            .disabled(model.mutating)
-            .accessibilityLabel("存入列表")
-            .accessibilityIdentifier("tasks.addList")
-
-            Button(action: submitDraft) {
-                Image(systemName: "plus")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(canSubmitDraft ? Color.accentColor : Color.secondary)
-                    .frame(width: 26, height: 26)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .disabled(!canSubmitDraft)
-            .help("添加待办")
-            .accessibilityLabel("添加待办")
-            .accessibilityIdentifier("tasks.addSubmit")
-        }
-        .padding(.vertical, 3)
-        .overlay(alignment: .bottom) { Divider() }
     }
 
     @ViewBuilder
@@ -180,41 +139,37 @@ struct TasksDetailView: View {
             Text("正在读取待办…")
                 .font(.callout)
                 .foregroundStyle(.secondary)
-        } else if model.projection.buckets.isEmpty {
-            Text("暂无未完成待办")
+        } else if model.projection.projectLists.isEmpty {
+            Text("暂无项目列表")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .padding(.vertical, 8)
         } else {
-            VStack(alignment: .leading, spacing: 14) {
-                ForEach(model.projection.buckets) { bucket in
+            let buckets = Dictionary(uniqueKeysWithValues: model.projection.buckets.map { ($0.list.id, $0.items) })
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(model.projection.projectLists) { list in
+                    let target = Target.list(list.id)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(bucket.list.title)
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.secondary)
-                            .accessibilityAddTraits(.isHeader)
-                        ForEach(bucket.items) { entry in
+                        HStack(spacing: 5) {
+                            Text(list.title)
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(.secondary)
+                                .accessibilityAddTraits(.isHeader)
                             Button {
-                                model.completeItem(entry.item)
+                                begin(target)
                             } label: {
-                                HStack(alignment: .firstTextBaseline, spacing: 9) {
-                                    Image(systemName: "circle")
-                                        .font(.system(size: 14))
-                                        .foregroundStyle(.secondary)
-                                    Text(entry.item.displayTitle)
-                                        .font(.callout)
-                                        .foregroundStyle(.primary)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.vertical, 5)
-                                .contentShape(Rectangle())
+                                Image(systemName: "plus")
+                                    .frame(width: 24, height: 24)
+                                    .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
-                            .disabled(model.mutating)
-                            .help("标记为已完成")
-                            .accessibilityLabel("完成 \(entry.item.displayTitle)")
-                            .accessibilityIdentifier("tasks.complete.\(entry.item.id)")
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel("在\(list.title)添加待办")
+                            .accessibilityIdentifier("tasks.add.\(list.id)")
+                        }
+                        if drafts[target] != nil { editor(target) }
+                        ForEach(buckets[list.id] ?? []) { entry in
+                            taskRow(entry.item)
                         }
                     }
                 }
@@ -222,11 +177,132 @@ struct TasksDetailView: View {
         }
     }
 
-    private func submitDraft() {
-        guard canSubmitDraft else { return }
-        let submitted = draftTitle
-        model.addItem(title: submitted) {
-            if draftTitle == submitted { draftTitle = "" }
+    private func taskRow(_ item: ReminderItem) -> some View {
+        let target = Target.item(item.id)
+        return HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Button {
+                model.completeItem(item)
+            } label: {
+                Image(systemName: "circle")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 24, height: 26)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(model.mutating || drafts[target] != nil)
+            .accessibilityLabel("完成 \(item.displayTitle)")
+            .accessibilityIdentifier("tasks.complete.\(item.id)")
+            if drafts[target] != nil {
+                editor(target, current: item)
+            } else {
+                Button {
+                    begin(target, item: item)
+                } label: {
+                    Text(item.displayTitle)
+                        .font(.callout)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 5)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("编辑标题")
+                .accessibilityLabel("编辑 \(item.displayTitle)")
+                .accessibilityIdentifier("tasks.edit.\(item.id)")
+            }
+        }
+    }
+
+    private func begin(_ target: Target, item: ReminderItem? = nil) {
+        if drafts[target] == nil {
+            drafts[target] = Draft(text: item?.displayTitle ?? "", original: item)
+        } else {
+            focused = target
+        }
+    }
+
+    private func editor(_ target: Target, current: ReminderItem? = nil) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 3) {
+                TextField(
+                    "记一条待办…",
+                    text: Binding(
+                        get: { drafts[target]?.text ?? "" },
+                        set: { drafts[target]?.text = $0 }
+                    )
+                )
+                .textFieldStyle(.plain)
+                .font(.callout)
+                .focused($focused, equals: target)
+                .task {
+                    await Task.yield()
+                    if !Task.isCancelled { focused = target }
+                }
+                .onSubmit { submit(target, current: current) }
+                .onExitCommand { cancel(target) }
+                .accessibilityLabel("待办标题")
+                .accessibilityIdentifier("tasks.titleInput")
+                Button {
+                    submit(target, current: current)
+                } label: {
+                    Image(systemName: "checkmark").frame(width: 24, height: 26)
+                }
+                .accessibilityLabel("保存")
+                .accessibilityIdentifier("tasks.save")
+                .disabled(
+                    model.mutating
+                        || (drafts[target]?.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Button {
+                    cancel(target)
+                } label: {
+                    Image(systemName: "xmark").frame(width: 22, height: 26)
+                }
+                .accessibilityLabel("取消")
+                .accessibilityIdentifier("tasks.cancel")
+                .disabled(model.mutating)
+            }
+            .buttonStyle(.plain)
+            .overlay(alignment: .bottom) { Divider() }
+            if let notice = drafts[target]?.notice {
+                Text(notice).font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func cancel(_ target: Target) {
+        guard !model.mutating else { return }
+        if focused == target { focused = nil }
+        drafts.removeValue(forKey: target)
+    }
+
+    private func submit(_ target: Target, current: ReminderItem?) {
+        guard !model.mutating, let draft = drafts[target] else { return }
+        let title = draft.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return }
+        let saved: @MainActor () -> Void = {
+            if drafts[target]?.text == draft.text {
+                if focused == target { focused = nil }
+                drafts.removeValue(forKey: target)
+            } else if var original = draft.original {
+                original.title = original.replacingDisplayTitle(with: title)
+                drafts[target]?.original = original
+            }
+        }
+        switch target {
+        case .list(let listID):
+            model.addItem(title: title, listID: listID, onSaved: saved)
+        case .item:
+            guard let original = draft.original, let current else { return }
+            if title == original.displayTitle || title == current.displayTitle {
+                cancel(target)
+            } else if current.title != original.title {
+                drafts[target]?.original = current
+                drafts[target]?.notice = "最新标题为「\(current.displayTitle)」。再次保存将采用你的修改。"
+            } else {
+                model.renameItem(original, to: title, onSaved: saved)
+            }
         }
     }
 }

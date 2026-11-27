@@ -214,10 +214,12 @@ public struct ReminderItem: Codable, Equatable, Sendable, Identifiable {
         self.sectionID = sectionID
     }
 
+    private static let conversationAddress =
+        #"(?i)(?:codex://|https?://(?:chatgpt\.com|chat\.openai\.com)/codex(?:/|(?=[?#\s)>]|$)))[^\s<>()\[\]，。；！？、」』】）]*"#
+
     /// Keep authored titles intact in storage while omitting chat links from the checklist.
     public var displayTitle: String {
-        let address =
-            #"(?i)(?:codex://|https?://(?:chatgpt\.com|chat\.openai\.com)/codex(?:/|(?=[?#\s)>]|$)))[^\s<>()\[\]，。；！？、」』】）]*"#
+        let address = Self.conversationAddress
         guard title.range(of: address, options: .regularExpression) != nil else { return title }
         let markdown = #"\[([^\]]*)\]\(\s*<?"# + address + #">?\s*\)"#
         let text =
@@ -227,6 +229,15 @@ public struct ReminderItem: Codable, Equatable, Sendable, Identifiable {
             .replacingOccurrences(of: #"[ \t]+(?=[，。；！？、])"#, with: "", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return text.isEmpty ? "无标题待办" : text
+    }
+
+    public func replacingDisplayTitle(with text: String) -> String {
+        if text == displayTitle { return title }
+        guard let regex = try? NSRegularExpression(pattern: Self.conversationAddress) else { return text }
+        let source = title as NSString
+        let links = regex.matches(in: title, range: NSRange(location: 0, length: source.length))
+            .map { "<" + source.substring(with: $0.range) + ">" }
+        return ([text] + links).joined(separator: " ")
     }
 
     public var codexURL: URL? {

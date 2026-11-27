@@ -18,7 +18,6 @@ final class TasksModel: ObservableObject, VorsmatePlugin {
     @Published private(set) var loading = false
     @Published private(set) var mutating = false
     @Published private(set) var actionError: String?
-    @Published var selectedQuickAddListID = ""
 
     var summaryStatus: String {
         TasksSummaryFormatter.statusText(state: connectionState)
@@ -91,7 +90,6 @@ final class TasksModel: ObservableObject, VorsmatePlugin {
         mutating = false
         actionError = nil
         projection = ProjectTasksProjection()
-        selectedQuickAddListID = ""
         connectionState = .disabled
     }
 
@@ -139,63 +137,52 @@ final class TasksModel: ObservableObject, VorsmatePlugin {
     }
 
     func completeItem(_ item: ReminderItem) {
-        guard active, !mutating else { return }
-        beginMutation()
-        let generation = lifecycleGeneration
-        mutationTask?.cancel()
-        mutationTask = Task { [weak self] in
-            guard let self else { return }
-            do {
-                try await client.setCompleted(itemID: item.id, completed: true)
-                let tree = try await client.fetchTree(includeCompleted: false)
-                guard !Task.isCancelled, self.active, self.lifecycleGeneration == generation else { return }
-                self.apply(tree: tree)
-                self.mutating = false
-                self.mutationTask = nil
-            } catch is CancellationError {
-                return
-            } catch {
-                guard !Task.isCancelled, self.active, self.lifecycleGeneration == generation else { return }
-                self.mutating = false
-                self.mutationTask = nil
-                self.handleFailure(error)
-            }
+        mutate { [client] in try await client.setCompleted(itemID: item.id, completed: true) }
+    }
+
+    func addItem(title: String, listID: String, onSaved: @escaping @MainActor () -> Void = {}) {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, projection.projectLists.contains(where: { $0.id == listID }) else { return }
+        mutate(onSaved: onSaved) { [client] in try await client.createItem(title: trimmed, listID: listID) }
+    }
+
+    func renameItem(_ item: ReminderItem, to title: String, onSaved: @escaping @MainActor () -> Void) {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let edited = item.replacingDisplayTitle(with: trimmed)
+        mutate(onSaved: onSaved) { [client] in
+            try await client.renameItem(itemID: item.id, title: edited, expectedTitle: item.title)
         }
     }
 
-    func addItem(title: String, onSaved: @escaping @MainActor () -> Void = {}) {
-        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard active, !mutating, !trimmed.isEmpty, let listID = resolvedQuickAddListID() else { return }
+    private func mutate(
+        onSaved: @escaping @MainActor () -> Void = {},
+        write: @escaping @MainActor () async throws -> Void
+    ) {
+        guard active, !mutating else { return }
         beginMutation()
         let generation = lifecycleGeneration
-        mutationTask?.cancel()
         mutationTask = Task { [weak self] in
             guard let self else { return }
             do {
-                try await client.createItem(title: trimmed, listID: listID)
+                try await write()
                 guard !Task.isCancelled, self.active, self.lifecycleGeneration == generation else { return }
                 onSaved()
                 let tree = try await client.fetchTree(includeCompleted: false)
                 guard !Task.isCancelled, self.active, self.lifecycleGeneration == generation else { return }
                 self.apply(tree: tree)
-                self.mutating = false
-                self.mutationTask = nil
-            } catch is CancellationError {
-                return
             } catch {
                 guard !Task.isCancelled, self.active, self.lifecycleGeneration == generation else { return }
                 self.mutating = false
                 self.mutationTask = nil
+                if error is CancellationError { return }
                 self.handleFailure(error)
+                if (error as? TasksHubError) == .httpError(409) { self.startFetch(showLoading: false) }
+                return
             }
+            self.mutating = false
+            self.mutationTask = nil
         }
-    }
-
-    private func resolvedQuickAddListID() -> String? {
-        if projection.projectLists.contains(where: { $0.id == selectedQuickAddListID }) {
-            return selectedQuickAddListID
-        }
-        return projection.projectLists.first?.id
     }
 
     private func beginMutation() {
@@ -274,9 +261,6 @@ final class TasksModel: ObservableObject, VorsmatePlugin {
         projection = next
         connectionState = .connected
         actionError = nil
-        if !next.projectLists.contains(where: { $0.id == selectedQuickAddListID }) {
-            selectedQuickAddListID = next.projectLists.first?.id ?? ""
-        }
     }
 
     private func handleFailure(_ error: Error) {
@@ -358,6 +342,13 @@ actor PreviewTasksHubClient: TasksHubClientProtocol {
         if offline { throw TasksHubError.unconfigured }
         guard let index = items.firstIndex(where: { $0.id == itemID }) else { return }
         items[index].completed = completed
+    }
+
+    func renameItem(itemID: String, title: String, expectedTitle: String) async throws {
+        if offline { throw TasksHubError.unconfigured }
+        guard let index = items.firstIndex(where: { $0.id == itemID }) else { throw TasksHubError.httpError(404) }
+        guard items[index].title == expectedTitle else { throw TasksHubError.httpError(409) }
+        items[index].title = title
     }
 
     func createItem(title: String, listID: String) async throws {

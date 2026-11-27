@@ -72,9 +72,9 @@ public enum TasksHubError: LocalizedError, Equatable, Sendable {
         switch self {
         case .unconfigured: "这台 Mac 尚未设置提醒事项连接器。"
         case .unreachable: "提醒事项连接器暂时无法连接。"
-        case .unauthorized: "请打开提醒事项连接器，检查配对状态。"
+        case .unauthorized: "请打开提醒事项连接器，重新连接这台 Mac。"
         case .invalidResponse: "提醒事项连接器返回了无法识别的数据。"
-        case .httpError(409): "这条待办已在其他软件中更新，请刷新。"
+        case .httpError(409): "这条待办已在其他软件中更新，请核对最新内容。"
         case .httpError(let code): "提醒事项连接器未能完成请求（HTTP \(code)）。"
         }
     }
@@ -83,6 +83,7 @@ public enum TasksHubError: LocalizedError, Equatable, Sendable {
 public protocol TasksHubClientProtocol: Sendable {
     func fetchTree(includeCompleted: Bool) async throws -> ReminderTree
     func setCompleted(itemID: String, completed: Bool) async throws
+    func renameItem(itemID: String, title: String, expectedTitle: String) async throws
     func createItem(title: String, listID: String) async throws
 }
 
@@ -121,12 +122,19 @@ public struct TasksHubClient: TasksHubClientProtocol {
     }
 
     public func setCompleted(itemID: String, completed: Bool) async throws {
+        try await patch(itemID, CompleteItemPayload(completed: completed, expected: ["completed": !completed]))
+    }
+
+    public func renameItem(itemID: String, title: String, expectedTitle: String) async throws {
+        try await patch(itemID, TitlePayload(title: title, expected: ["title": expectedTitle]))
+    }
+
+    private func patch<Payload: Encodable>(_ id: String, _ payload: Payload) async throws {
         let (baseURL, token) = try loadRuntime()
-        let url = baseURL.appending(path: "api/reminders/items").appending(path: itemID)
+        let url = baseURL.appending(path: "api/reminders/items").appending(path: id)
         var request = authorizedRequest(url: url, method: "PATCH", token: token)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(
-            CompleteItemPayload(completed: completed, expected: ["completed": !completed]))
+        request.httpBody = try JSONEncoder().encode(payload)
         _ = try await perform(request)
     }
 
@@ -172,6 +180,11 @@ public struct TasksHubClient: TasksHubClientProtocol {
     private struct CompleteItemPayload: Encodable {
         let completed: Bool
         let expected: [String: Bool]
+    }
+
+    private struct TitlePayload: Encodable {
+        let title: String
+        let expected: [String: String]
     }
 
     private struct CreateItemPayload: Encodable {

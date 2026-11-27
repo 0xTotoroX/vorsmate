@@ -101,21 +101,29 @@ struct TasksModelTests {
         await waitUntil { model.connectionState == .connected }
 
         let initialItem = try #require(model.projection.buckets.first?.items.first?.item)
-        model.selectedQuickAddListID = "list-vorsmate"
         var saved = 0
         await mock.setFailure(.httpError(500))
-        model.addItem(title: "编写单元测试") { saved += 1 }
+        model.addItem(title: "编写单元测试", listID: "list-vorsmate") { saved += 1 }
         await waitUntil { !model.mutating }
         #expect(saved == 0)
-        #expect(model.selectedQuickAddListID == "list-vorsmate")
         await mock.setFailure(nil)
-        model.addItem(title: "  编写单元测试  ") { saved += 1 }
+        model.addItem(title: "  编写单元测试  ", listID: "list-vorsmate") { saved += 1 }
         await waitUntil { model.projection.totalIncompleteCount == 2 }
         #expect(saved == 1)
         let created = await mock.createdItems
         #expect(created.count == 1)
         #expect(created.first?.title == "编写单元测试")
         #expect(created.first?.listID == "list-vorsmate")
+
+        model.renameItem(initialItem, to: "新标题") { saved += 1 }
+        await waitUntil { !model.mutating }
+        #expect(saved == 2)
+        let renamed = try #require(model.projection.buckets.first?.items.first?.item)
+        #expect(renamed.title == "新标题")
+        #expect(renamed.url == initialItem.url)
+        model.renameItem(initialItem, to: "旧视图改名") { saved += 1 }
+        await waitUntil { !model.mutating }
+        #expect(saved == 2)
 
         model.completeItem(initialItem)
         await waitUntil { model.projection.totalIncompleteCount == 1 }
@@ -198,6 +206,13 @@ private actor MockTasksHubClient: TasksHubClientProtocol {
         if let index = items.firstIndex(where: { $0.id == itemID }) {
             items[index].completed = completed
         }
+    }
+
+    func renameItem(itemID: String, title: String, expectedTitle: String) async throws {
+        if let failure { throw failure }
+        guard let index = items.firstIndex(where: { $0.id == itemID }) else { throw TasksHubError.httpError(404) }
+        guard items[index].title == expectedTitle else { throw TasksHubError.httpError(409) }
+        items[index].title = title
     }
 
     func createItem(title: String, listID: String) async throws {

@@ -15,6 +15,7 @@ struct TasksPolicyTests {
         let item = ReminderItem(id: "1", title: title)
         #expect(item.displayTitle == "按设计稿核对")
         #expect(item.title == title)
+        #expect(item.replacingDisplayTitle(with: "检查") == "检查 <codex://threads/test>")
         #expect(ReminderItem(id: "2", title: "<https://chatgpt.com/codex/tasks/test>").displayTitle == "无标题待办")
         #expect(
             ReminderItem(id: "3", title: "Codex CLI 与 https://example.com").displayTitle
@@ -228,8 +229,16 @@ struct TasksPolicyTests {
         await transport.enqueue(statusCode: 201, data: Data(#"{"ok":true}"#.utf8))
         try await client.createItem(title: "  测试新建待办  ", listID: "list-palboo")
 
+        await transport.enqueue(statusCode: 200, data: Data(#"{"ok":true}"#.utf8))
+        try await client.renameItem(itemID: "item-1", title: "新标题", expectedTitle: "旧标题")
+
         let recorded = await transport.recordedRequests()
-        #expect(recorded.count == 5)
+        #expect(recorded.count == 6)
+        let rename = try #require(recorded[5].httpBody)
+        let body = try #require(JSONSerialization.jsonObject(with: rename) as? [String: Any])
+        #expect(Set(body.keys) == ["title", "expected"])
+        #expect(body["title"] as? String == "新标题")
+        #expect(body["expected"] as? [String: String] == ["title": "旧标题"])
         let fetchReq = recorded[2]
         #expect(fetchReq.httpMethod == "GET")
         #expect(fetchReq.url?.absoluteString == "http://127.0.0.1:41937/api/reminders/tree?include_completed=false")
