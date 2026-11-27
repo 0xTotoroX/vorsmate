@@ -1,4 +1,4 @@
-// [INPUT]: Foundation、0xTotoro runtime.json 与 Reminders tree JSON。
+// [INPUT]: Foundation、提醒事项连接器的新旧配对路径与 Reminders tree JSON。
 // [OUTPUT]: Hub 连接配置解析、ReminderTree 模型、Project 分组投影与摘要格式化。
 // [POS]: VorsmateCore 纯数据与规则层；不发起网络请求或依赖 AppKit。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
@@ -20,8 +20,12 @@ public struct HubRuntimeInfo: Codable, Equatable, Sendable {
     public static func defaultRuntimeURL(
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
     ) -> URL {
-        homeDirectory
-            .appending(path: ".local/share/0xTotoro/runtime.json")
+        let shared = homeDirectory.appending(path: "Library/Application Support/RemindersConnector/runtime.json")
+        let legacy = homeDirectory.appending(path: ".local/share/0xTotoro/runtime.json")
+        if !FileManager.default.fileExists(atPath: shared.path), FileManager.default.fileExists(atPath: legacy.path) {
+            return legacy
+        }
+        return shared
     }
 
     public static func load(from url: URL) throws -> HubRuntimeInfo? {

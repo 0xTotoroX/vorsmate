@@ -20,7 +20,7 @@
 - TranslationModel.swift：截图工作流状态机，编排全局截图热键注册、矢量标注、按需 OCR／双引擎翻译回填、图片保存与桌面贴图生命周期。
 - TranslationPanelView.swift：总览内「截图」摘要行、就地展开「开始截图」入口及统一内联卡片中的快捷键 / 双引擎预设 / 密钥 / 语种设置。
 - WindowDragSectionView.swift：工具分类中的窗口拖动摘要行、修饰键菜单和辅助功能授权入口，复用面板原地展开。
-- TasksModel.swift：待办插件状态机；停用零开销释放轮询与在途请求，连接 0xTotoro Local Hub 并支持离线回退与预览替身。
+- TasksModel.swift 管理待办读取与勾选，按需打开随附或已安装的提醒事项连接器。停用时取消轮询与在途请求。
 - TasksView.swift：总览内「待办」摘要行与同宽详情页（Project 分组、测试分区标签、完成切换、1 行快速添加与 codex:// 打开）。
 - SystemTranslationBridge.swift：macOS 15+ Apple `Translation` 框架 `.translationTask` 离线批量翻译桥接与离线预览替身。
 - ScreenshotOverlayWindow.swift：全屏框选与浮动贴图协调器（OverlayKeyWindow、ScreenshotOverlayController）。

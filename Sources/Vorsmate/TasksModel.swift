@@ -4,6 +4,7 @@
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import AppKit
 import Foundation
+import UniformTypeIdentifiers
 import VorsmateCore
 import VorsmateSystem
 
@@ -95,9 +96,37 @@ final class TasksModel: ObservableObject, VorsmatePlugin {
     }
 
     func refresh() {
-        guard active else { return }
+        guard active, !mutating else { return }
         actionError = nil
         startFetch(showLoading: connectionState != .connected)
+    }
+
+    func openConnector() {
+        let id = "local.reminders-connector.app"
+        let filename = "Reminders Connector.app"
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let candidates = [
+            Bundle.main.bundleURL.appending(path: "Contents/Helpers").appending(path: filename),
+            home.appending(path: "Applications").appending(path: filename),
+            NSWorkspace.shared.urlForApplication(withBundleIdentifier: id),
+        ]
+        if let app = candidates.compactMap({ $0 }).first(where: { Bundle(url: $0)?.bundleIdentifier == id }),
+            openURL(app)
+        {
+            return
+        }
+        let panel = NSOpenPanel()
+        panel.title = "选择提醒事项连接器"
+        panel.message = "请选择独立补丁中的 Reminders Connector.app。"
+        panel.allowedContentTypes = [.applicationBundle]
+        panel.allowsMultipleSelection = false
+        panel.begin { [weak self] result in
+            guard result == .OK, let url = panel.url else { return }
+            guard Bundle(url: url)?.bundleIdentifier == id, self?.openURL(url) == true else {
+                self?.actionError = "请选择可在这台 Mac 上运行的提醒事项连接器。"
+                return
+            }
+        }
     }
 
     func panelDidChangeVisibility(_ visible: Bool) {
@@ -111,8 +140,7 @@ final class TasksModel: ObservableObject, VorsmatePlugin {
 
     func completeItem(_ item: ReminderItem) {
         guard active, !mutating else { return }
-        actionError = nil
-        mutating = true
+        beginMutation()
         let generation = lifecycleGeneration
         mutationTask?.cancel()
         mutationTask = Task { [weak self] in
@@ -138,8 +166,7 @@ final class TasksModel: ObservableObject, VorsmatePlugin {
     func addItem(title: String) {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard active, !mutating, !trimmed.isEmpty, let listID = resolvedQuickAddListID() else { return }
-        actionError = nil
-        mutating = true
+        beginMutation()
         let generation = lifecycleGeneration
         mutationTask?.cancel()
         mutationTask = Task { [weak self] in
@@ -175,8 +202,17 @@ final class TasksModel: ObservableObject, VorsmatePlugin {
         return projection.projectLists.first?.id
     }
 
+    private func beginMutation() {
+        fetchTask?.cancel()
+        fetchTask = nil
+        fetchGeneration &+= 1
+        loading = false
+        actionError = nil
+        mutating = true
+    }
+
     private func startFetch(showLoading: Bool) {
-        guard active else { return }
+        guard active, !mutating else { return }
         fetchGeneration &+= 1
         let generation = lifecycleGeneration
         let requestID = fetchGeneration

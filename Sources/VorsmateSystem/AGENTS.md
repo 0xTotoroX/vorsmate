@@ -20,7 +20,7 @@
 - WindowDragMonitor.swift：会话级鼠标与修饰键监听、辅助功能权限状态和停用释放，预览使用内存。
 - WindowDragGesture.swift：左键拖动阈值、点击还原、固定窗口与指针偏移，按上次写入时间合并移动，暂忙时追上最新位置，松键或停用取消重试。
 - WindowDragTarget.swift：WindowServer 窗口命中、跨进程 AX 位置读写与宿主原生窗口移动，区分暂时通信失败和窗口不可移动。
-- TasksHubClient.swift：0xTotoro Local Hub HTTP 客户端与可替换网络传输协议；仅访问本机回环地址，缺失或断连返回安全离线错误。
+- TasksHubClient.swift 每次访问时查找当前用户的提醒事项连接器，使用本机地址、原状态核对与可替换的网络传输。
 - GlobalHotKeyCenter.swift：Carbon 全局截图热键线程安全注册与停用注销，附预览空实现。
 - TypelessRecovery.swift：系统进程、事件监听、修饰键与遥控接管回读；保存诊断快照并提供 Typeless 的正常退出和打开操作。
 

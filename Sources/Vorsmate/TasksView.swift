@@ -193,19 +193,20 @@ struct TasksDetailView: View {
                         )
                         .font(.system(size: 14))
                         .foregroundStyle(.secondary)
-                        Text(model.connectionState == .offline ? "未连接待办服务" : "暂时无法读取 Apple 提醒事项")
+                        Text(model.connectionState == .offline ? "未连接提醒事项连接器" : "暂时无法读取 Apple 提醒事项")
                             .font(.callout.weight(.semibold))
                     }
-                    Text(model.actionError ?? "Vos 通过这台 Mac 上的待办服务读取 Apple 提醒事项。")
+                    Text(model.actionError ?? "首次使用，请打开连接器并允许访问 Apple 提醒事项。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
-                    Button(model.connectionState == .offline ? "重新连接" : "重试") {
-                        model.refresh()
+                    HStack {
+                        Button("打开连接器") { model.openConnector() }
+                        Button("重试") { model.refresh() }
+                            .accessibilityIdentifier("tasks.reconnect")
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
-                    .accessibilityIdentifier("tasks.reconnect")
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(14)

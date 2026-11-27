@@ -44,6 +44,15 @@ if REVISION="$(git rev-parse HEAD 2>/dev/null)"; then
 fi
 cp "$PROJECT_ROOT/Resources/AppIcon.icns" "$STAGED_APP/Contents/Resources/"
 cp "$PROJECT_ROOT/Resources/StatusIcon.pdf" "$STAGED_APP/Contents/Resources/"
+# Optional standalone connector supplied with the local distribution.
+connector_archive="${VORSMATE_REMINDERS_CONNECTOR_ARCHIVE:-$PROJECT_ROOT/artifacts/optional/RemindersConnector.zip}"
+if [[ -f "$connector_archive" ]]; then
+    mkdir -p "$STAGED_APP/Contents/Helpers"
+    /usr/bin/ditto -x -k "$connector_archive" "$STAGED_APP/Contents/Helpers"
+    connector_app="$STAGED_APP/Contents/Helpers/Reminders Connector.app"
+    [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$connector_app/Contents/Info.plist")" == "local.reminders-connector.app" ]]
+    /usr/bin/codesign --verify --deep --strict "$connector_app"
+fi
 cp "$PROJECT_ROOT/Resources/LaunchDaemons/app.vorsmate.fan-helper.plist" "$STAGED_APP/Contents/Library/LaunchDaemons/"
 cp "$PROJECT_ROOT/LICENSE" "$PROJECT_ROOT/THIRD_PARTY_NOTICES.md" "$STAGED_APP/Contents/Resources/License/"
 cp "$PROJECT_ROOT/LICENSES/macos-fan-control-MIT.txt" "$STAGED_APP/Contents/Resources/License/LICENSES/"

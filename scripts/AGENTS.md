@@ -4,6 +4,7 @@
 
 - import-remote.py：只读导入当前 RC003 的用户配置，已编辑的目标档案不会被覆盖。
 - build.sh 同时输出独立签名的 VorsmateRemote.app，主包记录临时签名时的配套插件哈希。
+- 构建时可通过 VORSMATE_REMINDERS_CONNECTOR_ARCHIVE 附带独立的 Mac 提醒事项连接器。日常开发版也识别 artifacts/optional/RemindersConnector.zip。
 - build.sh：常规 release 构建，--universal 包含 arm64 / x86_64，--development 使用 debug 并标记开发包；逐层签署 Sparkle、主应用、助手及配套插件，核对签名后替换构建产物，不安装或发布。
 - dev.sh：先构建和验签，再重开同路径实例；本机选用助手跟随时，核对包内助手与实际应答进程、按需重新登记。打开失败恢复上一份包，--build-only 仅构建验收包。
 - package.sh：验证应用及助手的两种架构、签名和许可，将应用、Applications 链接及安装说明打包为 Vorsmate-<版本>.dmg；不自动签名、公证或上传。

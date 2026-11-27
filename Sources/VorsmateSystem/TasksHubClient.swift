@@ -1,5 +1,5 @@
 // [INPUT]: Foundation URLSession、HubRuntimeInfo 与 ReminderTree 模型。
-// [OUTPUT]: 0xTotoro Local Hub HTTP 客户端与可替换网络传输协议。
+// [OUTPUT]: 提醒事项连接器客户端，使用本机配对和带原状态的写入请求。
 // [POS]: VorsmateSystem 待办连接层；仅访问本机回环 Hub，未启动或配置缺失时返回安全错误。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import Foundation
@@ -70,11 +70,12 @@ public enum TasksHubError: LocalizedError, Equatable, Sendable {
 
     public var errorDescription: String? {
         switch self {
-        case .unconfigured: "这台 Mac 尚未配置待办服务。"
-        case .unreachable: "无法连接这台 Mac 的待办服务。"
-        case .unauthorized: "本机待办服务拒绝了当前配对。"
-        case .invalidResponse: "本机待办服务返回了无法识别的数据。"
-        case .httpError(let code): "本机待办服务未能完成请求（HTTP \(code)）。"
+        case .unconfigured: "这台 Mac 尚未设置提醒事项连接器。"
+        case .unreachable: "提醒事项连接器暂时无法连接。"
+        case .unauthorized: "请打开提醒事项连接器，检查配对状态。"
+        case .invalidResponse: "提醒事项连接器返回了无法识别的数据。"
+        case .httpError(409): "这条待办已在其他软件中更新，请刷新。"
+        case .httpError(let code): "提醒事项连接器未能完成请求（HTTP \(code)）。"
         }
     }
 }
@@ -86,11 +87,11 @@ public protocol TasksHubClientProtocol: Sendable {
 }
 
 public struct TasksHubClient: TasksHubClientProtocol {
-    private let runtimeFileURL: URL
+    private let runtimeFileURL: URL?
     private let transport: any TasksHubTransport
 
     public init(
-        runtimeFileURL: URL = HubRuntimeInfo.defaultRuntimeURL(),
+        runtimeFileURL: URL? = nil,
         transport: any TasksHubTransport = URLSessionTasksHubTransport()
     ) {
         self.runtimeFileURL = runtimeFileURL
@@ -124,7 +125,8 @@ public struct TasksHubClient: TasksHubClientProtocol {
         let url = baseURL.appending(path: "api/reminders/items").appending(path: itemID)
         var request = authorizedRequest(url: url, method: "PATCH", token: token)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(CompleteItemPayload(completed: completed))
+        request.httpBody = try JSONEncoder().encode(
+            CompleteItemPayload(completed: completed, expected: ["completed": !completed]))
         _ = try await perform(request)
     }
 
@@ -140,7 +142,7 @@ public struct TasksHubClient: TasksHubClientProtocol {
     }
 
     private func loadRuntime() throws -> (URL, String) {
-        guard let info = try? HubRuntimeInfo.load(from: runtimeFileURL),
+        guard let info = try? HubRuntimeInfo.load(from: runtimeFileURL ?? HubRuntimeInfo.defaultRuntimeURL()),
             let baseURL = info.resolvedBaseURL
         else {
             throw TasksHubError.unconfigured
@@ -169,6 +171,7 @@ public struct TasksHubClient: TasksHubClientProtocol {
 
     private struct CompleteItemPayload: Encodable {
         let completed: Bool
+        let expected: [String: Bool]
     }
 
     private struct CreateItemPayload: Encodable {

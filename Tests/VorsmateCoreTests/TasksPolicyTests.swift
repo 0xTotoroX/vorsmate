@@ -9,6 +9,22 @@ import VorsmateSystem
 
 @Suite("待办 Hub 解析与客户端")
 struct TasksPolicyTests {
+    @Test("新旧客户端共用配对，并优先发现独立连接器")
+    func sharedConnectorDiscovery() throws {
+        let fm = FileManager.default
+        let home = fm.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? fm.removeItem(at: home) }
+        let shared = home.appending(path: "Library/Application Support/RemindersConnector/runtime.json")
+        let legacy = home.appending(path: ".local/share/0xTotoro/runtime.json")
+        #expect(HubRuntimeInfo.defaultRuntimeURL(homeDirectory: home).path == shared.path)
+        try fm.createDirectory(at: legacy.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("{}".utf8).write(to: legacy)
+        #expect(HubRuntimeInfo.defaultRuntimeURL(homeDirectory: home).path == legacy.path)
+        try fm.createDirectory(at: shared.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try fm.createSymbolicLink(at: shared, withDestinationURL: legacy)
+        #expect(HubRuntimeInfo.defaultRuntimeURL(homeDirectory: home).path == shared.path)
+    }
+
     @Test("runtime.json 缺失返回 nil，合法回环地址与端口回退正确解析并拒绝非回环域名")
     func runtimeInfoParsingAndValidation() throws {
         let dir = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
@@ -210,7 +226,10 @@ struct TasksPolicyTests {
         let patchReq = recorded[3]
         #expect(patchReq.httpMethod == "PATCH")
         #expect(patchReq.url?.absoluteString == "http://127.0.0.1:41937/api/reminders/items/item-1")
-        #expect(String(decoding: patchReq.httpBody ?? Data(), as: UTF8.self) == #"{"completed":true}"#)
+        let patchData = try #require(patchReq.httpBody)
+        let patch = try #require(JSONSerialization.jsonObject(with: patchData) as? [String: Any])
+        #expect(patch["completed"] as? Bool == true)
+        #expect((patch["expected"] as? [String: Bool]) == ["completed": false])
 
         let postReq = recorded[4]
         #expect(postReq.httpMethod == "POST")
