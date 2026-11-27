@@ -31,8 +31,11 @@ func verify() throws {
     let content = feed.prefix(range.lowerBound)
     let lines = String(decoding: feed.suffix(from: range.lowerBound), as: UTF8.self).split(separator: "\n").map(
         String.init)
-    guard let signatureLine = lines.first(where: { $0.hasPrefix("edSignature: ") }),
-        let lengthLine = lines.first(where: { $0.hasPrefix("length: ") }),
+    let signatureLines = lines.filter { $0.hasPrefix("edSignature: ") }
+    let lengthLines = lines.filter { $0.hasPrefix("length: ") }
+    try require(signatureLines.count == 1 && lengthLines.count == 1, "Expected single feed signature and length line")
+    guard let signatureLine = signatureLines.first,
+        let lengthLine = lengthLines.first,
         let signature = Data(base64Encoded: String(signatureLine.dropFirst("edSignature: ".count))),
         let length = Int(lengthLine.dropFirst("length: ".count))
     else { throw CocoaError(.fileReadCorruptFile) }

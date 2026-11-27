@@ -11,6 +11,8 @@ final class RemoteMonitor: ObservableObject {
     @Published private(set) var sent = 0
     @Published private(set) var needsPermission = false
     var report: (String) -> Void = { _ in }
+    var onActiveProfileChanged: ((String) -> Void)?
+    private var lastReportedProfileName: String?
     @Published private(set) var voiceStatus = "等待遥控器麦克风"
     private var voiceReady: String?
     private let voice = RemoteVoiceLink()
@@ -36,6 +38,7 @@ final class RemoteMonitor: ObservableObject {
     private var gestures = RemoteGestures()
     private var pending: [(RemoteStroke, RemoteAction)] = []
     private var sending = false
+    private var saving = false
     private var generation = 0
     private var revision = UUID()
     @Published private(set) var frontApp: String?
@@ -125,19 +128,46 @@ final class RemoteMonitor: ObservableObject {
         }
     }
 
+    var activeProfileName: String {
+        frontApp.flatMap { profile.applications?[$0]?.name } ?? "默认方案"
+    }
+
+    func emitCurrentActiveProfile() {
+        let name = activeProfileName
+        lastReportedProfileName = name
+        onActiveProfileChanged?(name)
+    }
+
+    private func notifyActiveProfileIfNeeded() {
+        let name = activeProfileName
+        guard lastReportedProfileName != name else { return }
+        lastReportedProfileName = name
+        onActiveProfileChanged?(name)
+    }
+
     @discardableResult
     func edit(_ button: RemoteButton, gesture: RemoteGesture, action: RemoteAction, previous: RemoteAction? = nil)
         -> String?
     {
-        save {
+        if let profileError { return profileError }
+        Task { @MainActor [weak self] in
+            _ = await self?.editAsync(button, gesture: gesture, action: action, previous: previous)
+        }
+        return nil
+    }
+
+    func editAsync(
+        _ button: RemoteButton, gesture: RemoteGesture, action: RemoteAction, previous: RemoteAction? = nil
+    ) async -> String? {
+        await saveAsync {
             try profile.editing(
                 button, gesture: gesture, previous: previous ?? profile.action(for: button, gesture: gesture),
                 action: action)
         }
     }
 
-    func configure(_ edit: RemoteMappingEdit, revision expected: UUID) -> String? {
-        save {
+    func configureAsync(_ edit: RemoteMappingEdit, revision expected: UUID) async -> String? {
+        await saveAsync {
             guard expected == revision else { throw PreferenceError.changedOnDisk }
             return try profile.applying(edit)
         }
@@ -147,13 +177,22 @@ final class RemoteMonitor: ObservableObject {
         revision = UUID()
         profile = value
         effective = value.resolved(for: frontApp)
+        notifyActiveProfileIfNeeded()
     }
 
-    private func save(_ change: () throws -> RemoteProfile) -> String? {
+    private func saveAsync(_ change: () throws -> RemoteProfile) async -> String? {
         if let profileError { return profileError }
+        guard !saving else { return "正在保存上一次配置更改，请稍候" }
         do {
+            let previous = profile
             let next = try change()
-            if !preview { try next.save(replacing: profile) }
+            saving = true
+            defer { saving = false }
+            if !preview {
+                try await Task.detached(priority: .userInitiated) {
+                    try next.save(replacing: previous)
+                }.value
+            }
             cancelGestures()
             replaceProfile(next)
             feedback = nil
@@ -260,6 +299,7 @@ final class RemoteMonitor: ObservableObject {
         cancelGestures()
         frontApp = id
         effective = profile.resolved(for: id)
+        notifyActiveProfileIfNeeded()
         return true
     }
 
@@ -467,11 +507,19 @@ final class RemoteMonitor: ObservableObject {
                     return
                 }
                 do {
-                    try await ActionOutput.send(action)
+                    try await ActionOutput.send(action) { [weak self] in
+                        guard let self else { return true }
+                        return self.generation != current || self.refreshFrontmost() || self.sourceID == nil
+                            || self.competing || !self.lease.isSuppressed()
+                    }
                     if current == generation {
                         feedback = nil
                         lastGesture = "\(stroke.button.name) · \(stroke.gesture.name)"
                         sent += 1
+                    }
+                } catch is CancellationError {
+                    if current == generation {
+                        cancelGestures()
                     }
                 } catch {
                     if current == generation {

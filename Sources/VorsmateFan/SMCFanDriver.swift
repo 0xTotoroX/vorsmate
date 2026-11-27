@@ -18,7 +18,9 @@ public final class SMCFanDriver: FanHardware {
     private var metadata: [String: (UInt32, UInt32)] = [:]
     private var sensors: [String]?
     private let referenceReader: OpaquePointer?
+    private let sensorScannerOverride: (() -> [String])?
     public init() {
+        self.sensorScannerOverride = nil
         // 仅对已经实测的机型启用这套 PMU 曲线；其他机型继续自动 / 只读。
         var size = 0
         sysctlbyname("hw.model", nil, &size, nil, 0)
@@ -26,6 +28,10 @@ public final class SMCFanDriver: FanHardware {
         let result = sysctlbyname("hw.model", &bytes, &size, nil, 0)
         let model = result == 0 ? String(decoding: bytes.prefix { $0 != 0 }, as: UTF8.self) : ""
         referenceReader = model == "Mac16,10" ? pmu_create() : nil
+    }
+    init(sensorScanner: @escaping () -> [String]) {
+        self.sensorScannerOverride = sensorScanner
+        self.referenceReader = nil
     }
     isolated deinit { pmu_destroy(referenceReader) }
     private func info(_ name: String) throws -> (UInt32, UInt32) {
@@ -58,24 +64,32 @@ public final class SMCFanDriver: FanHardware {
         for name in ["F\(id)Md", "F\(id)md"] { if (try? info(name)) != nil { return name } }
         throw FanFailure.unavailable
     }
-    private func temperatureSensors() -> [String] {
-        if let sensors { return sensors }
-        var found: [String] = []
-        if let number = try? readNumber("#KEY"), number > 0, number <= 10_000 {
-            for index in 0..<UInt32(number) {
-                var key: UInt32 = 0
-                guard smc_key_at_index(index, &key) == 0 else { continue }
-                var chars = [CChar](repeating: 0, count: 5)
-                smc_key_str(key, &chars)
-                let name = String(decoding: chars.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
-                if ["Tp", "Te", "Tg", "TC", "TG"].contains(where: { name.hasPrefix($0) }),
-                    let value = try? readNumber(name), value > 0, value < 130
-                {
-                    found.append(name)
+    func temperatureSensors() -> [String] {
+        if let sensors, !sensors.isEmpty { return sensors }
+        let found: [String]
+        if let sensorScannerOverride {
+            found = sensorScannerOverride()
+        } else {
+            var discovered: [String] = []
+            if let number = try? readNumber("#KEY"), number > 0, number <= 10_000 {
+                for index in 0..<UInt32(number) {
+                    var key: UInt32 = 0
+                    guard smc_key_at_index(index, &key) == 0 else { continue }
+                    var chars = [CChar](repeating: 0, count: 5)
+                    smc_key_str(key, &chars)
+                    let name = String(decoding: chars.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
+                    if ["Tp", "Te", "Tg", "TC", "TG"].contains(where: { name.hasPrefix($0) }),
+                        let value = try? readNumber(name), value > 0, value < 130
+                    {
+                        discovered.append(name)
+                    }
                 }
             }
+            found = discovered
         }
-        sensors = found
+        if !found.isEmpty {
+            sensors = found
+        }
         return found
     }
     public func read() throws -> FanSnapshot {
@@ -95,11 +109,11 @@ public final class SMCFanDriver: FanHardware {
         return FanSnapshot(fans: fans, temperature: temperatures.max(), controlTemperature: controlTemperature)
     }
     private func confirm(_ name: String, value: Double, tolerance: Double = 0.1) throws {
-        let deadline = Date().addingTimeInterval(2)
+        let deadline = ProcessInfo.processInfo.systemUptime + 2
         repeat {
             if let actual = try? readNumber(name), abs(actual - value) <= tolerance { return }
             Thread.sleep(forTimeInterval: 0.1)
-        } while Date() < deadline
+        } while ProcessInfo.processInfo.systemUptime < deadline
         throw FanFailure.timeout
     }
     public func setRPM(_ rpm: Double, fanID: Int) throws {
@@ -120,11 +134,11 @@ public final class SMCFanDriver: FanHardware {
         guard (0..<8).contains(fanID) else { throw FanFailure.unavailable }
         let key = try modeKey(fanID)
         if try readNumber(key) == 1 { try writeNumber(key, 0) }
-        let deadline = Date().addingTimeInterval(2)
+        let deadline = ProcessInfo.processInfo.systemUptime + 2
         repeat {
             if let mode = try? readNumber(key), mode == 0 || mode == 3 { return }
             Thread.sleep(forTimeInterval: 0.1)
-        } while Date() < deadline
+        } while ProcessInfo.processInfo.systemUptime < deadline
         throw FanFailure.timeout
     }
 }

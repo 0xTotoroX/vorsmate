@@ -31,6 +31,22 @@ parent = None
 if remote:
     subprocess.run(['git', 'fetch', '--no-tags', 'origin', 'refs/heads/updates:refs/remotes/origin/updates'], check=True)
     parent = subprocess.check_output(['git', 'rev-parse', 'refs/remotes/origin/updates'], text=True).strip()
+    existing = subprocess.run(['git', 'show', f'{parent}:appcast.xml'], capture_output=True)
+    if existing.returncode == 0:
+        existing_root = ET.fromstring(existing.stdout)
+        existing_item = existing_root.find('./channel/item')
+        if existing_item is not None:
+            existing_build_node = next(
+                (child for child in existing_item if child.tag == 'version' or child.tag.endswith('}version')),
+                None,
+            )
+            if existing_build_node is not None and existing_build_node.text:
+                existing_build = int(existing_build_node.text.strip())
+                new_build = int(str(info['CFBundleVersion']).strip())
+                assert new_build >= existing_build, (
+                    f'Refusing to overwrite newer appcast sparkle:version ({existing_build}) '
+                    f'with older build ({new_build})'
+                )
 with tempfile.TemporaryDirectory(prefix='vorsmate-feed-index-') as temporary:
     env = os.environ.copy()
     env['GIT_INDEX_FILE'] = str(pathlib.Path(temporary) / 'index')

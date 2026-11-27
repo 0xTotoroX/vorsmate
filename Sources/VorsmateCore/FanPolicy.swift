@@ -100,9 +100,12 @@ public struct FanSnapshot: Codable, Sendable {
     public var profiles: [Int: FanProfile]
     public var message: String?
     public var safetyPause: FanSafetyPause?
+    public var safetyClearedFixedFanIDs: Set<Int>
+
     public init(
         fans: [FanReading] = [], temperature: Double? = nil, controlTemperature: Double? = nil,
-        profiles: [Int: FanProfile] = [:], message: String? = nil, safetyPause: FanSafetyPause? = nil
+        profiles: [Int: FanProfile] = [:], message: String? = nil, safetyPause: FanSafetyPause? = nil,
+        safetyClearedFixedFanIDs: Set<Int> = []
     ) {
         self.fans = fans
         self.temperature = temperature
@@ -110,6 +113,23 @@ public struct FanSnapshot: Codable, Sendable {
         self.profiles = profiles
         self.message = message
         self.safetyPause = safetyPause
+        self.safetyClearedFixedFanIDs = safetyClearedFixedFanIDs
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case fans, temperature, controlTemperature, profiles, message, safetyPause, safetyClearedFixedFanIDs
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        fans = try values.decodeIfPresent([FanReading].self, forKey: .fans) ?? []
+        temperature = try values.decodeIfPresent(Double.self, forKey: .temperature)
+        controlTemperature = try values.decodeIfPresent(Double.self, forKey: .controlTemperature)
+        profiles = try values.decodeIfPresent([Int: FanProfile].self, forKey: .profiles) ?? [:]
+        message = try values.decodeIfPresent(String.self, forKey: .message)
+        safetyPause = try values.decodeIfPresent(FanSafetyPause.self, forKey: .safetyPause)
+        safetyClearedFixedFanIDs =
+            try values.decodeIfPresent(Set<Int>.self, forKey: .safetyClearedFixedFanIDs) ?? []
     }
 }
 

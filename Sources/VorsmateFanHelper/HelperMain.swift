@@ -1,8 +1,9 @@
 // [INPUT]: SMAppService 的 MachService、已签名客户端、系统温度压力与恢复记录。
-// [OUTPUT]: root 下受限风扇服务；单调时钟调速 / 租约；固定关机 / 重启前释放风扇并回复确认。
+// [OUTPUT]: root 下受限风扇服务；单调时钟调速 / 租约；固定关机 / 重启前释放风扇，命令启动后回执。
 // [POS]: 唯一特权进程；启动与读状态不接管未记录的风扇。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import Foundation
+import OSLog
 import VorsmateCore
 import VorsmateFan
 
@@ -62,7 +63,13 @@ private final class HelperService: NSObject, NSXPCListenerDelegate {
                 guard self.owner == nil || self.owner == token else { throw FanFailure.competingTool }
                 self.owner = token
             }
-            if self.owner == token { self.runtime.renew(at: ProcessInfo.processInfo.systemUptime) }
+            if self.owner == token {
+                if command.action != .status || !self.runtime.profiles.isEmpty {
+                    self.runtime.renew(at: ProcessInfo.processInfo.systemUptime)
+                } else if self.runtime.owned.isEmpty {
+                    self.owner = nil
+                }
+            }
             switch command.action {
             case .status: break
             case .configure:
@@ -95,6 +102,7 @@ private final class HelperService: NSObject, NSXPCListenerDelegate {
 }
 
 private final class Endpoint: NSObject, FanHelperProtocol, @unchecked Sendable {
+    private let logger = Logger(subsystem: "app.vorsmate.mac", category: "ShutdownHelper")
     private let action: @MainActor @Sendable (FanCommand) throws -> FanSnapshot
     init(action: @escaping @MainActor @Sendable (FanCommand) throws -> FanSnapshot) { self.action = action }
     func perform(_ data: Data, reply: @escaping @Sendable (Data?, String?) -> Void) {
@@ -106,17 +114,29 @@ private final class Endpoint: NSObject, FanHelperProtocol, @unchecked Sendable {
             do {
                 let command = try JSONDecoder().decode(FanCommand.self, from: data)
                 try command.validate()
-                let snapshot = try action(command)
-                reply(try JSONEncoder().encode(snapshot), nil)
+                let snapshot = try JSONEncoder().encode(action(command))
                 if command.action == .shutdown || command.action == .restart {
-                    // 回复已排队后才执行固定系统动作；不接受调用者的参数或路径。
+                    // 回执只确认固定命令已启动，整机关机由 macOS 完成。
                     let process = Process()
                     process.executableURL = URL(filePath: "/sbin/shutdown")
                     process.arguments = [command.action == .shutdown ? "-h" : "-r", "now"]
-                    do { try process.run() } catch {
-                        FileHandle.standardError.write(Data("Vorsmate shutdown: \(error.localizedDescription)\n".utf8))
+                    let operation = command.action.rawValue
+                    process.terminationHandler = { [logger] process in
+                        if process.terminationReason != .exit || process.terminationStatus != 0 {
+                            logger.error(
+                                "\(operation, privacy: .public) command exited with status \(process.terminationStatus)"
+                            )
+                        }
                     }
+                    do { try process.run() } catch {
+                        logger.error(
+                            "Could not launch \(operation, privacy: .public) command: \(error.localizedDescription)")
+                        reply(nil, "无法启动\(command.action == .shutdown ? "关机" : "重启")命令：\(error.localizedDescription)")
+                        return
+                    }
+                    logger.info("Started \(operation, privacy: .public) command")
                 }
+                reply(snapshot, nil)
             } catch { reply(nil, error.localizedDescription) }
         }
     }

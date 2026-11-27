@@ -5,7 +5,8 @@
 import Foundation
 import Testing
 import VorsmateCore
-import VorsmateFan
+
+@testable import VorsmateFan
 
 private let fanFixture = FanReading(
     id: 0, actualRPM: 2000, targetRPM: 2000, minimumRPM: 1000, maximumRPM: 4900, hardwareMode: 0)
@@ -482,5 +483,55 @@ struct FanRuntimeTests {
         #expect(hardware.reading.hardwareMode == 1)
         try runtime.configure(fanID: 0, profile: .init(mode: .system), at: 72)
         #expect(runtime.profiles.isEmpty && runtime.owned.isEmpty)
+    }
+
+    @Test("固定转速触发高温保护且首次归还失败时，续期轮询仍重试归还并记录被清除风扇")
+    func safetyClearedFixedRetriesOrphanedOwnedAndTracksClearedIDs() throws {
+        let hardware = FanFixtureDriver()
+        hardware.temperature = 100
+        let runtime = FanRuntime(hardware: hardware)
+        try runtime.configure(fanID: 0, profile: .init(mode: .fixed, rpm: 2500), at: 0)
+        #expect(runtime.owned == [0])
+
+        hardware.failRestore = true
+        runtime.renew(at: 2)
+        runtime.tick(at: 2, thermalState: .critical)
+        #expect(runtime.profiles.isEmpty)
+        #expect(runtime.safetyPause == nil)
+        #expect(runtime.owned == [0])
+        #expect(try runtime.snapshot().safetyClearedFixedFanIDs == [0])
+
+        // 即使客户端继续续期（未过期），游离 owned 仍会在下一轮 tick 立即重试归还
+        hardware.failRestore = false
+        runtime.renew(at: 4)
+        runtime.tick(at: 4, thermalState: .nominal)
+        #expect(runtime.owned.isEmpty)
+        #expect(hardware.reading.hardwareMode == 0)
+        #expect(try runtime.snapshot().safetyClearedFixedFanIDs == [0])
+
+        // 再次显式尝试固定但被高温拒绝时保留 cleared 标记；显式切回自动后清除标记
+        hardware.temperature = nil
+        #expect(throws: FanFailure.self) {
+            try runtime.configure(fanID: 0, profile: .init(mode: .fixed, rpm: 2400), at: 6)
+        }
+        #expect(try runtime.snapshot().safetyClearedFixedFanIDs == [0])
+        hardware.temperature = 65
+        try runtime.configure(fanID: 0, profile: .init(mode: .system), at: 8)
+        #expect(try runtime.snapshot().safetyClearedFixedFanIDs.isEmpty)
+    }
+
+    @Test("温度传感器扫描失败或为空时不永久缓存空列表，成功后才缓存")
+    func smcTemperatureSensorCacheRetriesOnEmpty() {
+        var responses: [[String]] = [[], [], ["Tp01", "TC0P"]]
+        var calls = 0
+        let driver = SMCFanDriver {
+            calls += 1
+            return responses.isEmpty ? [] : responses.removeFirst()
+        }
+        #expect(driver.temperatureSensors().isEmpty)
+        #expect(driver.temperatureSensors().isEmpty)
+        #expect(driver.temperatureSensors() == ["Tp01", "TC0P"])
+        #expect(driver.temperatureSensors() == ["Tp01", "TC0P"])
+        #expect(calls == 3)
     }
 }

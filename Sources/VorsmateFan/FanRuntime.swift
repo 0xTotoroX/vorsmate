@@ -11,6 +11,7 @@ public final class FanRuntime {
     public private(set) var owned: Set<Int>
     public private(set) var message: String?
     public private(set) var safetyPause: FanSafetyPause?
+    public private(set) var safetyClearedFixedFanIDs: Set<Int> = []
     private let hardware: any FanHardware
     private let persist: (Set<Int>) throws -> Void
     private var heartbeat: TimeInterval?
@@ -30,6 +31,7 @@ public final class FanRuntime {
         state.profiles = profiles
         state.message = message
         state.safetyPause = safetyPause
+        state.safetyClearedFixedFanIDs = safetyClearedFixedFanIDs
         return state
     }
     public func configure(
@@ -46,6 +48,7 @@ public final class FanRuntime {
             // 记录用户的智能选择，但不在无法判断温度时接管硬件。
             guard fan.hardwareMode != 1 || owned.contains(fanID) else { throw FanFailure.controlChanged }
             profiles[fanID] = profile
+            safetyClearedFixedFanIDs.remove(fanID)
             heartbeat = time
             suspend(elevated ? .systemPressure : .temperatureUnavailable)
             return
@@ -78,6 +81,7 @@ public final class FanRuntime {
                 profiles[fanID] = profile
             }
             curves[fanID] = profile.mode == .curve ? curve : nil
+            safetyClearedFixedFanIDs.remove(fanID)
             safetyPause = nil
             recoverySince = nil
             message = nil
@@ -120,10 +124,13 @@ public final class FanRuntime {
         heartbeat = nil
         safetyPause = nil
         recoverySince = nil
+        safetyClearedFixedFanIDs.removeAll()
         releaseHardware()
     }
     private func suspend(_ reason: FanSafetyPause) {
         // 固定低速不自动重新接管；只有智能调速保留待恢复的意图。
+        let clearedFixed = profiles.compactMap { $0.value.mode == .fixed ? $0.key : nil }
+        safetyClearedFixedFanIDs.formUnion(clearedFixed)
         profiles = profiles.filter { $0.value.mode == .curve }
         curves.removeAll()
         recoverySince = nil
@@ -141,6 +148,20 @@ public final class FanRuntime {
             message = "控制连接已结束，已请求交回系统控制。"
             releaseAll()
             return
+        }
+        let orphanedOwned = owned.subtracting(profiles.keys).sorted()
+        if !orphanedOwned.isEmpty {
+            for id in orphanedOwned {
+                do {
+                    try restore(id)
+                    if message?.hasPrefix("恢复系统控制未确认") == true {
+                        message = nil
+                    }
+                } catch {
+                    message = "恢复系统控制未确认：\(error.localizedDescription)"
+                }
+            }
+            if profiles.isEmpty { return }
         }
         if thermalState == .serious || thermalState == .critical {
             suspend(.systemPressure)

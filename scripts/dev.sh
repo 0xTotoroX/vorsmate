@@ -104,6 +104,15 @@ if [[ -z "$(/usr/bin/lsappinfo find "bundlepath=$RUN_APP")" ]]; then
     printf '系统未找到新启动的开发版。\n' >&2
     exit 1
 fi
-if [[ -d "$WORK_DIR/previous" ]]; then rm -rf "$WORK_DIR/previous"; fi
+if [[ "$helper_result" -eq 0 ]]; then
+    if [[ -d "$WORK_DIR/previous" ]]; then rm -rf "$WORK_DIR/previous"; fi
+else
+    if [[ -d "$WORK_DIR/previous" ]]; then
+        printf '风扇助手同步失败（退出码 %s），已保留上一版开发备份：%s\n' "$helper_result" "$WORK_DIR/previous" >&2
+    else
+        printf '风扇助手同步失败（退出码 %s）。\n' "$helper_result" >&2
+    fi
+    WORK_DIR=""
+fi
 printf 'Vorsmate 开发版已启动。\n%s\n' "$RUN_APP"
 exit "$helper_result"

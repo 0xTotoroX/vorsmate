@@ -63,6 +63,13 @@ final class UpdateUserDriver: NSObject, SPUUserDriver {
                 try Task.checkCancellation()
             } catch { return }
             guard let self, active, stage == watchedStage else { return }
+            if watchedStage == .preparing {
+                panel.model.present(
+                    "正在准备更新…",
+                    detail: "准备耗时较长，仍在后台处理中，完成后将提示重启。",
+                    busy: true)
+                return
+            }
             fail(.timedOut(watchedStage))
         }
     }
@@ -242,6 +249,8 @@ final class UpdateUserDriver: NSObject, SPUUserDriver {
             "可以更新了", detail: "重启后继续使用现有设置。", primary: "重启更新",
             action: { reply(.install) }, secondary: "稍后",
             cancel: { [weak self] in
+                self?.active = false
+                self?.transition(.finished)
                 self?.panel.hide()
                 reply(.dismiss)
             })

@@ -37,6 +37,14 @@ final class RemoteApp: NSObject, NSApplicationDelegate {
                 NSApp.terminate(nil)
                 return
             }
+            monitor.onActiveProfileChanged = { [weak self] name in
+                let sanitized =
+                    name
+                    .replacingOccurrences(of: "\r", with: " ")
+                    .replacingOccurrences(of: "\n", with: " ")
+                    .replacingOccurrences(of: "\t", with: " ")
+                self?.monitor.report("profile\t\(sanitized)")
+            }
             if preview { monitor.report("预览") }
             // The write end belongs exclusively to the host. EOF also covers a host crash.
             Task {
@@ -46,7 +54,7 @@ final class RemoteApp: NSObject, NSApplicationDelegate {
                             if let request = try? JSONDecoder().decode(
                                 RemoteEditorCommand.self, from: Data(command.utf8))
                             {
-                                handle(request)
+                                await handle(request)
                             }
                         } else if command == "open" {
                             show()
@@ -57,6 +65,9 @@ final class RemoteApp: NSObject, NSApplicationDelegate {
             }
         }
         monitor.observeFrontmost()
+        if hosted {
+            monitor.emitCurrentActiveProfile()
+        }
         if !preview { monitor.start() }
         if !hosted { show() }
     }
@@ -76,7 +87,7 @@ final class RemoteApp: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func handle(_ request: RemoteEditorCommand) {
+    private func handle(_ request: RemoteEditorCommand) async {
         switch request {
         case .observe:
             monitor.reloadProfile()
@@ -95,12 +106,12 @@ final class RemoteApp: NSObject, NSApplicationDelegate {
             monitor.requestPostAccess()
             publishState()
         case .configure(let id, let revision, let edit):
-            let error = monitor.configure(edit, revision: revision)
+            let error = await monitor.configureAsync(edit, revision: revision)
             let state = monitor.editorState
             lastState = state
             reply(.saved(id, state: state, error: error))
         case .change(let id, let button, let gesture, let previous, let action):
-            let error = monitor.edit(button, gesture: gesture, action: action, previous: previous)
+            let error = await monitor.editAsync(button, gesture: gesture, action: action, previous: previous)
             let state = monitor.editorState
             lastState = state
             reply(.saved(id, state: state, error: error))

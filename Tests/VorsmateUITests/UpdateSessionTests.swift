@@ -190,6 +190,78 @@ struct UpdateSessionTests {
         #expect(UpdateFailure(wrapped(NSError(domain: SUSparkleErrorDomain, code: 3001))) == .invalidSignature)
         #expect(UpdateFailure(wrapped(NSError(domain: SUSparkleErrorDomain, code: 1000))) == .invalidFeed)
     }
+
+    @Test("就绪阶段点稍后释放会话，可立即发起下一次更新检查")
+    func readyDismissAllowsNextCheck() {
+        var drivers: [UpdateUserDriver] = []
+        let model = UpdateModel(
+            enabled: true, scheduled: false, showsWindows: false,
+            makeSession: {
+                drivers.append($0)
+                return FakeUpdateSession()
+            })
+        model.check()
+        #expect(drivers.count == 1)
+
+        var choice: SPUUserUpdateChoice?
+        drivers[0].showReady { choice = $0 }
+        #expect(drivers[0].stage == .ready)
+        #expect(!model.canCheck || drivers[0].active)
+
+        drivers[0].panel.model.performSecondary()
+        #expect(choice == .dismiss)
+        #expect(!drivers[0].active)
+        #expect(drivers[0].stage == .finished)
+        #expect(model.canCheck)
+
+        model.check()
+        #expect(drivers.count == 2)
+        #expect(model.checking)
+        model.stop()
+    }
+
+    @Test("准备阶段超长等待不退出会话也不允许重叠重试，仍接受晚到的就绪回调")
+    func preparingLongWaitRemainsNonReentrantAndAcceptsLateReady() async {
+        let clock = UpdateWaiter()
+        var drivers: [UpdateUserDriver] = []
+        let model = UpdateModel(
+            enabled: true, scheduled: false, showsWindows: false, pause: { await clock.wait($0) },
+            makeSession: {
+                drivers.append($0)
+                return FakeUpdateSession()
+            })
+        model.check()
+        drivers[0].showDownloadDidStartExtractingUpdate()
+        await drain()
+        #expect(drivers[0].stage == .preparing)
+        #expect(!model.canCheck)
+
+        let timerIndex = clock.count - 1
+        clock.fire(timerIndex)
+        await drain()
+
+        #expect(drivers[0].active)
+        #expect(drivers[0].stage == .preparing)
+        #expect(!model.canCheck)
+        #expect(model.panel.model.primary == nil)
+        #expect(model.panel.model.busy)
+
+        model.check()
+        #expect(drivers.count == 1)
+
+        var choice: SPUUserUpdateChoice?
+        drivers[0].showReady { choice = $0 }
+        #expect(drivers[0].stage == .ready)
+        #expect(choice == nil)
+        drivers[0].panel.model.performPrimary()
+        #expect(choice == .install)
+
+        drivers[0].showUpdateInstalledAndRelaunched(true) {}
+        #expect(!drivers[0].active)
+        #expect(model.canCheck)
+        clock.finish()
+        await drain()
+    }
 }
 
 @MainActor
