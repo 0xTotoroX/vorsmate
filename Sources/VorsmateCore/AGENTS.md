@@ -24,4 +24,6 @@
 
 - UpdatePolicy.swift：固定签名 feed / 发布页地址、对应官方新旧命名安装包校验与语义版本规则；解析、版本选择和双重验签交由 Sparkle。
 
+- `WeatherCity.swift` 保存用户选择的城市及坐标，供天气接口和本机设置共用。
+
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md

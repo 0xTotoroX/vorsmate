@@ -13,4 +13,6 @@
 - TranslationModelTests.swift：Mock 驱动验证截图插件启停、单入口框选、矢量标注增删与 Esc / 调整选区重置、纯 OCR 与错误保留、按需翻译对照与 DeepSeek 预设、贴图钉住与先关叠层再保存流程及录屏权限流。
 - TasksModelTests.swift：Mock Hub 客户端验证待办插件与 PluginHost 启停零开销生命周期、离线回退、快速添加、完成切换与 codex:// 打开。
 
+- `CategoryScrollTests.swift` 验证滚轮、触控板、惯性与纵向意图区分。`PanelFeedTests.swift` 验证取消、迟到结果与失败后保留读数。
+
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md

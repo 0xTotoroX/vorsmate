@@ -14,7 +14,8 @@ struct PluginPreferencesTests {
             let value = try JSONDecoder().decode(Preferences.self, from: Data(json.utf8))
             #expect(value == Preferences())
             #expect(!value.tasksEnabled)
-            #expect(value.disabledAtRuntime == [.remote, .translate, .tasks])
+            #expect(value.disabledAtRuntime == [.remote, .translate, .tasks, .weather, .markets])
+            #expect(value.weatherCity == nil)
         }
     }
     @Test("完整新配置原子保存、重新加载且冲突不覆盖")
@@ -29,6 +30,9 @@ struct PluginPreferencesTests {
         value.remoteEnabled = true
         value.translateEnabled = true
         value.tasksEnabled = true
+        value.weatherEnabled = true
+        value.marketsEnabled = true
+        value.weatherCity = WeatherCity(name: "示例市", latitude: 46.5, longitude: 6.6)
         value.translation.engine = .openAICompatible
         value.translation.targetLanguage = .japanese
         value.fanProfiles = [0: FanProfile(mode: .fixed, rpm: 2800), 1: FanCurvePreset.balanced.profile]
@@ -63,7 +67,7 @@ struct PluginPreferencesTests {
     func optionalPlugins() throws {
         var value = Preferences()
         value.disabledPlugins = [.fan]
-        #expect(value.disabledAtRuntime == [.fan, .remote, .translate, .tasks])
+        #expect(value.disabledAtRuntime == [.fan, .remote, .translate, .tasks, .weather, .markets])
         value.disabledAtRuntime.remove(.remote)
         let data = try JSONEncoder().encode(value)
         let restored = try JSONDecoder().decode(Preferences.self, from: data)
@@ -74,6 +78,10 @@ struct PluginPreferencesTests {
         value.disabledAtRuntime.insert(.remote)
         value.disabledAtRuntime.remove(.translate)
         value.disabledAtRuntime.remove(.tasks)
+        value.disabledAtRuntime.remove(.weather)
+        #expect(value.weatherEnabled && !value.marketsEnabled)
+        value.disabledAtRuntime.remove(.markets)
+        #expect(value.marketsEnabled)
         #expect(!value.remoteEnabled)
         #expect(value.translateEnabled)
         #expect(value.tasksEnabled)
@@ -83,7 +91,7 @@ struct PluginPreferencesTests {
     func order() {
         let expected: [PluginID] = [
             .time, .inputSource, .audioInput, .audioOutput, .fan, .quickShutdown, .unattendedAuth, .remote,
-            .translate, .tasks,
+            .translate, .tasks, .weather, .markets,
         ]
         #expect(PluginID.allCases == expected)
         #expect(PluginID.audioInput.channel == .audioInput)
@@ -112,6 +120,8 @@ struct PluginPreferencesTests {
         #expect(PluginID.translate.defaultCategory == .tools)
         #expect(PluginID.remote.defaultCategory == .tools)
         #expect(PluginID.tasks.defaultCategory == .tools)
+        #expect(PluginID.weather.defaultCategory == .tools)
+        #expect(PluginID.markets.defaultCategory == .tools)
         #expect(PluginID.quickShutdown.defaultCategory == .system)
         #expect(PluginID.unattendedAuth.defaultCategory == .system)
 

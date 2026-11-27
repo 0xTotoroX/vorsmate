@@ -69,6 +69,23 @@ final class AppModel: ObservableObject {
         preview: preview,
         offlinePreview: CommandLine.arguments.contains("--preview-tasks-offline")
     )
+    let informationClient: WeatherMarketClient
+    let weather = PanelFeed<WeatherReading>(interval: .seconds(900))
+    let marketFeeds = Dictionary(
+        uniqueKeysWithValues: MarketInstrument.allCases.map { instrument in
+            (instrument, PanelFeed<MarketQuote>(interval: .seconds(instrument == .dollarYuan ? 3600 : 300)))
+        })
+    var weatherCity: WeatherCity? { preferences.weatherCity }
+
+    func selectWeatherCity(_ city: WeatherCity) {
+        guard preferences.weatherCity != city else { return }
+        do {
+            try save { $0.weatherCity = city }
+            weather.clear()
+        } catch {
+            configurationError = error.localizedDescription
+        }
+    }
     lazy var typelessRecovery: TypelessRecoveryModel = {
         if preview {
             return .preview(
@@ -108,6 +125,7 @@ final class AppModel: ObservableObject {
     init(preview: Bool, development: Bool = false) {
         self.preview = preview
         self.development = development
+        informationClient = preview ? .preview : WeatherMarketClient()
         self.canUseFanHelper = !development || FanServiceIdentity.teamID() != nil
         self.maintenance = !preview && !development && CommandLine.arguments.contains("--maintenance")
         self.canManageLogin = Self.supportsLoginItem(preview: preview)
@@ -126,6 +144,11 @@ final class AppModel: ObservableObject {
             )
         }
         if preview && CommandLine.arguments.contains("--preview-popover") { preferences.remoteEnabled = true }
+        if preview && CommandLine.arguments.contains("--preview-information") {
+            preferences.weatherEnabled = true
+            preferences.marketsEnabled = true
+            preferences.weatherCity = WeatherCity(name: "示例市", latitude: 0, longitude: 0)
+        }
         if preview
             && (CommandLine.arguments.contains("--preview-translate")
                 || CommandLine.arguments.contains("--preview-translate-window"))
@@ -231,6 +254,13 @@ final class AppModel: ObservableObject {
         result.append(remote)
         result.append(translation)
         result.append(tasks)
+        result.append(BuiltinPlugin(id: .weather, deactivate: { [weather] in weather.clear() }))
+        result.append(
+            BuiltinPlugin(
+                id: .markets,
+                deactivate: { [marketFeeds] in
+                    for feed in marketFeeds.values { feed.clear() }
+                }))
         return result
     }
     enum CategoryIndicator {
@@ -282,7 +312,7 @@ final class AppModel: ObservableObject {
         var hasActive = false
         for id in items {
             switch id {
-            case .time:
+            case .time, .weather, .markets:
                 break
             case .inputSource, .audioInput, .audioOutput:
                 if let controller = controllers.first(where: { $0.channel == id.channel }),

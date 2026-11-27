@@ -21,6 +21,8 @@
 - UnattendedAuthTests.swift：内存替身与可注入时钟验证重启默认关闭、可选截止与状态文案、锁屏保持与到期 / 失效核对、受阻不伪装批准、密码变更 / 删除、活动记录脱敏往返与停用清理。
 - FanCommandTests.swift：助手关机 / 重启固定无参数命令、额外载荷和未知动作拒绝。
 
+- `WeatherMarketTests.swift` 验证天气和行情解码、来源日期以及缺价行为。
+
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 
 - RemoteVoiceTests.swift：协议、解码、语音首包及断流、原输入优先级以及左右修饰键的回归。

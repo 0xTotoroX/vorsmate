@@ -45,6 +45,7 @@ struct PanelView: View {
             model.preview
             && (CommandLine.arguments.contains("--preview-translate")
                 || CommandLine.arguments.contains("--preview-tasks")
+                || CommandLine.arguments.contains("--preview-information")
                 || CommandLine.arguments.contains("--preview-tasks-detail")
                 || CommandLine.arguments.contains("--preview-tasks-offline"))
         _previewCategoryOverride = State(initialValue: previewTools ? .tools : nil)
@@ -106,6 +107,19 @@ struct PanelView: View {
                     })
             } else {
                 overviewScroll
+                    .background {
+                        if model.panelVisible, !showingPluginManager, !showingTypelessRecovery,
+                            remotePage == .home, visibleCategories.count > 1
+                        {
+                            CategoryScrollReceiver { step in
+                                let categories = visibleCategories
+                                guard let current = categories.firstIndex(of: activeCategory),
+                                    categories.indices.contains(current + step)
+                                else { return }
+                                selectCategory(categories[current + step])
+                            }
+                        }
+                    }
             }
         }
         .frame(width: 386)
@@ -324,15 +338,22 @@ struct PanelView: View {
         .padding(.bottom, 12)
     }
 
+    private func selectCategory(_ category: PluginCategory) {
+        if model.preview {
+            previewCategoryOverride = category
+        } else {
+            selectedCategoryRaw = category.rawValue
+        }
+        expandedSection = nil
+    }
+
     private func categoryBar(selected: PluginCategory) -> some View {
         HStack(spacing: 3) {
             ForEach(visibleCategories) { category in
                 let isSelected = category == selected
                 let indicator = isSelected ? .none : model.categoryIndicator(for: category)
                 Button {
-                    previewCategoryOverride = nil
-                    selectedCategoryRaw = category.rawValue
-                    expandedSection = nil
+                    selectCategory(category)
                 } label: {
                     Image(systemName: category.symbol)
                         .font(.system(size: 15, weight: .medium))
@@ -409,6 +430,13 @@ struct PanelView: View {
                 protectInteraction: protectInteraction)
         case .tasks:
             TasksSummaryRow(model: model.tasks) { expandedSection = .tasks }
+        case .weather:
+            WeatherSection(
+                feed: model.weather, city: model.weatherCity, client: model.informationClient,
+                visible: model.panelVisible, expanded: expansion(for: id),
+                selectCity: model.selectWeatherCity, protectInteraction: protectInteraction)
+        case .markets:
+            MarketsSection(feeds: model.marketFeeds, client: model.informationClient, visible: model.panelVisible)
         }
     }
 

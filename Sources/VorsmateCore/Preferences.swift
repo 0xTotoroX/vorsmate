@@ -37,19 +37,26 @@ public struct Preferences: Codable, Equatable, Sendable {
     public var remoteEnabled = false
     public var translateEnabled = false
     public var tasksEnabled = false
+    public var weatherEnabled = false
+    public var marketsEnabled = false
+    public var weatherCity: WeatherCity?
     public var disabledAtRuntime: Set<PluginID> {
         get {
             var disabled = disabledPlugins
             if !remoteEnabled { disabled.insert(.remote) } else { disabled.remove(.remote) }
             if !translateEnabled { disabled.insert(.translate) } else { disabled.remove(.translate) }
             if !tasksEnabled { disabled.insert(.tasks) } else { disabled.remove(.tasks) }
+            if !weatherEnabled { disabled.insert(.weather) } else { disabled.remove(.weather) }
+            if !marketsEnabled { disabled.insert(.markets) } else { disabled.remove(.markets) }
             return disabled
         }
         set {
             remoteEnabled = !newValue.contains(.remote)
             translateEnabled = !newValue.contains(.translate)
             tasksEnabled = !newValue.contains(.tasks)
-            disabledPlugins = newValue.subtracting([.remote, .translate, .tasks])
+            weatherEnabled = !newValue.contains(.weather)
+            marketsEnabled = !newValue.contains(.markets)
+            disabledPlugins = newValue.subtracting([.remote, .translate, .tasks, .weather, .markets])
         }
     }
     public var fanProfiles: [Int: FanProfile] = [:]
@@ -61,6 +68,7 @@ public struct Preferences: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case version, policies, disabledPlugins, remoteEnabled, translateEnabled, tasksEnabled, fanProfiles,
             shutdownPolicy, translation, unattendedAuth, pluginOrder
+        case weatherEnabled, marketsEnabled, weatherCity
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -70,6 +78,9 @@ public struct Preferences: Codable, Equatable, Sendable {
         remoteEnabled = try values.decodeIfPresent(Bool.self, forKey: .remoteEnabled) ?? false
         translateEnabled = try values.decodeIfPresent(Bool.self, forKey: .translateEnabled) ?? false
         tasksEnabled = try values.decodeIfPresent(Bool.self, forKey: .tasksEnabled) ?? false
+        weatherEnabled = try values.decodeIfPresent(Bool.self, forKey: .weatherEnabled) ?? false
+        marketsEnabled = try values.decodeIfPresent(Bool.self, forKey: .marketsEnabled) ?? false
+        weatherCity = try values.decodeIfPresent(WeatherCity.self, forKey: .weatherCity)
         fanProfiles = try values.decodeIfPresent([Int: FanProfile].self, forKey: .fanProfiles) ?? [:]
         shutdownPolicy = try values.decodeIfPresent(ShutdownPolicy.self, forKey: .shutdownPolicy) ?? ShutdownPolicy()
         translation =

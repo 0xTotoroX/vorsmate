@@ -23,4 +23,6 @@
 
 适配器不录音、不监听按键；测试通过 SourceDriver 替身驱动控制器。
 
+- `WeatherMarketClient.swift` 从 Open-Meteo 查询城市与天气，从 Nasdaq、CoinGecko 和 ExchangeRate-API 独立读取带时间的报价。
+
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md

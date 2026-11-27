@@ -38,4 +38,8 @@
 - UpdateFailure.swift：更新阶段 / 截止时间配置和嵌套网络、HTTP、签名、配置及安装错误的中文分类。
 - UpdatePanel.swift：紧凑原生更新窗口、进度及一次性操作 / 关闭语义。
 
+- `CategoryScrollReceiver.swift` 识别总览面板内的横向滚轮与触控板手势，过滤惯性及纵向滚动。
+- `PanelFeed.swift` 保存单项最近读数并按可见性、数据源刷新周期与失败状态安排下次读取。
+- `WeatherMarketsView.swift` 展示天气、选城与三项行情。
+
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md

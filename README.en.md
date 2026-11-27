@@ -16,7 +16,7 @@
 
 ## Features
 
-Modules are organized into Devices, Tools, and System tabs. The panel shows current state by default and opens inline controls or a detail page on click. You can toggle or reorder any module under `功能模块…` in the top-right menu; disabling a module stops its background work. Built natively with SwiftUI and AppKit, Vorsmate supports system Liquid Glass on macOS 26+ without accounts or cloud services.
+Switch between Devices, Tools, and System by clicking a tab, scrolling a mouse wheel horizontally, or swiping sideways with two fingers on a trackpad. Toggle and reorder modules under `功能模块…` in the top-right menu. Built with SwiftUI and AppKit, Vorsmate supports system Liquid Glass on macOS 26+. Optional weather and market modules fetch their own data and require no account.
 
 ### Built-in modules
 
@@ -35,6 +35,8 @@ Disabled by default; enable them from `功能模块…` in the top-right menu.
 
 | Module | What it does |
 | --- | --- |
+| Weather | Shows current conditions in a selected city. Expand to see today's temperature range and the observation time from Open-Meteo. |
+| Markets | Shows the Nasdaq-100, SOL in USD, and the USD/CNY reference rate, each with its source and quote time. |
 | Screenshot & Translation | Trigger window-snapping screen capture by hotkey, annotate with rectangles, arrows, or freehand ink, copy offline OCR text, translate in place via macOS Translation or a custom OpenAI-compatible endpoint, and pin scalable translucent stickers. |
 | Xiaomi Remote | Place the built `VorsmateRemote.app` beside `Vorsmate.app` to map RC003 buttons to per-app shortcuts, gestures, and hold-to-repeat, with voice input via MiRemoteV 2ch. |
 
