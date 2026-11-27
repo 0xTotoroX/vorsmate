@@ -431,52 +431,23 @@ public final class UnattendedAuthController: ObservableObject {
 
             switch result {
             case .approved(let detail):
-                self.appendEvent(
-                    UnattendedAuthDialogEvent(
-                        timestamp: detectedAt,
-                        source: safeSource,
-                        summary: safeSummary,
-                        outcome: .approved,
-                        detail: detail
-                    ))
+                self.recordDialogEvent(
+                    at: detectedAt, source: safeSource, summary: safeSummary, outcome: .approved, detail: detail)
             case .blocked(let reason):
-                self.appendEvent(
-                    UnattendedAuthDialogEvent(
-                        timestamp: detectedAt,
-                        source: safeSource,
-                        summary: safeSummary,
-                        outcome: .blocked,
-                        detail: reason
-                    ))
+                self.recordDialogEvent(
+                    at: detectedAt, source: safeSource, summary: safeSummary, outcome: .blocked, detail: reason)
             case .leftForUser(let reason):
-                self.appendEvent(
-                    UnattendedAuthDialogEvent(
-                        timestamp: detectedAt,
-                        source: safeSource,
-                        summary: safeSummary,
-                        outcome: .leftForUser,
-                        detail: reason
-                    ))
+                self.recordDialogEvent(
+                    at: detectedAt, source: safeSource, summary: safeSummary, outcome: .leftForUser, detail: reason)
             case .passwordRejected(let reason):
                 if case .invalid = self.passwordVerifier.verifyPassword(password) {
-                    self.appendEvent(
-                        UnattendedAuthDialogEvent(
-                            timestamp: detectedAt,
-                            source: safeSource,
-                            summary: safeSummary,
-                            outcome: .passwordInvalid,
-                            detail: reason
-                        ))
+                    self.recordDialogEvent(
+                        at: detectedAt, source: safeSource, summary: safeSummary, outcome: .passwordInvalid,
+                        detail: reason)
                     self.disable(reason: .passwordInvalid)
                 } else {
-                    self.appendEvent(
-                        UnattendedAuthDialogEvent(
-                            timestamp: detectedAt,
-                            source: safeSource,
-                            summary: safeSummary,
-                            outcome: .blocked,
-                            detail: reason
-                        ))
+                    self.recordDialogEvent(
+                        at: detectedAt, source: safeSource, summary: safeSummary, outcome: .blocked, detail: reason)
                 }
             }
         }
@@ -513,6 +484,14 @@ public final class UnattendedAuthController: ObservableObject {
                 self.reconcileDeadlineAndHealth()
             }
         }
+    }
+
+    private func recordDialogEvent(
+        at timestamp: Date, source: String, summary: String, outcome: UnattendedAuthEventOutcome, detail: String?
+    ) {
+        appendEvent(
+            UnattendedAuthDialogEvent(
+                timestamp: timestamp, source: source, summary: summary, outcome: outcome, detail: detail))
     }
 
     private func appendEvent(_ event: UnattendedAuthDialogEvent) {
