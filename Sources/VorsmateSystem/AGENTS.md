@@ -19,7 +19,7 @@
 - TranslationService.swift：本机非同步钥匙串 API 密钥存储、NaturalLanguage 语种判断与 OpenAI 兼容批量翻译客户端（支持网络替身）。
 - WindowDragMonitor.swift：会话级鼠标与修饰键监听、辅助功能权限状态和停用释放，预览使用内存。
 - WindowDragEventTap.swift / WindowTitleDrag.swift：独立事件线程和标题栏坐标换算，起拖后直接传递鼠标移动，松键和停用补发松手。
-- WindowDragGesture.swift：左键拖动阈值、点击还原、固定窗口与指针偏移，优先交接标题栏拖动，回退时按上次写入时间合并移动，暂忙时追上最新位置，松键或停用取消重试。
+- WindowDragGesture.swift：左键拖动阈值、点击还原、固定窗口与指针偏移，按下时预读目标，起拖复核后交接标题栏拖动，回退时按上次写入时间合并移动，暂忙时追上最新位置，松键或停用取消重试。
 - WindowDragTarget.swift：WindowServer 窗口命中、核对同一窗口的空白标题栏落点与可移动性，兼容回退区分暂时通信失败和窗口不可移动。
 - TasksHubClient.swift 每次访问时查找当前用户的提醒事项连接器，使用本机地址、原状态核对与可替换的网络传输。
 - GlobalHotKeyCenter.swift：Carbon 全局截图热键线程安全注册与停用注销，附预览空实现。

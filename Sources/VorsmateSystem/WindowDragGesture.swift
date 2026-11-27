@@ -8,15 +8,28 @@ import VorsmateCore
 
 @MainActor
 final class WindowDragGesture {
+    private final class Press {
+        let down: CGEvent
+        let hit: WindowDragTarget.Hit
+        var candidate: WindowDragTarget?
+        var preparedAt: ContinuousClock.Instant?
+
+        init(_ down: CGEvent, _ hit: WindowDragTarget.Hit) {
+            self.down = down
+            self.hit = hit
+        }
+    }
+
     private enum Phase {
         case idle
-        case pending(CGEvent, WindowDragTarget.Hit)
+        case pending(Press)
         case moving(WindowDragTarget, offset: CGPoint)
         case untilMouseUp
     }
 
     private let hitTest: @MainActor (CGPoint) -> WindowDragTarget.Hit?
     private let resolve: @MainActor (WindowDragTarget.Hit, CGPoint) -> WindowDragTarget?
+    private let stillExposed: @MainActor (WindowDragTarget.Hit, CGPoint) -> Bool
     private var phase = Phase.idle
     private var latestPosition: CGPoint?
     private var lastWritten: CGPoint?
@@ -30,10 +43,12 @@ final class WindowDragGesture {
 
     init(
         hitTest: @escaping @MainActor (CGPoint) -> WindowDragTarget.Hit? = WindowDragTarget.hit,
-        resolve: @escaping @MainActor (WindowDragTarget.Hit, CGPoint) -> WindowDragTarget? = WindowDragTarget.resolve
+        resolve: @escaping @MainActor (WindowDragTarget.Hit, CGPoint) -> WindowDragTarget? = WindowDragTarget.resolve,
+        stillExposed: @escaping @MainActor (WindowDragTarget.Hit, CGPoint) -> Bool = WindowDragTarget.stillExposed
     ) {
         self.hitTest = hitTest
         self.resolve = resolve
+        self.stillExposed = stillExposed
     }
 
     // true 表示该鼠标事件已由拖动处理。flagsChanged 始终传给系统。
@@ -46,7 +61,16 @@ final class WindowDragGesture {
         case .leftMouseDown:
             reset(forward: forward)
             guard matches, let hit = hitTest(event.location), let down = event.copy() else { return false }
-            phase = .pending(down, hit)
+            let press = Press(down, hit)
+            phase = .pending(press)
+            if beginTitleDrag != nil {
+                // 按下后先让鼠标回调返回，再利用指针尚未移动的时间查找标题栏。
+                Task { @MainActor [weak self, weak press] in
+                    guard let self, let press else { return }
+                    press.candidate = self.resolve(press.hit, press.down.location)
+                    press.preparedAt = .now
+                }
+            }
             return true
         case .flagsChanged:
             if !matches { interrupt(forward: forward) }
@@ -60,12 +84,16 @@ final class WindowDragGesture {
                 return false
             case .untilMouseUp:
                 return true
-            case .pending(let down, let hit):
+            case .pending(let press):
                 if released { return false }  // reset 会在原 mouseUp 之前补发 mouseDown。
+                let down = press.down
+                let hit = press.hit
                 let dx = event.location.x - down.location.x
                 let dy = event.location.y - down.location.y
-                guard dx * dx + dy * dy >= 9 else { return true }
-                guard let target = resolve(hit, down.location) else {
+                let distanceSquared = dx * dx + dy * dy
+                let hasTitle = beginTitleDrag != nil && press.candidate?.titleBarPoint != nil
+                guard distanceSquared >= (hasTitle ? 4 : 9) else { return true }
+                guard let target = targetForDrag(press) else {
                     reset(forward: forward)
                     return false
                 }
@@ -74,6 +102,7 @@ final class WindowDragGesture {
                     beginTitleDrag(WindowTitleDrag(down: down, title: title, window: hit.number))
                     return true
                 }
+                guard distanceSquared >= 9 else { return true }
                 let position = CGPoint(x: target.origin.x + dx, y: target.origin.y + dy)
                 guard moveOrRetry(position, on: target, retryIfBusy: true) else {
                     reset(forward: forward)
@@ -94,6 +123,16 @@ final class WindowDragGesture {
         default:
             return false
         }
+    }
+
+    private func targetForDrag(_ press: Press) -> WindowDragTarget? {
+        if let candidate = press.candidate, let prepared = press.preparedAt,
+            ContinuousClock.now - prepared < .milliseconds(350),
+            stillExposed(press.hit, candidate.titleBarPoint ?? press.down.location)
+        {
+            return candidate
+        }
+        return resolve(press.hit, press.down.location)
     }
 
     private func scheduleDelivery(retryIfBusy: Bool) {
@@ -140,9 +179,9 @@ final class WindowDragGesture {
 
     func interrupt(forward: (CGEvent) -> Void) {
         switch phase {
-        case .pending(let down, _):
+        case .pending(let press):
             phase = .idle
-            forward(down)
+            forward(press.down)
         case .moving:
             flush()
             phase = .untilMouseUp
@@ -152,7 +191,7 @@ final class WindowDragGesture {
     }
 
     func reset(forward: (CGEvent) -> Void) {
-        if case .pending(let down, _) = phase { forward(down) }
+        if case .pending(let press) = phase { forward(press.down) }
         phase = .idle
         latestPosition = nil
         lastWritten = nil

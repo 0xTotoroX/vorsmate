@@ -43,6 +43,16 @@ struct WindowDragTarget {
         return Hit(number: number, pid: pid, bounds: bounds)
     }
 
+    static func stillExposed(_ hit: Hit, at point: CGPoint) -> Bool {
+        guard let expected = hit.bounds,
+            let row = (CGWindowListCopyWindowInfo(.optionIncludingWindow, hit.number) as? [[String: Any]])?.first,
+            row[kCGWindowOwnerPID as String] as? pid_t == hit.pid,
+            let bounds = row[kCGWindowBounds as String] as? NSDictionary,
+            CGRect(dictionaryRepresentation: bounds as CFDictionary) == expected
+        else { return false }
+        return windowNumber(at: point) == hit.number
+    }
+
     static func resolve(_ hitWindow: Hit, at point: CGPoint) -> Self? {
         guard windowNumber(at: point) == hitWindow.number else { return nil }
         if hitWindow.pid == getpid() {

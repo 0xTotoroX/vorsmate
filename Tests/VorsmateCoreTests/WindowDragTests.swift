@@ -19,6 +19,8 @@ struct WindowDragTests {
         var movable = true
         var moveResult = WindowDragTarget.MoveResult.moved
         var titlePoint: CGPoint?
+        var exposed = true
+        var rechecks: [CGPoint] = []
         var hits: [CGPoint] = []
         var resolutions: [CGWindowID] = []
         var attempts = 0
@@ -38,19 +40,36 @@ struct WindowDragTests {
                     if self.moveResult == .moved { self.moves.append(point) }
                     return self.moveResult
                 }
+            },
+            stillExposed: { [unowned self] _, point in
+                self.rechecks.append(point)
+                return self.exposed
             })
 
         @discardableResult
-        func send(_ type: CGEventType, dx: Int = 0, dy: Int = 0, flags: CGEventFlags = .maskAlternate) -> Bool {
+        func send(
+            _ type: CGEventType, dx: Int = 0, dy: Int = 0, flags: CGEventFlags = .maskAlternate,
+            beginTitleDrag: ((WindowTitleDrag) -> Void)? = nil
+        ) -> Bool {
             let event = CGEvent(source: nil)!
             event.type = type
             event.flags = flags
             event.location = CGPoint(x: anchor.x + CGFloat(dx), y: anchor.y + CGFloat(dy))
             event.setIntegerValueField(.mouseEventClickState, value: 2)
-            return gesture.consumes(type, event: event, modifier: .option) { forwarded.append($0) }
+            return gesture.consumes(type, event: event, modifier: .option, beginTitleDrag: beginTitleDrag) {
+                forwarded.append($0)
+            }
         }
 
         func reset() { gesture.reset { forwarded.append($0) } }
+
+        func waitForResolution() async throws {
+            let deadline = ContinuousClock.now + .seconds(2)
+            while resolutions.isEmpty && ContinuousClock.now < deadline {
+                try await Task.sleep(for: .milliseconds(2))
+            }
+            #expect(resolutions == [17])
+        }
 
         func waitForAttempts(_ count: Int) async throws {
             let deadline = ContinuousClock.now + .seconds(2)
@@ -59,6 +78,42 @@ struct WindowDragTests {
             }
             #expect(attempts == count)
         }
+    }
+
+    @Test("按下时预读标题栏，微动仍还原单击，起拖只复核已选窗口", arguments: [false, true])
+    func preparedTitle(click: Bool) async throws {
+        let f = Fixture()
+        let point = CGPoint(x: 150, y: -32)
+        f.titlePoint = point
+        var active: WindowTitleDrag?
+        let receive: (WindowTitleDrag) -> Void = { active = $0 }
+        #expect(f.send(.leftMouseDown, beginTitleDrag: receive))
+        try await f.waitForResolution()
+        #expect(f.attempts == 0)
+        #expect(f.send(.leftMouseDragged, dx: click ? 1 : 2, beginTitleDrag: receive))
+        #expect(f.resolutions == [17])
+        #expect(f.rechecks == (click ? [] : [point]))
+        #expect((active == nil) == click)
+        if click {
+            #expect(!f.send(.leftMouseUp))
+            #expect(f.forwarded.map(\.type) == [.leftMouseDown])
+        }
+    }
+
+    @Test("预读后窗口失效或标题栏被遮住时重新确认，不向原落点发按下")
+    func coveredPreparedTitle() async throws {
+        let f = Fixture()
+        f.titlePoint = .zero
+        var active: WindowTitleDrag?
+        let receive: (WindowTitleDrag) -> Void = { active = $0 }
+        f.send(.leftMouseDown, beginTitleDrag: receive)
+        try await f.waitForResolution()
+        f.exposed = false
+        f.movable = false
+        #expect(!f.send(.leftMouseDragged, dx: 10, beginTitleDrag: receive))
+        #expect(f.resolutions == [17, 17])
+        #expect(active == nil)
+        #expect(f.forwarded.map(\.type) == [.leftMouseDown])
     }
 
     @Test("单键与组合精确匹配，忽略大小写锁定和左右键位")
