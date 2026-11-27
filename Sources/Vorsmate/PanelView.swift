@@ -35,6 +35,8 @@ struct PanelView: View {
         let initialSection: PluginID? =
             if model.preview && CommandLine.arguments.contains("--preview-unattended-detail") {
                 .unattendedAuth
+            } else if model.preview && CommandLine.arguments.contains("--preview-window-drag") {
+                .windowDrag
             } else if model.preview && CommandLine.arguments.contains("--preview-tasks-detail") {
                 .tasks
             } else {
@@ -43,7 +45,8 @@ struct PanelView: View {
         _expandedSection = State(initialValue: initialSection)
         let previewTools =
             model.preview
-            && (CommandLine.arguments.contains("--preview-translate")
+            && (CommandLine.arguments.contains("--preview-window-drag")
+                || CommandLine.arguments.contains("--preview-translate")
                 || CommandLine.arguments.contains("--preview-tasks")
                 || CommandLine.arguments.contains("--preview-information")
                 || CommandLine.arguments.contains("--preview-tasks-detail")
@@ -428,6 +431,10 @@ struct PanelView: View {
                 model: model.translation,
                 expanded: expansion(for: id),
                 protectInteraction: protectInteraction)
+        case .windowDrag:
+            WindowDragSectionView(
+                monitor: model.windowDrag, expanded: expansion(for: id),
+                setModifier: { model.setWindowDragModifier($0) })
         case .tasks:
             TasksSummaryRow(model: model.tasks) { expandedSection = .tasks }
         case .weather:

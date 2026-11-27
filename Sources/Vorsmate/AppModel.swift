@@ -60,6 +60,7 @@ final class AppModel: ObservableObject {
             }
         )
     }()
+    lazy var windowDrag = WindowDragMonitor(modifier: preferences.windowDragModifier, preview: preview)
     lazy var remote = RemoteCompanion(preview: preview)
     lazy var translation = TranslationModel(preview: preview, preferences: preferences.translation) {
         [weak self] prefs in
@@ -143,6 +144,7 @@ final class AppModel: ObservableObject {
                 lockedID: "preview-offline"
             )
         }
+        if preview && CommandLine.arguments.contains("--preview-window-drag") { preferences.windowDragEnabled = true }
         if preview && CommandLine.arguments.contains("--preview-popover") { preferences.remoteEnabled = true }
         if preview && CommandLine.arguments.contains("--preview-information") {
             preferences.weatherEnabled = true
@@ -200,6 +202,7 @@ final class AppModel: ObservableObject {
                 unattendedAuth.objectWillChange,
                 remote.objectWillChange,
                 translation.objectWillChange,
+                windowDrag.objectWillChange,
                 tasks.objectWillChange,
                 typelessRecovery.objectWillChange,
                 plugins.objectWillChange,
@@ -251,6 +254,11 @@ final class AppModel: ObservableObject {
                 id: .unattendedAuth, activate: { unattendedAuth.activate() },
                 deactivate: { unattendedAuth.deactivate() }, refresh: { unattendedAuth.refresh() },
                 visibility: { unattendedAuth.panelDidChangeVisibility($0) }))
+        let windowDrag = windowDrag
+        result.append(
+            BuiltinPlugin(
+                id: .windowDrag, activate: { windowDrag.start() }, deactivate: { windowDrag.stop() },
+                refresh: { windowDrag.refresh() }))
         result.append(remote)
         result.append(translation)
         result.append(tasks)
@@ -277,6 +285,16 @@ final class AppModel: ObservableObject {
 
     func setPlugin(_ id: PluginID, enabled: Bool) {
         do { try plugins.setEnabled(enabled, for: id) } catch { configurationError = error.localizedDescription }
+    }
+
+    func setWindowDragModifier(_ modifier: WindowDragModifier) {
+        guard modifier != windowDrag.modifier else { return }
+        do {
+            try save { $0.windowDragModifier = modifier }
+            windowDrag.setModifier(modifier)
+        } catch {
+            configurationError = error.localizedDescription
+        }
     }
 
     func movePlugin(_ id: PluginID, in category: PluginCategory, by offset: Int) {
@@ -348,6 +366,8 @@ final class AppModel: ObservableObject {
                 if translation.busy || translation.translating || translation.ocrRunning {
                     hasActive = true
                 }
+            case .windowDrag:
+                if windowDrag.status.needsAttention { return .error }
             case .remote:
                 break
             case .tasks:
@@ -382,6 +402,7 @@ final class AppModel: ObservableObject {
                 shutdown.reloadPolicy(preferences.shutdownPolicy)
                 unattendedAuth.reloadPreferences(preferences.unattendedAuth)
                 translation.reloadPreferences(preferences.translation)
+                windowDrag.setModifier(preferences.windowDragModifier)
                 plugins.reloadDisabled(preferences.disabledAtRuntime)
                 plugins.start()
             } catch {

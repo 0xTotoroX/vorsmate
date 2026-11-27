@@ -34,6 +34,8 @@ public struct Preferences: Codable, Equatable, Sendable {
     public var version = 1
     public var policies: [String: SelectionPolicy] = [:]
     public var disabledPlugins: Set<PluginID> = []
+    public var windowDragEnabled = false
+    public var windowDragModifier: WindowDragModifier = .option
     public var remoteEnabled = false
     public var translateEnabled = false
     public var tasksEnabled = false
@@ -48,15 +50,17 @@ public struct Preferences: Codable, Equatable, Sendable {
             if !tasksEnabled { disabled.insert(.tasks) } else { disabled.remove(.tasks) }
             if !weatherEnabled { disabled.insert(.weather) } else { disabled.remove(.weather) }
             if !marketsEnabled { disabled.insert(.markets) } else { disabled.remove(.markets) }
+            if !windowDragEnabled { disabled.insert(.windowDrag) } else { disabled.remove(.windowDrag) }
             return disabled
         }
         set {
+            windowDragEnabled = !newValue.contains(.windowDrag)
             remoteEnabled = !newValue.contains(.remote)
             translateEnabled = !newValue.contains(.translate)
             tasksEnabled = !newValue.contains(.tasks)
             weatherEnabled = !newValue.contains(.weather)
             marketsEnabled = !newValue.contains(.markets)
-            disabledPlugins = newValue.subtracting([.remote, .translate, .tasks, .weather, .markets])
+            disabledPlugins = newValue.subtracting([.remote, .translate, .tasks, .weather, .markets, .windowDrag])
         }
     }
     public var fanProfiles: [Int: FanProfile] = [:]
@@ -66,6 +70,7 @@ public struct Preferences: Codable, Equatable, Sendable {
     public var pluginOrder: [PluginID] = []
     public init() {}
     private enum CodingKeys: String, CodingKey {
+        case windowDragEnabled, windowDragModifier
         case version, policies, disabledPlugins, remoteEnabled, translateEnabled, tasksEnabled, fanProfiles,
             shutdownPolicy, translation, unattendedAuth, pluginOrder
         case weatherEnabled, marketsEnabled, weatherCity
@@ -75,6 +80,8 @@ public struct Preferences: Codable, Equatable, Sendable {
         version = try values.decodeIfPresent(Int.self, forKey: .version) ?? 1
         policies = try values.decodeIfPresent([String: SelectionPolicy].self, forKey: .policies) ?? [:]
         disabledPlugins = try values.decodeIfPresent(Set<PluginID>.self, forKey: .disabledPlugins) ?? []
+        windowDragEnabled = try values.decodeIfPresent(Bool.self, forKey: .windowDragEnabled) ?? false
+        windowDragModifier = try values.decodeIfPresent(WindowDragModifier.self, forKey: .windowDragModifier) ?? .option
         remoteEnabled = try values.decodeIfPresent(Bool.self, forKey: .remoteEnabled) ?? false
         translateEnabled = try values.decodeIfPresent(Bool.self, forKey: .translateEnabled) ?? false
         tasksEnabled = try values.decodeIfPresent(Bool.self, forKey: .tasksEnabled) ?? false

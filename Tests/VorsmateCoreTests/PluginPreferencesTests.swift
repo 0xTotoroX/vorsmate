@@ -14,7 +14,7 @@ struct PluginPreferencesTests {
             let value = try JSONDecoder().decode(Preferences.self, from: Data(json.utf8))
             #expect(value == Preferences())
             #expect(!value.tasksEnabled)
-            #expect(value.disabledAtRuntime == [.remote, .translate, .tasks, .weather, .markets])
+            #expect(value.disabledAtRuntime == [.remote, .translate, .tasks, .weather, .markets, .windowDrag])
             #expect(value.weatherCity == nil)
         }
     }
@@ -30,6 +30,9 @@ struct PluginPreferencesTests {
         value.remoteEnabled = true
         value.translateEnabled = true
         value.tasksEnabled = true
+        value.disabledAtRuntime.remove(.windowDrag)
+        value.windowDragModifier = .commandOption
+        #expect(value.windowDragEnabled && !value.disabledPlugins.contains(.windowDrag))
         value.weatherEnabled = true
         value.marketsEnabled = true
         value.weatherCity = WeatherCity(name: "示例市", latitude: 46.5, longitude: 6.6)
@@ -67,7 +70,7 @@ struct PluginPreferencesTests {
     func optionalPlugins() throws {
         var value = Preferences()
         value.disabledPlugins = [.fan]
-        #expect(value.disabledAtRuntime == [.fan, .remote, .translate, .tasks, .weather, .markets])
+        #expect(value.disabledAtRuntime == [.fan, .remote, .translate, .tasks, .weather, .markets, .windowDrag])
         value.disabledAtRuntime.remove(.remote)
         let data = try JSONEncoder().encode(value)
         let restored = try JSONDecoder().decode(Preferences.self, from: data)
@@ -91,7 +94,7 @@ struct PluginPreferencesTests {
     func order() {
         let expected: [PluginID] = [
             .time, .inputSource, .audioInput, .audioOutput, .fan, .quickShutdown, .unattendedAuth, .remote,
-            .translate, .tasks, .weather, .markets,
+            .translate, .tasks, .weather, .markets, .windowDrag,
         ]
         #expect(PluginID.allCases == expected)
         #expect(PluginID.audioInput.channel == .audioInput)
@@ -120,6 +123,7 @@ struct PluginPreferencesTests {
         #expect(PluginID.translate.defaultCategory == .tools)
         #expect(PluginID.remote.defaultCategory == .tools)
         #expect(PluginID.tasks.defaultCategory == .tools)
+        #expect(PluginID.windowDrag.defaultCategory == .tools)
         #expect(PluginID.weather.defaultCategory == .tools)
         #expect(PluginID.markets.defaultCategory == .tools)
         #expect(PluginID.quickShutdown.defaultCategory == .system)

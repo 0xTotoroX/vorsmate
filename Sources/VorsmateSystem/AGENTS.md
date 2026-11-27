@@ -17,6 +17,9 @@
 - TranslationDriver.swift：ScreenCaptureKit 桌面快照与 CGWindowList 窗口矩形采集、录屏权限预检 / 引导、Vision 带位置框 OCR 区块提取、剪贴板图文读写、PNG 保存面板与离线预览替身。
 - SceneImageRenderer.swift：屏幕选区像素裁切、局部背景 / 前景对比色采样、原场景文字回填与矢量标注叠加合成图像。
 - TranslationService.swift：本机非同步钥匙串 API 密钥存储、NaturalLanguage 语种判断与 OpenAI 兼容批量翻译客户端（支持网络替身）。
+- WindowDragMonitor.swift：会话级鼠标与修饰键监听、辅助功能权限状态和停用释放，预览使用内存。
+- WindowDragGesture.swift：左键拖动阈值、点击还原、固定窗口与指针偏移、合并移动和中断收尾。
+- WindowDragTarget.swift：WindowServer 窗口命中、跨进程 AX 位置读写与宿主原生窗口移动。
 - TasksHubClient.swift：0xTotoro Local Hub HTTP 客户端与可替换网络传输协议；仅访问本机回环地址，缺失或断连返回安全离线错误。
 - GlobalHotKeyCenter.swift：Carbon 全局截图热键线程安全注册与停用注销，附预览空实现。
 - TypelessRecovery.swift：系统进程、事件监听、修饰键与遥控接管回读；保存诊断快照并提供 Typeless 的正常退出和打开操作。

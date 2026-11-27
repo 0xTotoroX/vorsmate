@@ -66,6 +66,23 @@ struct PluginHostTests {
         restored.stop()
     }
 
+    @Test("窗口拖动默认关闭，内存预览可改键、停用并重新启用")
+    func windowDragLifecycle() {
+        let model = AppModel(preview: true)
+        defer { model.stop() }
+        #expect(!model.enabledPlugins.contains(.windowDrag))
+        #expect(model.windowDrag.status == .inactive)
+        model.setPlugin(.windowDrag, enabled: true)
+        #expect(model.windowDrag.status == .ready)
+        model.setWindowDragModifier(.commandOption)
+        model.setPlugin(.windowDrag, enabled: false)
+        model.refresh()
+        #expect(model.windowDrag.status == .inactive)
+        model.setPlugin(.windowDrag, enabled: true)
+        #expect(model.windowDrag.modifier == .commandOption)
+        #expect(model.windowDrag.status == .ready)
+    }
+
     @Test("时间对照模块严格按 pluginOrder 排位分卡，不强行置顶")
     func timeComparisonCardOrderFollowsPluginOrder() {
         let timeFirst = PanelView.cardGroups(for: [.time, .inputSource, .fan])

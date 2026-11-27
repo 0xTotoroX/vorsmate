@@ -30,7 +30,7 @@ public enum PluginCategory: String, CaseIterable, Codable, Sendable, Identifiabl
 
 public enum PluginID: String, Codable, CaseIterable, Sendable, Identifiable {
     case time, inputSource, audioInput, audioOutput, fan, quickShutdown, unattendedAuth, remote, translate, tasks
-    case weather, markets
+    case weather, markets, windowDrag
     public var id: Self { self }
     public var title: String {
         switch self {
@@ -43,6 +43,7 @@ public enum PluginID: String, Codable, CaseIterable, Sendable, Identifiable {
         case .unattendedAuth: "无人值守授权"
         case .remote: "遥控器"
         case .translate: "截图"
+        case .windowDrag: "窗口拖动"
         case .tasks: "待办"
         case .weather: "天气"
         case .markets: "行情"
@@ -59,6 +60,7 @@ public enum PluginID: String, Codable, CaseIterable, Sendable, Identifiable {
         case .unattendedAuth: "lock.shield"
         case .remote: "appletvremote.gen4"
         case .translate: "viewfinder"
+        case .windowDrag: "arrow.up.and.down.and.arrow.left.and.right"
         case .tasks: "checklist"
         case .weather: "cloud.sun"
         case .markets: "chart.line.uptrend.xyaxis"
@@ -68,7 +70,7 @@ public enum PluginID: String, Codable, CaseIterable, Sendable, Identifiable {
         switch self {
         case .time, .inputSource, .audioInput, .audioOutput, .fan:
             .devices
-        case .translate, .remote, .tasks, .weather, .markets:
+        case .translate, .remote, .tasks, .weather, .markets, .windowDrag:
             .tools
         case .quickShutdown, .unattendedAuth:
             .system
