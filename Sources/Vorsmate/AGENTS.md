@@ -2,24 +2,29 @@
 
 > L2 | 父级: ../AGENTS.md
 
-- AppMain.swift：NSApplication、NSStatusItem / NSPopover、按内容伸缩、显隐通知与实例检查、开发标记与同路径重载；`--inspect` / `--preview` / `--show` / `--computer-use-panel` 入口。
+- AppMain.swift：NSApplication、原生编辑与关闭窗口快捷键、NSStatusItem / NSPopover、一键关机与无人值守授权菜单栏常显及右键快速操作、显隐与实例检查；开发版标记及同路径实例交接，兼容现有检查、预览（含 `--preview-translate-window`）和面板入口。
 - PanelAutomation.swift：向同一路径的运行实例发送开始 / 结束命令，管理自动化保持和两分钟超时。
 - DevelopmentFanHelper.swift：固定签名开发包的助手移交、系统登记与应答进程路径核对。
 - PanelDismissal.swift：鼠标离开约半秒收起，原生菜单范围 / 拖动 / 键盘 / 自动化保护；仅面板可见时观察，不影响后台管理。
 - BrandIcon.swift：加载包内的单色海鸥矢量图，菜单栏和面板标题共用 18 点模板图像；开发裸程序无资源时回退到字母符号。
-- AppModel.swift：六模块 PluginHost 装配、兼容配置和模块开关保存、配置冲突保护与恢复、登录状态、面板可见性、无品牌演示设备与内存预览（`--preview-long-list` 扩展滚动验收数据）、显式 `--maintenance` 标记；开发版复用配置，限制更新、登录项及临时签名的助手访问。
-- PanelView.swift：动态插件列表与无首尾 / 重复分隔线、单项展开和功能模块二级菜单；内容超过屏幕适配上限后滚动，登录授权入口仅在需要时出现。
-- ChannelView.swift：三通道共用模式和单份选择 / 拖动列表装配，不显示排序入口或移动图标，等待与错误反馈保留。
-- SourceList.swift：AppKit 滚动列表桥，三点起拖、预览让位、松手一次保存；取消 / 外部配置变化回滚、关闭清理、边缘滚动、点击与键盘选择分离。
+- AppModel.swift：插件装配（含无人值守授权、截图及预览参数）、兼容配置和模块开关保存、冲突保护与恢复、面板显隐、退出停止、内存预览与维护入口；关机前先释放已授权助手再走 System Events，失败时恢复风扇档位；开发版沿用设备和偏好、支持固定包路径的登录项管理，仅限制应用内更新和临时签名下的助手访问。
+- PanelView.swift：顶部分类切换栏（设备 / 工具 / 系统）与微点状态、分组卡片容器、动态插件列表、单项展开、无人值守授权总览一键关闭与详情切换、统一的「功能模块…」启停与排序管理页；内容超过屏幕适配上限后滚动，登录授权入口仅在需要时出现；正常/开发版不再在更多菜单重复展示 Typeless 入口。
+- ChannelView.swift：三通道共用模式和单份选择 / 拖动列表装配，8 项及以内完整展开，超过 8 项以 7.5 行（330pt）露半行暗示滚动；不显示排序入口或移动图标，等待与错误反馈保留。
+- SourceList.swift：AppKit 无滚动条隐式滚动列表桥（`SilentScrollView` + `ZeroScroller` 锁定 `.overlay` 且零占位宽度），三点起拖、预览让位、松手一次保存；取消 / 外部配置变化回滚、关闭清理、边缘滚动、点击与键盘选择分离。
 - SourceRow.swift：原生行内容、离线状态 / 移除、辅助动作和可中断弹簧；轻微抬起，系统减少动态效果时停用动画。
-- PanelSummaryRow.swift：共用摘要行，左侧功能 / 管理状态，右侧当前设备或实测值；长名称与等待反馈，悬停只强调箭头。
-- FanModel.swift：保存全档位、启动 / 唤醒恢复、睡眠 / 停用释放、空闲停轮询；后台读数不切换界面忙碌态，串行请求与代次检查防止停用后的迟到接管。
+- PanelSummaryRow.swift：共用总览摘要行（PanelSummaryRow / PanelActionSummaryRow）、分组卡片（PanelSectionCard）、内联展开卡片（PanelInlineCard）与内联提示（PanelInlineNotice）；悬停只强调箭头。
+- FanModel.swift：保存全档位、启动 / 唤醒恢复、睡眠与关机前释放 / 唤醒或关机失败恢复、空闲停轮询；后台读数不切换界面忙碌态，串行请求与代次检查防止停用后的迟到接管。
 - FanModelDriver.swift：真实 SMC / XPC / SMAppService 与内存预览的可替换边界，支持无硬件模型测试。
-- RemotePanel.swift：同一菜单栏面板的全键列表、模型点选与按手势编辑。
-- RemoteCompanion.swift：发现并验证同目录配套应用，按开关管理子进程、控制管道及配置回执，传递遥控器语音的就绪状态。
+- RemotePanel.swift：同一菜单栏面板的全键列表、模型点选、原生方案 / 动作选单、键帽重录与 Typeless 诊断入口。
+- RemoteCompanion.swift：发现并验证同目录配套应用，按开关管理子进程、控制管道、配置回执与当前生效方案名称，传递遥控器语音的就绪状态。
+- TranslationModel.swift：截图工作流状态机，编排全局截图热键注册、矢量标注、按需 OCR／双引擎翻译回填、图片保存与桌面贴图生命周期。
+- TranslationPanelView.swift：总览内「截图」摘要行、就地展开「开始截图」入口及统一内联卡片中的快捷键 / 双引擎预设 / 密钥 / 语种设置。
+- SystemTranslationBridge.swift：macOS 15+ Apple `Translation` 框架 `.translationTask` 离线批量翻译桥接与离线预览替身。
+- ScreenshotOverlayWindow.swift：全屏窗口吸附框选蒙层（矢量标注预览与三分线辅助）、Liquid Glass A2 纯图标工具条及支持滚轮缩放与透明度的桌面贴图窗口。
 - TypelessRecoveryPanel.swift：菜单栏内的诊断详情、保存后确认及有时限的正常退出流程；预览用内存替身。
-- PluginHost.swift：六插件生命周期协议、注册表、幂等启停、刷新 / 显隐分发与开关持久化失败保护；时间资源随视图启停。
-- QuickShutdownView.swift：菜单栏下班详情、应用勾选和搜索、退出选项、固定操作区及五秒日落倒计时。
+- PluginHost.swift：内置与可选插件生命周期协议、注册表、幂等启停、刷新 / 显隐分发与开关持久化失败保护；时间资源随视图启停。
+- QuickShutdownView.swift：菜单栏关机详情、应用勾选和搜索、退出选项、摘要 / 详情取消入口、清理与提交反馈（倒计时展示于菜单栏，保留电源能量环动画 ShutdownMark）。
+- UnattendedAuthView.swift：菜单栏无人值守授权详情页，包含本机钥匙串密码录入 / 更换 / 删除、全机覆盖告知、可选截止时间设置、辅助功能授权引导、运行状态一键关闭与脱敏活动记录。
 - FanView.swift：摘要显示自动 / 均衡 / 增强 / 自定义与实测值；展开为四个并列选项，自定义显示固定转速滑杆，兼容原有档位和旧自定义曲线；悬停区分热点与参考温度，临时保护与确认失败明确显示。
 - TimeComparisonView.swift：当地 / 美西双时钟，响应系统时区变化，点击展开当天滑杆与双向日期编辑；完成保留换算，现在 / 关闭面板复位，仅可见时定时更新。
 

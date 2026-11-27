@@ -1,7 +1,8 @@
-// [INPUT]: 内置与可选资源计数插件与临时配置存储。
-// [OUTPUT]: 全组合顺序、幂等启停、持久化失败与禁用不刷新测试。
-// [POS]: 内置宿主生命周期回归，不调用设备 API。
+// [INPUT]: 内置与可选资源计数插件、AppModel、PanelView 与临时配置存储。
+// [OUTPUT]: 全组合顺序、幂等启停、持久化失败、禁用不刷新、时间对照按序分组与跨分类指示点响应式刷新测试。
+// [POS]: 内置宿主生命周期与主面板组织回归，不调用设备 API。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+import Combine
 import Foundation
 import Testing
 import VorsmateCore
@@ -63,6 +64,45 @@ struct PluginHostTests {
         try restored.setEnabled(true, for: .fan)
         #expect(probe.starts == 2)
         restored.stop()
+    }
+
+    @Test("时间对照模块严格按 pluginOrder 排位分卡，不强行置顶")
+    func timeComparisonCardOrderFollowsPluginOrder() {
+        let timeFirst = PanelView.cardGroups(for: [.time, .inputSource, .fan])
+        #expect(timeFirst == [.time, .list([.inputSource, .fan])])
+
+        let timeMiddle = PanelView.cardGroups(for: [.inputSource, .time, .audioInput, .fan])
+        #expect(timeMiddle == [.list([.inputSource]), .time, .list([.audioInput, .fan])])
+
+        let timeLast = PanelView.cardGroups(for: [.inputSource, .fan, .time])
+        #expect(timeLast == [.list([.inputSource, .fan]), .time])
+    }
+
+    @Test("子模型状态变更时 AppModel 转发 objectWillChange 以刷新跨分类指示点")
+    func appModelForwardsChildObjectWillChangeForCategoryIndicators() async {
+        let model = AppModel(preview: true)
+        var changes = 0
+        let cancellable = model.objectWillChange.sink { _ in
+            changes += 1
+        }
+        defer {
+            cancellable.cancel()
+            model.stop()
+        }
+
+        let before = changes
+        model.setPlugin(.translate, enabled: true)
+        #expect(model.categoryIndicator(for: .tools) == .none)
+
+        model.translation.saveAPIKey("")
+        #expect(changes > before)
+        #expect(model.categoryIndicator(for: .tools) == .error)
+
+        let afterError = changes
+        model.shutdown.start(.shutdown)
+        #expect(changes > afterError)
+        #expect(model.categoryIndicator(for: .system) == .active)
+        model.shutdown.cancel()
     }
 }
 

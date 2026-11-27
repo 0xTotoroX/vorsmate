@@ -11,11 +11,15 @@ struct SourceList: NSViewRepresentable {
     @ObservedObject var controller: ChannelController
 
     func makeNSView(context: Context) -> NSScrollView {
+        makeScrollView()
+    }
+
+    func makeScrollView() -> NSScrollView {
         let list = SourceListView(frame: NSRect(x: 0, y: 0, width: 320, height: 0))
         list.autoresizingMask = .width
         list.setAccessibilityLabel("\(controller.channel.title)列表，可直接拖动排序")
         list.setAccessibilityIdentifier("sources.\(controller.channel.rawValue)")
-        let scroll = NSScrollView()
+        let scroll = SilentScrollView()
         scroll.borderType = .noBorder
         scroll.drawsBackground = false
         scroll.hasVerticalScroller = true
@@ -47,6 +51,39 @@ struct SourceList: NSViewRepresentable {
             list?.apply(policy: controller.policy, snapshot: controller.snapshot)
         }
         list.apply(policy: controller.policy, snapshot: controller.snapshot)
+    }
+}
+
+private final class ZeroScroller: NSScroller {
+    override class var isCompatibleWithOverlayScrollers: Bool { true }
+
+    override class func scrollerWidth(
+        for controlSize: NSControl.ControlSize,
+        scrollerStyle: NSScroller.Style
+    ) -> CGFloat {
+        0
+    }
+
+    override func draw(_ dirtyRect: NSRect) {}
+    override func drawKnob() {}
+    override func drawKnobSlot(in slotRect: NSRect, highlight flag: Bool) {}
+}
+
+private final class SilentScrollView: NSScrollView {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        super.scrollerStyle = .overlay
+        verticalScroller = ZeroScroller()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var scrollerStyle: NSScroller.Style {
+        get { .overlay }
+        set { super.scrollerStyle = .overlay }
     }
 }
 

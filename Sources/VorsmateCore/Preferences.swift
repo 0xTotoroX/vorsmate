@@ -6,14 +6,26 @@ import Darwin
 import Foundation
 
 // The directory stays in place when an atomic write replaces the file or promotes a v1 profile to v2.
-func withConfigurationWriteLock(at url: URL, _ write: () throws -> Void) throws {
+func withConfigurationWriteLock(at url: URL, timeoutSeconds: TimeInterval = 1.5, _ write: () throws -> Void) throws {
     let directory = url.deletingLastPathComponent()
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     let fd = open(directory.path, O_RDONLY | O_DIRECTORY | O_CLOEXEC)
     guard fd >= 0 else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno)) }
-    defer { close(fd) }
-    while flock(fd, LOCK_EX) != 0 {
-        if errno != EINTR { throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno)) }
+    defer {
+        flock(fd, LOCK_UN)
+        close(fd)
+    }
+    let timeoutNanos = UInt64(max(0.05, timeoutSeconds) * 1_000_000_000)
+    let deadline = DispatchTime.now().uptimeNanoseconds &+ timeoutNanos
+    while flock(fd, LOCK_EX | LOCK_NB) != 0 {
+        if errno == EINTR { continue }
+        if errno != EWOULDBLOCK {
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+        }
+        if DispatchTime.now().uptimeNanoseconds >= deadline {
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(ETIMEDOUT))
+        }
+        usleep(10_000)
     }
     try write()
 }
@@ -23,18 +35,28 @@ public struct Preferences: Codable, Equatable, Sendable {
     public var policies: [String: SelectionPolicy] = [:]
     public var disabledPlugins: Set<PluginID> = []
     public var remoteEnabled = false
+    public var translateEnabled = false
     public var disabledAtRuntime: Set<PluginID> {
-        get { remoteEnabled ? disabledPlugins.subtracting([.remote]) : disabledPlugins.union([.remote]) }
+        get {
+            var disabled = disabledPlugins
+            if !remoteEnabled { disabled.insert(.remote) } else { disabled.remove(.remote) }
+            if !translateEnabled { disabled.insert(.translate) } else { disabled.remove(.translate) }
+            return disabled
+        }
         set {
             remoteEnabled = !newValue.contains(.remote)
-            disabledPlugins = newValue.subtracting([.remote])
+            translateEnabled = !newValue.contains(.translate)
+            disabledPlugins = newValue.subtracting([.remote, .translate])
         }
     }
     public var fanProfiles: [Int: FanProfile] = [:]
     public var shutdownPolicy = ShutdownPolicy()
+    public var translation = TranslationPreferences()
+    public var pluginOrder: [PluginID] = []
     public init() {}
     private enum CodingKeys: String, CodingKey {
-        case version, policies, disabledPlugins, remoteEnabled, fanProfiles, shutdownPolicy
+        case version, policies, disabledPlugins, remoteEnabled, translateEnabled, fanProfiles, shutdownPolicy,
+            translation, pluginOrder
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -42,8 +64,37 @@ public struct Preferences: Codable, Equatable, Sendable {
         policies = try values.decodeIfPresent([String: SelectionPolicy].self, forKey: .policies) ?? [:]
         disabledPlugins = try values.decodeIfPresent(Set<PluginID>.self, forKey: .disabledPlugins) ?? []
         remoteEnabled = try values.decodeIfPresent(Bool.self, forKey: .remoteEnabled) ?? false
+        translateEnabled = try values.decodeIfPresent(Bool.self, forKey: .translateEnabled) ?? false
         fanProfiles = try values.decodeIfPresent([Int: FanProfile].self, forKey: .fanProfiles) ?? [:]
         shutdownPolicy = try values.decodeIfPresent(ShutdownPolicy.self, forKey: .shutdownPolicy) ?? ShutdownPolicy()
+        translation =
+            try values.decodeIfPresent(TranslationPreferences.self, forKey: .translation)
+            ?? TranslationPreferences()
+        pluginOrder = try values.decodeIfPresent([PluginID].self, forKey: .pluginOrder) ?? []
+    }
+    public func resolvedOrder(from candidates: [PluginID]) -> [PluginID] {
+        let candidateSet = Set(candidates)
+        var seen: Set<PluginID> = []
+        var result: [PluginID] = []
+        result.reserveCapacity(candidates.count)
+        for id in pluginOrder where candidateSet.contains(id) && seen.insert(id).inserted {
+            result.append(id)
+        }
+        for id in candidates where seen.insert(id).inserted {
+            result.append(id)
+        }
+        return result
+    }
+    public static func movedOrder(_ current: [PluginID], moving id: PluginID, by offset: Int) -> [PluginID] {
+        guard offset != 0, let index = current.firstIndex(of: id), !current.isEmpty else {
+            return current
+        }
+        let target = min(current.count - 1, max(0, index + offset))
+        guard target != index else { return current }
+        var next = current
+        let item = next.remove(at: index)
+        next.insert(item, at: target)
+        return next
     }
     public subscript(channel: Channel) -> SelectionPolicy {
         get { policies[channel.rawValue] ?? SelectionPolicy() }

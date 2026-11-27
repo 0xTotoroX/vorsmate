@@ -212,4 +212,27 @@ struct SourceListTests {
         #expect(list.displayedIDs == ["a", "b", "c"])
         #expect(saves == 0)
     }
+
+    @Test("SourceList 使用隐式无占位滚动条且不保留灰色槽位")
+    func silentZeroScrollerScrollView() {
+        let driver = ListDriver()
+        let sources = (0..<10).map { Source(id: "\($0)", name: "设备 \($0)") }
+        driver.snapshot = Snapshot(sources: sources)
+        let controller = ChannelController(
+            channel: .audioOutput,
+            driver: driver,
+            policy: SelectionPolicy(priority: sources),
+            persist: { _ in })
+        defer { controller.stop() }
+
+        let scroll = SourceList(controller: controller).makeScrollView()
+        scroll.frame = NSRect(x: 0, y: 0, width: 320, height: 176)
+        scroll.scrollerStyle = .legacy
+        scroll.tile()
+
+        #expect(scroll.scrollerStyle == .overlay)
+        #expect(scroll.contentSize.width == scroll.frame.width)
+        #expect(scroll.contentView.frame.width == scroll.frame.width)
+        #expect((scroll.verticalScroller?.frame.width ?? 0) == 0)
+    }
 }

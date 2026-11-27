@@ -111,32 +111,42 @@ struct TypelessRecoveryPanel: View {
     let back: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Button(action: back) { Label("Vorsmate", systemImage: "chevron.left") }
-                .buttonStyle(.plain).font(.callout).foregroundStyle(.secondary)
-                .accessibilityIdentifier("typeless.back")
-            Text("Typeless 诊断与恢复").font(.title2.weight(.semibold))
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 12) {
+                Button(action: back) { Label("Vorsmate", systemImage: "chevron.left") }
+                    .buttonStyle(.plain).font(.callout).foregroundStyle(.secondary)
+                    .accessibilityIdentifier("typeless.back")
+                Text("Typeless 诊断与恢复").font(.title2.weight(.semibold))
+            }
+            .padding(.horizontal, 20)
+
             if let snapshot = model.snapshot {
-                VStack(alignment: .leading, spacing: 9) {
-                    diagnosticRow("Typeless", snapshot.running ? "运行中" : "未运行", id: "running")
-                    diagnosticRow("快捷键监听", snapshot.listener.title, id: "listener")
-                    diagnosticRow(
-                        "系统检测到按下",
-                        snapshot.modifiers.isEmpty
-                            ? "未检测到 Control、Option 或 Fn" : snapshot.modifiers.joined(separator: "、"),
-                        id: "modifiers")
-                    Divider()
-                    diagnosticRow("小米遥控器", snapshot.remoteConnection.title, id: "remote")
-                    diagnosticRow("Vorsmate 接管", snapshot.remoteTakeover.title, id: "takeover")
+                PanelSectionCard {
+                    VStack(alignment: .leading, spacing: 9) {
+                        diagnosticRow("Typeless", snapshot.running ? "运行中" : "未运行", id: "running")
+                        diagnosticRow("快捷键监听", snapshot.listener.title, id: "listener")
+                        diagnosticRow(
+                            "系统检测到按下",
+                            snapshot.modifiers.isEmpty
+                                ? "未检测到 Control、Option 或 Fn" : snapshot.modifiers.joined(separator: "、"),
+                            id: "modifiers")
+                        Divider()
+                        diagnosticRow("小米遥控器", snapshot.remoteConnection.title, id: "remote")
+                        diagnosticRow("Vorsmate 接管", snapshot.remoteTakeover.title, id: "takeover")
+                    }
+                    .padding(14)
                 }
+                .padding(.horizontal, 16)
+
                 Text(snapshot.guidance).font(.callout).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 20)
                     .accessibilityIdentifier("typeless.guidance")
             }
-            Divider()
             actions
+                .padding(.horizontal, 20)
         }
-        .padding(.horizontal, 20).padding(.vertical, 14)
+        .padding(.vertical, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .onDisappear(perform: model.cancelConfirmation)
     }
@@ -158,11 +168,11 @@ struct TypelessRecoveryPanel: View {
                 .controlSize(.small).accessibilityIdentifier("typeless.progress")
         case .idle, .finished, .failed:
             if case .finished(let message) = model.phase {
-                Label(message, systemImage: "checkmark.circle").font(.callout)
+                PanelInlineNotice(text: message, symbol: "checkmark.circle")
                     .accessibilityIdentifier("typeless.result")
             }
             if case .failed(let message) = model.phase {
-                Label(message, systemImage: "exclamationmark.circle").font(.callout).foregroundStyle(.red)
+                PanelInlineNotice(text: message, symbol: "exclamationmark.circle", isError: true)
                     .accessibilityIdentifier("typeless.error")
             }
             HStack {

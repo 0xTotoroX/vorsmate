@@ -1,6 +1,6 @@
 // [INPUT]: 系统驱动、PreferencesStore、SMAppService 与更新模型。
 // [OUTPUT]: 插件装配、配置与开关、可见性分发、开发版与隔离预览和维护入口。
-// [POS]: 应用组合入口；通过 PluginHost 控制各模块资源；关机执行选择已授权助手或系统回退。
+// [POS]: 应用组合入口；通过 PluginHost 控制各模块资源；关机先释放已授权助手再走系统事件。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import AppKit
 import Combine
@@ -14,6 +14,7 @@ final class AppModel: ObservableObject {
     let preview: Bool
     let development: Bool
     let maintenance: Bool
+    let canManageLogin: Bool
     private let canUseFanHelper: Bool
     lazy var fan = FanModel(
         preview: preview, savedProfiles: preferences.fanProfiles,
@@ -24,18 +25,42 @@ final class AppModel: ObservableObject {
     lazy var shutdown = ShutdownController(
         driver: preview
             ? PreviewShutdownDriver(longList: CommandLine.arguments.contains("--preview-long-list"))
-            : SystemShutdownDriver(systemAction: { [canUseFanHelper] action in
-                if canUseFanHelper && SMAppService.daemon(plistName: FanServiceIdentity.plist).status == .enabled {
-                    let client = FanConnection()
-                    defer { client.invalidate() }
-                    // A lost reply does not mean the helper failed to submit the system request.
-                    _ = try await client.request(FanCommand(action: action == .shutdown ? .shutdown : .restart))
-                    return
-                }
-                try await SystemShutdownDriver.appleScript(action)
-            }), policy: preferences.shutdownPolicy,
-        persist: { [weak self] policy in try self?.save { $0.shutdownPolicy = policy } })
+            : SystemShutdownDriver(systemAction: SystemShutdownDriver.appleScript),
+        policy: preferences.shutdownPolicy,
+        persist: { [weak self] policy in try self?.save { $0.shutdownPolicy = policy } },
+        prepareSystemAction: { [weak self] in
+            guard let self else { return }
+            if self.canUseFanHelper && SMAppService.daemon(plistName: FanServiceIdentity.plist).status == .enabled {
+                try await self.fan.releaseForShutdown()
+            }
+        },
+        recoverPreparedAction: { [weak self] in
+            self?.fan.resumeAfterShutdownFailure()
+        })
+    lazy var unattendedAuth: UnattendedAuthController = {
+        if preview {
+            let prefill =
+                CommandLine.arguments.contains("--preview-unattended-active")
+                || CommandLine.arguments.contains("--preview-unattended-deadline")
+            return UnattendedAuthController(
+                driver: PreviewUnattendedAuthDriver(trusted: true),
+                passwordStore: InMemoryUnattendedPasswordStore(initialPassword: prefill ? "preview-admin" : nil),
+                passwordVerifier: FixedPasswordVerifier(),
+                historyStore: .inMemory
+            )
+        }
+        return UnattendedAuthController(
+            driver: SystemUnattendedAuthDriver(),
+            passwordStore: KeychainUnattendedPasswordStore(),
+            passwordVerifier: OpenDirectoryPasswordVerifier(),
+            historyStore: .standard
+        )
+    }()
     lazy var remote = RemoteCompanion(preview: preview)
+    lazy var translation = TranslationModel(preview: preview, preferences: preferences.translation) {
+        [weak self] prefs in
+        try self?.save { $0.translation = prefs }
+    }
     lazy var typelessRecovery: TypelessRecoveryModel = {
         if preview {
             return .preview(
@@ -66,15 +91,21 @@ final class AppModel: ObservableObject {
     private(set) var controllers: [ChannelController] = []
     private let store = PreferencesStore.standard
     private var canSave = true
+    private var childCancellables: [AnyCancellable] = []
+
+    static func supportsLoginItem(bundle: Bundle = .main, preview: Bool) -> Bool {
+        !preview && bundle.bundleURL.pathExtension == "app" && bundle.bundleIdentifier == FanServiceIdentity.app
+    }
 
     init(preview: Bool, development: Bool = false) {
         self.preview = preview
         self.development = development
         self.canUseFanHelper = !development || FanServiceIdentity.teamID() != nil
         self.maintenance = !preview && !development && CommandLine.arguments.contains("--maintenance")
+        self.canManageLogin = Self.supportsLoginItem(preview: preview)
         self.updates = UpdateModel(enabled: !preview && !development)
         if !preview {
-            if !development { refreshLoginStatus() }
+            if canManageLogin { refreshLoginStatus() }
             do { preferences = try store.load() } catch {
                 configurationError = "无法读取配置：\(error.localizedDescription)"
                 canSave = false
@@ -87,6 +118,12 @@ final class AppModel: ObservableObject {
             )
         }
         if preview && CommandLine.arguments.contains("--preview-popover") { preferences.remoteEnabled = true }
+        if preview
+            && (CommandLine.arguments.contains("--preview-translate")
+                || CommandLine.arguments.contains("--preview-translate-window"))
+        {
+            preferences.translateEnabled = true
+        }
         for channel in Channel.allCases {
             let driver: any SourceDriver = preview ? PreviewDriver(channel: channel) : Self.driver(for: channel)
             if channel == .audioInput, let input = driver as? AudioDeviceDriver {
@@ -105,6 +142,43 @@ final class AppModel: ObservableObject {
             controllers.append(controller)
         }
         if canSave { plugins.start() }
+        if preview {
+            let previewDeadline = CommandLine.arguments.contains("--preview-unattended-deadline")
+            let previewActive = CommandLine.arguments.contains("--preview-unattended-active")
+            if previewDeadline || previewActive {
+                unattendedAuth.loadPreviewSampleHistory(now: unattendedAuth.now)
+                _ = unattendedAuth.enable(deadlineChoice: previewDeadline ? .durationMinutes(25) : .none)
+            }
+        }
+        observeChildModels()
+    }
+
+    private func observeChildModels() {
+        childCancellables.removeAll()
+        let publishers: [ObservableObjectPublisher] =
+            controllers.map(\.objectWillChange) + [
+                fan.objectWillChange,
+                shutdown.objectWillChange,
+                unattendedAuth.objectWillChange,
+                remote.objectWillChange,
+                translation.objectWillChange,
+                typelessRecovery.objectWillChange,
+                plugins.objectWillChange,
+            ]
+        for publisher in publishers {
+            publisher.sink { [weak self] _ in
+                if Thread.isMainThread {
+                    MainActor.assumeIsolated {
+                        self?.objectWillChange.send()
+                    }
+                } else {
+                    Task { @MainActor [weak self] in
+                        self?.objectWillChange.send()
+                    }
+                }
+            }
+            .store(in: &childCancellables)
+        }
     }
     private func save(_ change: (inout Preferences) -> Void) throws {
         guard canSave else { throw CocoaError(.fileReadCorruptFile) }
@@ -123,6 +197,7 @@ final class AppModel: ObservableObject {
         }
         let fan = fan
         let shutdown = shutdown
+        let unattendedAuth = unattendedAuth
         result.append(
             BuiltinPlugin(
                 id: .fan, activate: { fan.activate() }, deactivate: { fan.stop() },
@@ -132,13 +207,105 @@ final class AppModel: ObservableObject {
                 id: .quickShutdown, activate: { shutdown.activate() },
                 deactivate: { shutdown.deactivate() }, refresh: { shutdown.refresh() },
                 visibility: { shutdown.panelDidChangeVisibility($0) }))
+        result.append(
+            BuiltinPlugin(
+                id: .unattendedAuth, activate: { unattendedAuth.activate() },
+                deactivate: { unattendedAuth.deactivate() }, refresh: { unattendedAuth.refresh() },
+                visibility: { unattendedAuth.panelDidChangeVisibility($0) }))
         result.append(remote)
+        result.append(translation)
         return result
     }
+    enum CategoryIndicator {
+        case none
+        case active
+        case error
+    }
+
     var availablePlugins: [PluginID] { PluginID.allCases.filter { $0 != .remote || remote.available } }
     var enabledPlugins: [PluginID] { availablePlugins.filter { plugins.enabledIDs.contains($0) } }
+    var orderedAvailablePlugins: [PluginID] { preferences.resolvedOrder(from: availablePlugins) }
+    var orderedEnabledPlugins: [PluginID] { preferences.resolvedOrder(from: enabledPlugins) }
+    var hasCustomPluginOrder: Bool { !preferences.pluginOrder.isEmpty }
+
     func setPlugin(_ id: PluginID, enabled: Bool) {
         do { try plugins.setEnabled(enabled, for: id) } catch { configurationError = error.localizedDescription }
+    }
+
+    func movePlugin(_ id: PluginID, in category: PluginCategory, by offset: Int) {
+        let fullOrder = preferences.resolvedOrder(from: PluginID.allCases)
+        let categoryIndices = fullOrder.indices.filter { fullOrder[$0].defaultCategory == category }
+        let categoryItems = categoryIndices.map { fullOrder[$0] }
+        let reordered = Preferences.movedOrder(categoryItems, moving: id, by: offset)
+        guard reordered != categoryItems else { return }
+
+        var updated = fullOrder
+        for (slotIndex, item) in zip(categoryIndices, reordered) {
+            updated[slotIndex] = item
+        }
+        let nextOrder = updated == PluginID.allCases ? [] : updated
+        do {
+            try save { $0.pluginOrder = nextOrder }
+        } catch {
+            configurationError = error.localizedDescription
+        }
+    }
+
+    func resetPluginOrder() {
+        guard !preferences.pluginOrder.isEmpty else { return }
+        do {
+            try save { $0.pluginOrder = [] }
+        } catch {
+            configurationError = error.localizedDescription
+        }
+    }
+
+    func categoryIndicator(for category: PluginCategory) -> CategoryIndicator {
+        let items = orderedEnabledPlugins.filter { $0.defaultCategory == category }
+        var hasActive = false
+        for id in items {
+            switch id {
+            case .time:
+                break
+            case .inputSource, .audioInput, .audioOutput:
+                if let controller = controllers.first(where: { $0.channel == id.channel }),
+                    controller.error != nil
+                {
+                    return .error
+                }
+            case .fan:
+                if fan.error != nil || fan.snapshot.safetyPause != nil {
+                    return .error
+                }
+            case .quickShutdown:
+                if shutdown.error != nil {
+                    return .error
+                }
+                if shutdown.canCancel || shutdown.executing {
+                    hasActive = true
+                }
+            case .unattendedAuth:
+                if unattendedAuth.errorMessage != nil
+                    || unattendedAuth.passwordInvalidated
+                    || (unattendedAuth.isEnabled && !unattendedAuth.accessibilityTrusted)
+                {
+                    return .error
+                }
+                if unattendedAuth.isEnabled {
+                    hasActive = true
+                }
+            case .translate:
+                if translation.hotKeyConflict != nil || translation.feedbackIsError {
+                    return .error
+                }
+                if translation.busy || translation.translating || translation.ocrRunning {
+                    hasActive = true
+                }
+            case .remote:
+                break
+            }
+        }
+        return hasActive ? .active : .none
     }
     static func driver(for channel: Channel) -> any SourceDriver {
         switch channel {
@@ -150,7 +317,7 @@ final class AppModel: ObservableObject {
     func refresh() {
         remote.discover()
         objectWillChange.send()
-        if !preview && !development { refreshLoginStatus() }
+        if canManageLogin { refreshLoginStatus() }
         if !canSave {
             do {
                 preferences = try store.load()
@@ -159,6 +326,7 @@ final class AppModel: ObservableObject {
                 for controller in controllers { controller.reload(preferences[controller.channel], start: false) }
                 fan.reloadSavedProfiles(preferences.fanProfiles)
                 shutdown.reloadPolicy(preferences.shutdownPolicy)
+                translation.reloadPreferences(preferences.translation)
                 plugins.reloadDisabled(preferences.disabledAtRuntime)
                 plugins.start()
             } catch {
@@ -170,14 +338,15 @@ final class AppModel: ObservableObject {
     }
     func stop() {
         updates.stop()
+        unattendedAuth.terminate()
         plugins.stop()
     }
     func setLogin(_ enabled: Bool) {
-        guard !development else { return }
         guard !preview else {
             loginEnabled = enabled
             return
         }
+        guard canManageLogin else { return }
         do {
             if enabled { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
             refreshLoginStatus()

@@ -160,17 +160,65 @@ struct FanModelTests {
         model.stop()
         await model.waitForOperations()
     }
-    @Test("写盘失败不下发命令也不改变保存档位")
-    func persistenceFailure() async {
+    @Test("写盘失败回滚内存与硬件档位；命令失败不写盘")
+    func persistenceAndCommandFailure() async {
         let driver = FanMock()
         let model = FanModel(preview: true, driver: driver, persist: { _ in throw CocoaError(.fileWriteUnknown) })
         model.activate()
         await model.waitForOperations()
         model.configure(id: 0, profile: FanProfile(mode: .fixed))
         await model.waitForOperations()
-        #expect(!driver.actions.contains(.configure))
         #expect(model.savedProfiles.isEmpty)
+        #expect(driver.snapshot.profiles.isEmpty)
         #expect(model.error != nil)
+        model.stop()
+        await model.waitForOperations()
+
+        var persistCount = 0
+        let rejectingDriver = FanMock()
+        rejectingDriver.rejectedID = 0
+        let rejectingModel = FanModel(preview: true, driver: rejectingDriver, persist: { _ in persistCount += 1 })
+        rejectingModel.activate()
+        await rejectingModel.waitForOperations()
+        rejectingModel.configure(id: 0, profile: FanProfile(mode: .fixed))
+        await rejectingModel.waitForOperations()
+        #expect(persistCount == 0)
+        #expect(rejectingModel.savedProfiles.isEmpty)
+        #expect(rejectingModel.error != nil)
+        rejectingModel.stop()
+        await rejectingModel.waitForOperations()
+    }
+
+    @Test("高温保护清除固定转速后从 savedProfiles 移除并持久化，唤醒不再恢复")
+    func safetyClearedFixedFanIsRemovedFromSavedProfiles() async {
+        var persisted: [Int: FanProfile] = [
+            0: FanProfile(mode: .fixed, rpm: 3200),
+            1: FanCurvePreset.balanced.profile,
+        ]
+        let driver = FanMock()
+        let model = FanModel(preview: true, savedProfiles: persisted, driver: driver, persist: { persisted = $0 })
+        model.activate()
+        await model.waitForOperations()
+
+        driver.snapshot.profiles.removeValue(forKey: 0)
+        driver.snapshot.safetyClearedFixedFanIDs = [0]
+        driver.snapshot.safetyPause = .systemPressure
+        model.refresh()
+        await model.waitForOperations()
+
+        #expect(model.savedProfiles[0] == nil)
+        #expect(model.savedProfiles[1] == FanCurvePreset.balanced.profile)
+        #expect(persisted[0] == nil)
+        #expect(persisted[1] == FanCurvePreset.balanced.profile)
+
+        driver.snapshot.safetyClearedFixedFanIDs = []
+        driver.snapshot.safetyPause = nil
+        model.willSleep()
+        await model.waitForOperations()
+        model.didWake()
+        await model.waitForOperations()
+        #expect(driver.snapshot.profiles[0] == nil)
+        #expect(driver.snapshot.profiles[1] == FanCurvePreset.balanced.profile)
         model.stop()
         await model.waitForOperations()
     }
@@ -243,6 +291,58 @@ struct FanModelTests {
         await model.waitForOperations()
         #expect(driver.actions.count == count + 1)
         #expect(!model.busy)
+        model.stop()
+        await model.waitForOperations()
+    }
+    @Test("关机前经自有驱动释放风扇并停止轮询，系统动作失败后可恢复档位")
+    func releaseForShutdownAndResume() async throws {
+        let driver = FanMock()
+        let model = FanModel(
+            preview: true, savedProfiles: [0: FanCurvePreset.cooling.profile], driver: driver)
+        model.activate()
+        model.setPanelVisible(true)
+        await model.waitForOperations()
+        #expect(model.polling)
+        #expect(model.snapshot.profiles[0] == FanCurvePreset.cooling.profile)
+        try await model.releaseForShutdown()
+        #expect(driver.actions.last == .release)
+        #expect(model.snapshot.profiles.isEmpty)
+        #expect(!model.polling)
+        model.resumeAfterShutdownFailure()
+        await model.waitForOperations()
+        #expect(model.snapshot.profiles[0] == FanCurvePreset.cooling.profile)
+        #expect(model.polling)
+        model.stop()
+        await model.waitForOperations()
+    }
+
+    @Test("在途 refresh 期间触发 releaseForShutdown 时阻止 defer 重启轮询")
+    func releaseForShutdownPreventsInFlightRefreshFromRestartingPolling() async throws {
+        let driver = FanMock()
+        let model = FanModel(
+            preview: true, savedProfiles: [0: FanCurvePreset.cooling.profile], driver: driver)
+        model.activate()
+        model.setPanelVisible(true)
+        await model.waitForOperations()
+        #expect(model.polling)
+
+        driver.holdStatus = true
+        model.refresh()
+        for _ in 0..<30 { await Task.yield() }
+
+        let releaseTask = Task { @MainActor in
+            try await model.releaseForShutdown()
+        }
+        for _ in 0..<20 { await Task.yield() }
+        driver.resumeStatus()
+        try await releaseTask.value
+
+        #expect(!model.polling)
+        #expect(driver.actions.last == .release)
+
+        model.resumeAfterShutdownFailure()
+        await model.waitForOperations()
+        #expect(model.polling)
         model.stop()
         await model.waitForOperations()
     }

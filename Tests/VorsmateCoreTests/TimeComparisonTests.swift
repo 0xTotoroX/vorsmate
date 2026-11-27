@@ -108,4 +108,61 @@ struct TimeComparisonTests {
         let end = TimeComparison(at: day.instant(at: day.lastMinute), localTimeZone: zone)
         #expect(end.local.date == "2026-11-01" && end.local.time == "23:59")
     }
+    @Test("美西参考区域在春秋季夏令时切换日的滑杆分钟映射")
+    func pacificDaySlider() {
+        let springDay = LocalDayTimeline(
+            at: instant("2026-03-08T12:00:00Z"),
+            region: .pacific,
+            localTimeZone: zone,
+            comparisonZone: .pacific)
+        #expect(springDay.lastMinute == 23 * 60 - 1)
+        let afterSpringJump = TimeComparison(at: springDay.instant(at: 120), localTimeZone: zone)
+        #expect(afterSpringJump.pacific.time == "03:00" && afterSpringJump.pacific.abbreviation == "PDT")
+        let springEnd = TimeComparison(at: springDay.instant(at: 3000), localTimeZone: zone)
+        #expect(springEnd.pacific.date == "2026-03-08" && springEnd.pacific.time == "23:59")
+
+        let fallDay = LocalDayTimeline(
+            at: instant("2026-11-01T12:00:00Z"),
+            region: .pacific,
+            localTimeZone: zone,
+            comparisonZone: .pacific)
+        #expect(fallDay.lastMinute == 25 * 60 - 1)
+        let first0130 = fallDay.instant(at: 90)
+        let second0130 = fallDay.instant(at: 150)
+        let firstCmp = TimeComparison(at: first0130, localTimeZone: zone)
+        let secondCmp = TimeComparison(at: second0130, localTimeZone: zone)
+        #expect(firstCmp.pacific.time == "01:30" && firstCmp.pacific.abbreviation == "PDT")
+        #expect(secondCmp.pacific.time == "01:30" && secondCmp.pacific.abbreviation == "PST")
+        #expect(fallDay.minute(at: first0130) == 90 && fallDay.minute(at: second0130) == 150)
+        let fallEnd = TimeComparison(at: fallDay.instant(at: fallDay.lastMinute), localTimeZone: zone)
+        #expect(fallEnd.pacific.date == "2026-11-01" && fallEnd.pacific.time == "23:59")
+    }
+    @Test("支持切换美东、伦敦、东京与 UTC 对比时区")
+    func comparisonZones() {
+        let winter = instant("2026-01-15T15:00:00Z")
+        let summer = instant("2026-07-15T15:00:00Z")
+
+        let easternWinter = TimeComparison(at: winter, localTimeZone: zone, comparisonZone: .eastern)
+        #expect(easternWinter.pacific.time == "10:00" && easternWinter.pacific.abbreviation == "EST")
+        #expect(easternWinter.differenceInSeconds == 13 * 3600)
+        #expect(easternWinter.differenceLabel == "当地快 13 小时")
+        #expect(easternWinter.dayLabel == "同一天")
+
+        let easternSummer = TimeComparison(at: summer, localTimeZone: zone, comparisonZone: .eastern)
+        #expect(easternSummer.pacific.time == "11:00" && easternSummer.pacific.abbreviation == "EDT")
+        #expect(easternSummer.differenceInSeconds == 12 * 3600)
+
+        let londonWinter = TimeComparison(at: winter, localTimeZone: zone, comparisonZone: .london)
+        #expect(londonWinter.pacific.time == "15:00" && londonWinter.pacific.abbreviation == "GMT")
+        let londonSummer = TimeComparison(at: summer, localTimeZone: zone, comparisonZone: .london)
+        #expect(londonSummer.pacific.time == "16:00" && londonSummer.pacific.abbreviation == "BST")
+
+        let tokyo = TimeComparison(at: winter, localTimeZone: zone, comparisonZone: .tokyo)
+        #expect(tokyo.pacific.time == "00:00" && tokyo.pacific.date == "2026-01-16")
+        #expect(tokyo.pacific.abbreviation == "JST" && tokyo.dayLabel == "东京后一天")
+
+        let utc = TimeComparison(at: winter, localTimeZone: zone, comparisonZone: .utc)
+        #expect(utc.pacific.time == "15:00" && utc.pacific.abbreviation == "UTC")
+        #expect(utc.differenceInSeconds == 8 * 3600)
+    }
 }

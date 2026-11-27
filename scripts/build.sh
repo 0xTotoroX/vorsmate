@@ -17,8 +17,11 @@ esac
 if "$DEVELOPMENT" && [[ -z "${VORSMATE_DIST_DIR:-}" ]]; then
     VORSMATE_DIST_DIR="$PROJECT_ROOT/artifacts/dev/build"
 fi
+SHOW_BIN_ARGS=("${BUILD_ARGS[@]}")
+SDK_VERSION="$(xcrun --show-sdk-version 2>/dev/null || echo 14.0)"
+BUILD_ARGS+=(-Xlinker -platform_version -Xlinker macos -Xlinker 14.0 -Xlinker "$SDK_VERSION")
 swift build "${BUILD_ARGS[@]}"
-BIN_PATH="$(swift build "${BUILD_ARGS[@]}" --show-bin-path)"
+BIN_PATH="$(swift build "${SHOW_BIN_ARGS[@]}" --show-bin-path)"
 DIST_DIR="${VORSMATE_DIST_DIR:-$PROJECT_ROOT/dist}"
 mkdir -p "$DIST_DIR"
 DIST_DIR="$(cd "$DIST_DIR" && pwd -P)"

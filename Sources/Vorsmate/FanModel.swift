@@ -1,5 +1,5 @@
 // [INPUT]: 可替换风扇驱动、已存档位、保存回调与工作区睡眠 / 唤醒事件。
-// [OUTPUT]: 跨启动恢复、睡眠释放 / 唤醒恢复、安静读数刷新及独立的手动处理状态。
+// [OUTPUT]: 跨启动恢复、睡眠与关机前释放 / 唤醒或失败恢复、安静读数刷新及独立的手动处理状态。
 // [POS]: 界面与助手的装配；串行请求和代次检查阻止迟到回读与停用后接管。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import AppKit
@@ -26,6 +26,7 @@ final class FanModel: ObservableObject {
     private var revision = 0
     private var active = false
     private var sleeping = false
+    private var releasingForShutdown = false
     private var panelVisible = false
     private var refreshing = false
     var polling: Bool { timer != nil }
@@ -48,6 +49,7 @@ final class FanModel: ObservableObject {
         guard !active else { return }
         active = true
         sleeping = false
+        releasingForShutdown = false
         let center = NSWorkspace.shared.notificationCenter
         for (name, sleep) in [(NSWorkspace.willSleepNotification, true), (NSWorkspace.didWakeNotification, false)] {
             observers.append(
@@ -65,7 +67,9 @@ final class FanModel: ObservableObject {
         if visible { refresh() }
     }
     private func updatePolling() {
-        let needed = active && !sleeping && (panelVisible || !savedProfiles.isEmpty || !snapshot.profiles.isEmpty)
+        let needed =
+            active && !sleeping && !releasingForShutdown
+            && (panelVisible || !savedProfiles.isEmpty || !snapshot.profiles.isEmpty)
         if !needed {
             timer?.invalidate()
             timer = nil
@@ -90,7 +94,7 @@ final class FanModel: ObservableObject {
         }
     }
     func refresh() {
-        guard active, !sleeping, !busy, !refreshing else { return }
+        guard active, !sleeping, !releasingForShutdown, !busy, !refreshing else { return }
         let wasEnabled = helperEnabled
         authorization()
         if !wasEnabled && helperEnabled {
@@ -106,25 +110,27 @@ final class FanModel: ObservableObject {
                 self.refreshing = false
                 self.updatePolling()
             }
-            guard self.active, !self.sleeping, self.revision == token else { return }
+            guard self.active, !self.sleeping, !self.releasingForShutdown, self.revision == token else { return }
             do {
                 if self.helperEnabled {
                     let state = try await self.driver.request(FanCommand(action: .status))
-                    guard self.revision == token else { return }
-                    self.snapshot = state
+                    guard self.revision == token, !self.releasingForShutdown else { return }
+                    self.applySnapshot(state)
                     if self.competingApp != nil, !self.snapshot.profiles.isEmpty {
                         let released = try await self.driver.request(FanCommand(action: .release))
-                        guard self.revision == token else { return }
-                        self.snapshot = released
+                        guard self.revision == token, !self.releasingForShutdown else { return }
+                        self.applySnapshot(released)
                         throw FanFailure.competingTool
                     }
                 } else {
                     self.snapshot = try self.driver.read()
                 }
                 self.controlConfirmed = true
-                self.error = nil
+                if self.error == nil || self.error == FanFailure.competingTool.localizedDescription {
+                    self.error = nil
+                }
             } catch {
-                guard self.revision == token else { return }
+                guard self.revision == token, !self.releasingForShutdown else { return }
                 self.error = error.localizedDescription
                 self.controlConfirmed = !self.helperEnabled
                 self.readLocal()
@@ -137,12 +143,13 @@ final class FanModel: ObservableObject {
             if helperEnabled {
                 reading.profiles = snapshot.profiles
                 reading.safetyPause = snapshot.safetyPause
+                reading.safetyClearedFixedFanIDs = snapshot.safetyClearedFixedFanIDs
             }
             snapshot = reading
         } catch { self.error = error.localizedDescription }
     }
     func configure(id: Int, profile: FanProfile) {
-        guard active, !sleeping, !busy else { return }
+        guard active, !sleeping, !releasingForShutdown, !busy else { return }
         authorization()
         guard competingApp == nil else {
             error = FanFailure.competingTool.localizedDescription
@@ -152,19 +159,18 @@ final class FanModel: ObservableObject {
             error = FanFailure.notAuthorized.localizedDescription
             return
         }
+        let previousSaved = savedProfiles
         var next = savedProfiles
         if profile.mode == .system { next.removeValue(forKey: id) } else { next[id] = profile }
-        do { try persist(next) } catch {
-            self.error = error.localizedDescription
-            return
-        }
         savedProfiles = next
         revision &+= 1
         let token = revision
         busy = true
         updatePolling()
         enqueue { [weak self] in
-            guard let self, self.active, !self.sleeping, self.revision == token else { return }
+            guard let self, self.active, !self.sleeping, !self.releasingForShutdown, self.revision == token else {
+                return
+            }
             defer {
                 if self.revision == token {
                     self.busy = false
@@ -173,23 +179,45 @@ final class FanModel: ObservableObject {
             }
             do {
                 let state = try await self.driver.request(FanCommand(action: .configure, fanID: id, profile: profile))
-                guard self.revision == token else { return }
+                guard self.revision == token, !self.releasingForShutdown else { return }
+                var persistTarget = next
+                for clearedID in state.safetyClearedFixedFanIDs where persistTarget[clearedID]?.mode == .fixed {
+                    persistTarget.removeValue(forKey: clearedID)
+                }
+                self.savedProfiles = persistTarget
                 self.snapshot = state
-                self.controlConfirmed = true
-                self.error = nil
+                do {
+                    try self.persist(persistTarget)
+                    self.controlConfirmed = true
+                    self.error = nil
+                } catch {
+                    self.savedProfiles = previousSaved
+                    self.error = error.localizedDescription
+                    let rollbackProfile = previousSaved[id] ?? FanProfile()
+                    if let rolledBack = try? await self.driver.request(
+                        FanCommand(action: .configure, fanID: id, profile: rollbackProfile)),
+                        self.revision == token
+                    {
+                        self.snapshot = rolledBack
+                    }
+                    self.controlConfirmed = true
+                }
             } catch {
-                guard self.revision == token else { return }
+                guard self.revision == token, !self.releasingForShutdown else { return }
+                self.savedProfiles = previousSaved
                 self.error = error.localizedDescription
                 self.controlConfirmed = false
-                if let state = try? await self.driver.request(FanCommand(action: .status)), self.revision == token {
-                    self.snapshot = state
+                if let state = try? await self.driver.request(FanCommand(action: .status)),
+                    self.revision == token, !self.releasingForShutdown
+                {
+                    self.applySnapshot(state)
                     self.controlConfirmed = true
                 }
             }
         }
     }
     private func restoreSavedProfiles() {
-        guard active, !sleeping else { return }
+        guard active, !sleeping, !releasingForShutdown else { return }
         authorization()
         revision &+= 1
         let token = revision
@@ -198,7 +226,9 @@ final class FanModel: ObservableObject {
         busy = true
         updatePolling()
         enqueue { [weak self] in
-            guard let self, self.active, !self.sleeping, self.revision == token else { return }
+            guard let self, self.active, !self.sleeping, !self.releasingForShutdown, self.revision == token else {
+                return
+            }
             defer {
                 if self.revision == token {
                     self.busy = false
@@ -210,26 +240,47 @@ final class FanModel: ObservableObject {
                 if self.helperEnabled {
                     guard self.competingApp == nil else { throw FanFailure.competingTool }
                     for id in profiles.keys.sorted() {
-                        guard self.active, !self.sleeping, self.revision == token else { return }
+                        guard self.active, !self.sleeping, !self.releasingForShutdown, self.revision == token else {
+                            return
+                        }
                         do {
                             _ = try await self.driver.request(
                                 FanCommand(action: .configure, fanID: id, profile: profiles[id]))
                         } catch { failures.append("风扇 \(id + 1)：\(error.localizedDescription)") }
                     }
                     let state = try await self.driver.request(FanCommand(action: .status))
-                    guard self.revision == token else { return }
-                    self.snapshot = state
+                    guard self.revision == token, !self.releasingForShutdown else { return }
+                    self.applySnapshot(state)
                 } else {
                     self.snapshot = try self.driver.read()
                 }
                 self.controlConfirmed = true
-                self.error = failures.isEmpty ? nil : failures.joined(separator: "；")
+                if !failures.isEmpty {
+                    self.error = failures.joined(separator: "；")
+                } else if self.error == nil || self.error == FanFailure.competingTool.localizedDescription {
+                    self.error = nil
+                }
             } catch {
-                guard self.revision == token else { return }
+                guard self.revision == token, !self.releasingForShutdown else { return }
                 self.error = error.localizedDescription
                 self.controlConfirmed = false
                 self.readLocal()
             }
+        }
+    }
+    private func applySnapshot(_ state: FanSnapshot) {
+        snapshot = state
+        let clearedIDs = state.safetyClearedFixedFanIDs.filter { savedProfiles[$0]?.mode == .fixed }
+        guard !clearedIDs.isEmpty else { return }
+        var updated = savedProfiles
+        for id in clearedIDs {
+            updated.removeValue(forKey: id)
+        }
+        savedProfiles = updated
+        do {
+            try persist(updated)
+        } catch {
+            self.error = error.localizedDescription
         }
     }
     func willSleep() {
@@ -262,9 +313,33 @@ final class FanModel: ObservableObject {
             self.driver.invalidate()
         }
     }
+    func releaseForShutdown() async throws {
+        releasingForShutdown = true
+        timer?.invalidate()
+        timer = nil
+        revision &+= 1
+        let token = revision
+        busy = false
+        await operation?.value
+        authorization()
+        guard driver.helperEnabled else { return }
+        let state = try await driver.request(FanCommand(action: .release))
+        if revision == token {
+            snapshot = state
+            controlConfirmed = true
+            error = nil
+        }
+        driver.invalidate()
+    }
+    func resumeAfterShutdownFailure() {
+        releasingForShutdown = false
+        guard active && !sleeping else { return }
+        restoreSavedProfiles()
+    }
     func stop() {
         guard active else { return }
         active = false
+        releasingForShutdown = false
         for observer in observers { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
         observers = []
         release()

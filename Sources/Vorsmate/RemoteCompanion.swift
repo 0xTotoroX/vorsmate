@@ -11,6 +11,7 @@ final class RemoteCompanion: ObservableObject, VorsmatePlugin {
     let id = PluginID.remote
     @Published private(set) var available = false
     @Published private(set) var status = "已停用"
+    @Published private(set) var activeProfileLabel: String?
     @Published private(set) var editor: RemoteEditorState?
     @Published private(set) var editorError: String?
     @Published private(set) var pending: UUID?
@@ -88,6 +89,7 @@ final class RemoteCompanion: ObservableObject, VorsmatePlugin {
         wanted = false
         voiceReadiness(nil)
         closeSession()
+        activeProfileLabel = nil
         status = "已停用"
     }
     func refresh() { discover() }
@@ -142,10 +144,12 @@ final class RemoteCompanion: ObservableObject, VorsmatePlugin {
     private func receive(_ reply: RemoteEditorReply) {
         switch reply {
         case .state(let state):
+            activeProfileLabel = state.frontApp.flatMap { state.profile.applications?[$0]?.name } ?? "默认方案"
             if observing { editor = state }
         case .saved(let id, let state, let error):
             guard pending == id else { return }
             pending = nil
+            activeProfileLabel = state.frontApp.flatMap { state.profile.applications?[$0]?.name } ?? "默认方案"
             if observing {
                 editor = state
                 editorError = error
@@ -218,7 +222,14 @@ final class RemoteCompanion: ObservableObject, VorsmatePlugin {
                     case "voice=ready": self.voiceReadiness(true)
                     case "voice=offline": self.voiceReadiness(false)
                     case "voice=external": self.voiceReadiness(nil)
-                    default: self.status = line
+                    default:
+                        if line.hasPrefix("profile\t") {
+                            let name = String(line.dropFirst("profile\t".count))
+                                .trimmingCharacters(in: .whitespacesAndNewlines)
+                            self.activeProfileLabel = name.isEmpty ? nil : name
+                        } else {
+                            self.status = line
+                        }
                     }
                 }
             } catch {}
@@ -230,9 +241,10 @@ struct RemoteRow: View {
     @ObservedObject var plugin: RemoteCompanion
     let open: () -> Void
     var body: some View {
+        let value = plugin.activeProfileLabel ?? (plugin.status == "遥控器就绪" ? "默认方案" : "小米 2 Pro")
         Button(action: open) {
             PanelSummaryRow(
-                title: "遥控器", symbol: PluginID.remote.symbol, status: plugin.status, value: "小米 2 Pro",
+                title: "遥控器", symbol: PluginID.remote.symbol, status: plugin.status, value: value,
                 navigation: .detail)
         }.buttonStyle(.plain).accessibilityIdentifier("remote.open")
     }

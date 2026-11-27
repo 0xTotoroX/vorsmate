@@ -23,6 +23,7 @@ struct RemotePanel: View {
     @Binding var gesture: RemoteGesture
     @Binding var appID: String?
     let protectInteraction: (Bool) -> Void
+    var onOpenTypeless: (() -> Void)? = nil
     @State private var recording: UUID?
     @State private var pressedRow: RemoteButton?
     @State private var addingID: String?
@@ -133,28 +134,56 @@ struct RemotePanel: View {
             scopePicker(state)
             gestures
             let mapping = state.profile.resolved(for: appID)
-            VStack(spacing: 0) {
-                ForEach(buttons) { key in
-                    let value = key == .voice ? "按住说话" : mapping.action(for: key, gesture: gesture).title
-                    Button {
-                        page = .detail(key)
-                    } label: {
-                        HStack(spacing: 9) {
-                            Image(systemName: key.symbol).frame(width: 19).accessibilityHidden(true)
-                            Text(key.name)
-                            Spacer(minLength: 6)
-                            Text(value).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
-                            Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
+            PanelSectionCard {
+                VStack(spacing: 0) {
+                    ForEach(buttons) { key in
+                        let value = key == .voice ? "按住说话" : mapping.action(for: key, gesture: gesture).title
+                        Button {
+                            page = .detail(key)
+                        } label: {
+                            HStack(spacing: 9) {
+                                Image(systemName: key.symbol).frame(width: 19).accessibilityHidden(true)
+                                Text(key.name)
+                                Spacer(minLength: 6)
+                                Text(value).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                                Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
+                            }
+                            .padding(.horizontal, 14)
+                            .frame(minHeight: 32)
+                            .contentShape(Rectangle())
+                            .background(highlighted.contains(key) ? Color.accentColor.opacity(0.12) : .clear)
+                        }.buttonStyle(
+                            RemoteRowPressStyle { down in
+                                if down { pressedRow = key } else if pressedRow == key { pressedRow = nil }
+                            }
+                        ).accessibilityLabel("\(key.name)，\(value)").accessibilityIdentifier(
+                            "remote.key.\(key.rawValue)")
+                        if key != buttons.last { Divider().padding(.horizontal, 14) }
+                    }
+                }
+            }
+            if let onOpenTypeless {
+                PanelSectionCard {
+                    Button(action: onOpenTypeless) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "waveform.path.ecg")
+                                .font(.system(size: 13))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 19)
+                                .accessibilityHidden(true)
+                            Text("Typeless 诊断与恢复")
+                                .font(.callout)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
                         }
-                        .frame(minHeight: 28).contentShape(Rectangle())
-                        .background(highlighted.contains(key) ? Color.blue.opacity(0.12) : .clear)
-                    }.buttonStyle(
-                        RemoteRowPressStyle { down in
-                            if down { pressedRow = key } else if pressedRow == key { pressedRow = nil }
-                        }
-                    ).accessibilityLabel("\(key.name)，\(value)").accessibilityIdentifier(
-                        "remote.key.\(key.rawValue)")
-                    if key != buttons.last { Divider() }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("remote.typeless")
                 }
             }
         }
@@ -187,82 +216,96 @@ struct RemotePanel: View {
             let override = appID.flatMap { state.profile.applications?[$0]?.buttons[key.rawValue] }
             let saved = binding[gesture]
             let action = saved.editableAction
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text("动作")
-                    Spacer()
-                    Menu(
-                        appID != nil && override?.actions[gesture.rawValue] == nil
-                            ? "沿用默认 · " + action.kind.title : action.kind.title
-                    ) {
-                        if appID != nil {
-                            Button("沿用默认动作") { setAction(nil, key: key, revision: state.revision) }
-                            Divider()
-                        }
-                        ForEach(RemoteAction.Kind.choices, id: \.self) { kind in
-                            Button(kind.title) { choose(kind, key: key, revision: state.revision) }
-                        }
-                    }.fixedSize().accessibilityIdentifier("remote.action")
-                }
-                if let revision = recording {
-                    Divider()
+            PanelSectionCard {
+                VStack(alignment: .leading, spacing: 10) {
                     HStack {
-                        KeyRecorder { captured in
-                            guard recording != nil else { return }
-                            cancelCapture()
-                            setAction(captured, key: key, revision: revision)
-                        }.frame(height: 24)
-                        Button("取消") { cancelCapture() }
-                    }
-                } else if action.kind == .shortcut {
-                    Divider()
-                    HStack {
-                        Text("快捷键")
+                        Text("动作")
                         Spacer()
-                        HStack(spacing: 4) {
-                            ForEach(Array(action.keycaps.enumerated()), id: \.offset) { _, label in
-                                Text(label).font(.callout.weight(.medium))
-                                    .padding(.horizontal, 5).padding(.vertical, 2)
-                                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
+                        Menu(
+                            appID != nil && override?.actions[gesture.rawValue] == nil
+                                ? "沿用默认 · " + action.kind.title : action.kind.title
+                        ) {
+                            if appID != nil {
+                                Button("沿用默认动作") { setAction(nil, key: key, revision: state.revision) }
+                                Divider()
                             }
-                        }.accessibilityElement(children: .ignore).accessibilityLabel(action.title)
+                            ForEach(RemoteAction.Kind.choices, id: \.self) { kind in
+                                Button(kind.title) { choose(kind, key: key, revision: state.revision) }
+                            }
+                        }.fixedSize().accessibilityIdentifier("remote.action")
                     }
-                    Button("重新录入") { beginCapture(state.revision) }.buttonStyle(.link).accessibilityIdentifier(
-                        "remote.record")
-                } else if action.kind == .openApplication {
-                    LabeledContent("应用", value: action.title)
-                    Button("更换应用…") { choose(.openApplication, key: key, revision: state.revision) }.buttonStyle(.link)
-                }
-                Divider()
-                HStack {
-                    Text("按住时")
-                    Spacer()
-                    let mode = binding.hold ?? .once
-                    let inherited = appID != nil && override?.hold == nil
-                    Menu((inherited ? "沿用默认 · " : "") + mode.title) {
-                        if appID != nil {
-                            Button("沿用默认方式") {
-                                plugin.configure(.hold(app: appID, button: key, mode: nil), revision: state.revision)
+                    if let revision = recording {
+                        Divider()
+                        HStack {
+                            KeyRecorder { captured in
+                                guard recording != nil else { return }
+                                cancelCapture()
+                                setAction(captured, key: key, revision: revision)
+                            }.frame(height: 24)
+                            Button("取消") { cancelCapture() }
+                        }
+                    } else if action.kind == .shortcut {
+                        Divider()
+                        HStack {
+                            Text("快捷键")
+                            Spacer()
+                            Button {
+                                beginCapture(state.revision)
+                            } label: {
+                                HStack(spacing: 4) {
+                                    ForEach(Array(action.keycaps.enumerated()), id: \.offset) { _, label in
+                                        Text(label).font(.callout.weight(.medium))
+                                            .padding(.horizontal, 6).padding(.vertical, 2)
+                                            .background(Color.primary.opacity(0.07), in: Capsule())
+                                    }
+                                }
                             }
-                            Divider()
+                            .buttonStyle(.plain)
+                            .help("点击重新录入快捷键")
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel(action.title)
+                            .accessibilityIdentifier("remote.record")
                         }
-                        ForEach(RemoteHoldMode.allCases, id: \.self) { mode in
-                            Button(mode.title) {
-                                plugin.configure(.hold(app: appID, button: key, mode: mode), revision: state.revision)
-                            }.disabled(
-                                (mode == .repeatSingle && binding.single.kind == .none)
-                                    || (mode == .repeatLong && binding.long.kind == .none))
-                        }
-                    }.fixedSize().accessibilityIdentifier("remote.hold")
+                    } else if action.kind == .openApplication {
+                        LabeledContent("应用", value: action.title)
+                        Button("更换应用…") { choose(.openApplication, key: key, revision: state.revision) }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                    }
+                    Divider()
+                    HStack {
+                        Text("按住时")
+                        Spacer()
+                        let mode = binding.hold ?? .once
+                        let inherited = appID != nil && override?.hold == nil
+                        Menu((inherited ? "沿用默认 · " : "") + mode.title) {
+                            if appID != nil {
+                                Button("沿用默认方式") {
+                                    plugin.configure(
+                                        .hold(app: appID, button: key, mode: nil), revision: state.revision)
+                                }
+                                Divider()
+                            }
+                            ForEach(RemoteHoldMode.allCases, id: \.self) { mode in
+                                Button(mode.title) {
+                                    plugin.configure(
+                                        .hold(app: appID, button: key, mode: mode), revision: state.revision)
+                                }.disabled(
+                                    (mode == .repeatSingle && binding.single.kind == .none)
+                                        || (mode == .repeatLong && binding.long.kind == .none))
+                            }
+                        }.fixedSize().accessibilityIdentifier("remote.hold")
+                    }
+                    if let mode = binding.hold, mode != .once {
+                        let repeated = mode == .repeatSingle ? binding.single : binding.long
+                        Text(repeated.kind == .none ? "先设置要连发的动作" : "按住后连续执行「" + repeated.title + "」，松手停止")
+                            .font(.callout).foregroundStyle(.secondary)
+                    }
+                    if binding.rapid {
+                        Text("允许快速连按").font(.callout).foregroundStyle(.secondary)
+                    }
                 }
-                if let mode = binding.hold, mode != .once {
-                    let repeated = mode == .repeatSingle ? binding.single : binding.long
-                    Text(repeated.kind == .none ? "先设置要连发的动作" : "按住后连续执行「" + repeated.title + "」，松手停止")
-                        .font(.callout).foregroundStyle(.secondary)
-                }
-                if binding.rapid {
-                    Text("允许快速连按").font(.callout).foregroundStyle(.secondary)
-                }
+                .padding(14)
             }.disabled(plugin.pending != nil || state.problem != nil)
         }
     }
@@ -375,7 +418,7 @@ private struct RemoteRowPressStyle: ButtonStyle {
     let pressing: (Bool) -> Void
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .foregroundStyle(configuration.isPressed ? Color.blue : Color.primary)
+            .foregroundStyle(configuration.isPressed ? Color.accentColor : Color.primary)
             .onChange(of: configuration.isPressed) { _, down in pressing(down) }
             .onDisappear { pressing(false) }
     }

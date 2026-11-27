@@ -1,8 +1,9 @@
 // [INPUT]: AppKit 生命周期、PanelView、AppModel、BrandIcon、PanelAutomation。
-// [OUTPUT]: 原生菜单栏弹层、开发实例交接、限时自动化保持、独立预览与只读 JSON 检查。
+// [OUTPUT]: 原生菜单栏（含一键关机倒计时与无人值守授权状态及右键操作）、开发实例交接、自动化交互保护、独立预览与只读 JSON 检查。
 // [POS]: 可执行入口，.app 由 scripts/build.sh 打包。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import AppKit
+import Combine
 import SwiftUI
 import VorsmateCore
 import VorsmateFan
@@ -108,6 +109,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     private var panelHeight: CGFloat = 360
     private let dismissal = PanelDismissal()
     private var panelEditing = false
+    private var defaultStatusFont: NSFont?
+    private var statusItemActivity: AnyCancellable?
     private lazy var panelAutomation = PanelAutomation { [weak self] in
         self?.automationDidChange()
     }
@@ -120,10 +123,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
             NSApp.terminate(nil)
             return
         }
+        installStandardMenus()
         let model = AppModel(preview: preview, development: DevelopmentBuild.enabled)
         model.panelVisible = preview
+        model.translation.onPrepareScreenshot = { [weak self] in
+            self?.popover.performClose(nil)
+        }
         self.model = model
-        let maximumHeight = min(650, max(300, (NSScreen.main?.visibleFrame.height ?? 800) - 80))
+        let maximumHeight = min(760, max(320, (NSScreen.main?.visibleFrame.height ?? 800) - 72))
         let view = PanelView(
             model: model, maximumHeight: maximumHeight,
             protectInteraction: { [weak self] active in
@@ -144,27 +151,77 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
             window.makeFirstResponder(nil)
             previewWindow = window
             NSApp.activate(ignoringOtherApps: true)
+            if CommandLine.arguments.contains("--preview-translate-window") {
+                model.translation.openPreviewSampleSticker()
+            }
             return
         }
-        let badge = model.development ? "开发" : nil
+        let badge = preview ? "预览" : nil
         item = NSStatusBar.system.statusItem(
-            withLength: preview || badge != nil ? NSStatusItem.variableLength : NSStatusItem.squareLength)
+            withLength: badge != nil ? NSStatusItem.variableLength : NSStatusItem.squareLength)
         item?.button?.image = BrandIcon.template
-        if let title = preview ? "预览" : badge {
-            item?.button?.title = title
-            item?.button?.imagePosition = .imageLeading
-        }
-        let itemName = preview ? "Vorsmate 预览" : (badge.map { "Vorsmate \($0)" } ?? "Vorsmate")
-        item?.button?.setAccessibilityLabel(itemName)
-        item?.button?.toolTip = itemName
         item?.button?.target = self
-        item?.button?.action = #selector(togglePanel)
+        item?.button?.action = #selector(statusItemClicked(_:))
+        item?.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        defaultStatusFont = item?.button?.font
+        statusItemActivity = Publishers.CombineLatest(
+            Publishers.CombineLatest3(
+                model.unattendedAuth.$isEnabled,
+                model.unattendedAuth.$deadline,
+                model.unattendedAuth.$now
+            ),
+            Publishers.CombineLatest4(
+                model.shutdown.$countdown,
+                model.shutdown.$pendingAction,
+                model.shutdown.$executing,
+                model.shutdown.$submitting
+            )
+        )
+        .sink { [weak self] unattended, shutdown in
+            self?.updateStatusItem(
+                unattendedEnabled: unattended.0,
+                unattendedDeadline: unattended.1,
+                unattendedNow: unattended.2,
+                shutdownCountdown: shutdown.0,
+                shutdownAction: shutdown.1,
+                shutdownExecuting: shutdown.2,
+                shutdownSubmitting: shutdown.3
+            )
+        }
         popover.behavior = .transient
         popover.delegate = self
         popover.contentSize = NSSize(width: 386, height: panelHeight)
         popover.contentViewController = host
         panelAutomation.start()
         if CommandLine.arguments.contains("--show") { showPanel() }
+    }
+    private func installStandardMenus() {
+        let mainMenu = NSMenu()
+        let appItem = NSMenuItem()
+        let appMenu = NSMenu(title: "Vorsmate")
+        appMenu.addItem(withTitle: "退出 Vorsmate", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        mainMenu.addItem(appItem)
+        appItem.submenu = appMenu
+
+        let editItem = NSMenuItem()
+        let editMenu = NSMenu(title: "编辑")
+        editMenu.addItem(withTitle: "撤销", action: Selector(("undo:")), keyEquivalent: "z")
+        let redoItem = editMenu.addItem(withTitle: "重做", action: Selector(("redo:")), keyEquivalent: "z")
+        redoItem.keyEquivalentModifierMask = [.command, .shift]
+        editMenu.addItem(.separator())
+        editMenu.addItem(withTitle: "剪切", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "复制", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "粘贴", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "全选", action: #selector(NSResponder.selectAll(_:)), keyEquivalent: "a")
+        mainMenu.addItem(editItem)
+        editItem.submenu = editMenu
+
+        let windowItem = NSMenuItem()
+        let windowMenu = NSMenu(title: "窗口")
+        windowMenu.addItem(withTitle: "关闭", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        mainMenu.addItem(windowItem)
+        windowItem.submenu = windowMenu
+        NSApp.mainMenu = mainMenu
     }
     private func updateDismissalBehavior() {
         let protected = panelEditing || panelAutomation.isActive
@@ -189,6 +246,136 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
             frame.origin = NSPoint(x: window.frame.minX, y: window.frame.maxY - frame.height)
             window.setFrame(frame, display: true)
         }
+    }
+    private func updateStatusItem(
+        unattendedEnabled: Bool,
+        unattendedDeadline: Date?,
+        unattendedNow: Date,
+        shutdownCountdown: Int?,
+        shutdownAction: ShutdownAction?,
+        shutdownExecuting: Bool,
+        shutdownSubmitting: Bool
+    ) {
+        guard let item, let button = item.button, let model else { return }
+        let badge = model.preview ? "预览" : nil
+        let monospacedFont = NSFont.monospacedDigitSystemFont(
+            ofSize: defaultStatusFont?.pointSize ?? NSFont.systemFontSize,
+            weight: .regular
+        )
+        if let shutdownTitle = ShutdownStatusFormatter.menuBarTitle(
+            countdown: shutdownCountdown,
+            action: shutdownAction,
+            executing: shutdownExecuting,
+            submitting: shutdownSubmitting
+        ) {
+            let title = badge.map { "\($0) · \(shutdownTitle)" } ?? shutdownTitle
+            let tooltip =
+                ShutdownStatusFormatter.menuBarTooltip(
+                    countdown: shutdownCountdown,
+                    action: shutdownAction,
+                    executing: shutdownExecuting,
+                    submitting: shutdownSubmitting
+                ) ?? title
+            if item.length != NSStatusItem.variableLength { item.length = NSStatusItem.variableLength }
+            if button.font != monospacedFont { button.font = monospacedFont }
+            if button.title != title { button.title = title }
+            if button.imagePosition != .imageLeading { button.imagePosition = .imageLeading }
+            if button.toolTip != tooltip { button.toolTip = tooltip }
+            if button.accessibilityLabel() != tooltip { button.setAccessibilityLabel(tooltip) }
+        } else if let activeTitle = UnattendedAuthStatusFormatter.menuBarTitle(
+            isEnabled: unattendedEnabled, deadline: unattendedDeadline, now: unattendedNow)
+        {
+            let title = badge.map { "\($0) · \(activeTitle)" } ?? activeTitle
+            let fullStatus = UnattendedAuthStatusFormatter.fullStatus(
+                isEnabled: unattendedEnabled, deadline: unattendedDeadline, now: unattendedNow)
+            if item.length != NSStatusItem.variableLength { item.length = NSStatusItem.variableLength }
+            if button.font != monospacedFont { button.font = monospacedFont }
+            if button.title != title { button.title = title }
+            if button.imagePosition != .imageLeading { button.imagePosition = .imageLeading }
+            if button.toolTip != fullStatus { button.toolTip = fullStatus }
+            if button.accessibilityLabel() != fullStatus { button.setAccessibilityLabel(fullStatus) }
+        } else {
+            let length = badge != nil ? NSStatusItem.variableLength : NSStatusItem.squareLength
+            let title = badge ?? ""
+            let imagePosition: NSControl.ImagePosition = badge != nil ? .imageLeading : .imageOnly
+            let itemName = model.preview ? "Vorsmate 预览" : (model.development ? "Vorsmate 开发版" : "Vorsmate")
+            if item.length != length { item.length = length }
+            if let defaultStatusFont, button.font != defaultStatusFont { button.font = defaultStatusFont }
+            if button.title != title { button.title = title }
+            if button.imagePosition != imagePosition { button.imagePosition = imagePosition }
+            if button.toolTip != itemName { button.toolTip = itemName }
+            if button.accessibilityLabel() != itemName { button.setAccessibilityLabel(itemName) }
+        }
+    }
+    @objc private func statusItemClicked(_ sender: NSStatusBarButton) {
+        let event = NSApp.currentEvent
+        let isRightClick =
+            event?.type == .rightMouseUp
+            || (event?.type == .leftMouseUp && event?.modifierFlags.contains(.control) == true)
+        if isRightClick {
+            if model?.shutdown.canCancel == true || model?.unattendedAuth.isEnabled == true {
+                showStatusMenu(from: sender)
+            }
+            return
+        }
+        togglePanel()
+    }
+    private func showStatusMenu(from button: NSStatusBarButton) {
+        guard let model else { return }
+        let hasShutdown = model.shutdown.canCancel
+        let hasUnattended = model.unattendedAuth.isEnabled
+        guard hasShutdown || hasUnattended else { return }
+        if popover.isShown { popover.performClose(nil) }
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        if hasShutdown, let action = model.shutdown.pendingAction {
+            let statusItem = NSMenuItem(
+                title: model.shutdown.menuBarTitle ?? model.shutdown.status, action: nil, keyEquivalent: "")
+            statusItem.isEnabled = false
+            menu.addItem(statusItem)
+            menu.addItem(.separator())
+            let cancelItem = NSMenuItem(
+                title: "取消\(action.title)",
+                action: #selector(cancelShutdownFromMenu),
+                keyEquivalent: ""
+            )
+            cancelItem.target = self
+            cancelItem.isEnabled = true
+            menu.addItem(cancelItem)
+            if hasUnattended { menu.addItem(.separator()) }
+        }
+        if hasUnattended {
+            let statusItem = NSMenuItem(title: model.unattendedAuth.fullStatusText, action: nil, keyEquivalent: "")
+            statusItem.isEnabled = false
+            menu.addItem(statusItem)
+            if !hasShutdown { menu.addItem(.separator()) }
+            let disableItem = NSMenuItem(
+                title: "关闭无人值守授权",
+                action: #selector(disableUnattendedAuthFromMenu),
+                keyEquivalent: ""
+            )
+            disableItem.target = self
+            disableItem.isEnabled = true
+            menu.addItem(disableItem)
+        }
+        let openItem = NSMenuItem(
+            title: "打开面板",
+            action: #selector(openPanelFromMenu),
+            keyEquivalent: ""
+        )
+        openItem.target = self
+        openItem.isEnabled = true
+        menu.addItem(openItem)
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 4), in: button)
+    }
+    @objc private func cancelShutdownFromMenu() {
+        model?.shutdown.cancel()
+    }
+    @objc private func disableUnattendedAuthFromMenu() {
+        model?.unattendedAuth.disable(reason: .manual)
+    }
+    @objc private func openPanelFromMenu() {
+        if !popover.isShown { showPanel() }
     }
     @objc private func togglePanel() {
         if popover.isShown { popover.performClose(nil) } else { showPanel() }
