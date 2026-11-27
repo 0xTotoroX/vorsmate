@@ -1,5 +1,5 @@
 // [INPUT]: Quartz 全局坐标、WindowServer 的命中窗口和辅助功能窗口位置。
-// [OUTPUT]: 原始窗口位置与有时限的位置写入；不移动光标，不激活其他应用。
+// [OUTPUT]: 原始窗口位置与有时限的移动结果，区分目标暂忙和不可移动。
 // [POS]: 窗口拖动的系统边界，仅处理指针按下时命中的可移动窗口。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import AppKit
@@ -7,8 +7,12 @@ import ApplicationServices
 
 @MainActor
 struct WindowDragTarget {
+    enum MoveResult {
+        case moved, busy, unavailable
+    }
+
     let origin: CGPoint
-    let move: (CGPoint) -> Bool
+    let move: (CGPoint) -> MoveResult
 
     struct Hit {
         let number: CGWindowID
@@ -40,9 +44,9 @@ struct WindowDragTarget {
             else { return nil }
             let origin = appKitPoint(CGPoint(x: window.frame.minX, y: window.frame.maxY))
             return Self(origin: origin) { [weak window] position in
-                guard let window, window.isVisible else { return false }
+                guard let window, window.isVisible else { return .unavailable }
                 window.setFrameTopLeftPoint(appKitPoint(position))
-                return true
+                return .moved
             }
         }
 
@@ -74,8 +78,12 @@ struct WindowDragTarget {
         else { return nil }
         return Self(origin: origin) { position in
             var position = position
-            guard let value = AXValueCreate(.cgPoint, &position) else { return false }
-            return AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, value) == .success
+            guard let value = AXValueCreate(.cgPoint, &position) else { return .unavailable }
+            switch AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, value) {
+            case .success: return .moved
+            case .cannotComplete: return .busy
+            default: return .unavailable
+            }
         }
     }
 

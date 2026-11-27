@@ -1,5 +1,5 @@
 // [INPUT]: 内存窗口、合成 Quartz 事件与真实手势处理器。
-// [OUTPUT]: 修饰键、点击还原、目标固定、终点与中断的回归。
+// [OUTPUT]: 修饰键、点击还原、目标固定、暂忙恢复、终点与中断的回归。
 // [POS]: 不向系统投递事件，也不移动桌面上的窗口。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import CoreGraphics
@@ -17,7 +17,7 @@ struct WindowDragTests {
         let origin = CGPoint(x: -80, y: -60)
         var number: CGWindowID? = 17
         var movable = true
-        var writable = true
+        var moveResult = WindowDragTarget.MoveResult.moved
         var hits: [CGPoint] = []
         var resolutions: [CGWindowID] = []
         var attempts = 0
@@ -34,9 +34,8 @@ struct WindowDragTests {
                 guard self.movable else { return nil }
                 return WindowDragTarget(origin: self.origin) { point in
                     self.attempts += 1
-                    guard self.writable else { return false }
-                    self.moves.append(point)
-                    return true
+                    if self.moveResult == .moved { self.moves.append(point) }
+                    return self.moveResult
                 }
             })
 
@@ -51,6 +50,14 @@ struct WindowDragTests {
         }
 
         func reset() { gesture.reset { forwarded.append($0) } }
+
+        func waitForAttempts(_ count: Int) async throws {
+            let deadline = ContinuousClock.now + .seconds(2)
+            while attempts < count && ContinuousClock.now < deadline {
+                try await Task.sleep(for: .milliseconds(5))
+            }
+            #expect(attempts == count)
+        }
     }
 
     @Test("单键与组合精确匹配，忽略大小写锁定和左右键位")
@@ -106,7 +113,7 @@ struct WindowDragTests {
         f.number = 17
         for movable in [false, true] {
             f.movable = movable
-            f.writable = false
+            f.moveResult = .unavailable
             #expect(f.send(.leftMouseDown))
             #expect(!f.send(.leftMouseDragged, dx: 10))
             #expect(!f.send(.leftMouseUp))
@@ -141,23 +148,58 @@ struct WindowDragTests {
         f.send(.leftMouseDragged, dx: 5)
         f.send(.leftMouseDragged, dx: 8)
         f.send(.leftMouseDragged, dx: 18)
-        let deadline = ContinuousClock.now + .seconds(2)
-        while f.moves.count < 2 && ContinuousClock.now < deadline {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        try await f.waitForAttempts(2)
         #expect(f.moves == [CGPoint(x: -75, y: -60), CGPoint(x: -62, y: -60)])
-        f.writable = false
+        f.moveResult = .unavailable
         #expect(f.send(.leftMouseDragged, dx: 26))
-        let failureDeadline = ContinuousClock.now + .seconds(2)
-        while f.attempts < 3 && ContinuousClock.now < failureDeadline {
-            try await Task.sleep(for: .milliseconds(10))
-        }
-        f.writable = true
+        try await f.waitForAttempts(3)
+        f.moveResult = .moved
         #expect(f.send(.leftMouseDragged, dx: 30))
         #expect(f.send(.leftMouseUp, dx: 34))
         #expect(f.attempts == 3)
         #expect(f.moves.last == CGPoint(x: -62, y: -60))
         #expect(f.forwarded.isEmpty)
+    }
+
+    @Test("首笔或途中暂忙后追上最新位置，仍可拖至终点", arguments: [false, true])
+    func recoversFromBusyTarget(firstWrite: Bool) async throws {
+        let f = Fixture()
+        f.send(.leftMouseDown)
+        if !firstWrite { f.send(.leftMouseDragged, dx: 5) }
+        f.moveResult = .busy
+        #expect(f.send(.leftMouseDragged, dx: 14))
+        let failedAttempt = firstWrite ? 1 : 2
+        try await f.waitForAttempts(failedAttempt)
+        f.send(.leftMouseDragged, dx: 25)
+        f.send(.leftMouseDragged, dx: 5)
+        f.moveResult = .moved
+        try await f.waitForAttempts(failedAttempt + 1)
+        let recovered = CGPoint(x: -75, y: -60)
+        #expect(f.moves == (firstWrite ? [recovered] : [recovered, recovered]))
+        #expect(f.send(.leftMouseUp, dx: 34))
+        #expect(f.moves.last == CGPoint(x: -46, y: -60))
+        #expect(f.forwarded.isEmpty)
+    }
+
+    @Test("暂忙后的重试不会越过松键、松手或停用")
+    func cancelsBusyRetry() async throws {
+        enum Ending: CaseIterable { case releaseModifier, releaseMouse, stop }
+        for end in Ending.allCases {
+            let f = Fixture()
+            f.moveResult = .busy
+            f.send(.leftMouseDown)
+            f.send(.leftMouseDragged, dx: 5)
+            switch end {
+            case .releaseModifier: f.send(.flagsChanged, flags: [])
+            case .releaseMouse: f.send(.leftMouseUp, dx: 12)
+            case .stop: f.reset()
+            }
+            let attempts = f.attempts
+            f.moveResult = .moved
+            try await Task.sleep(for: .milliseconds(120))
+            #expect(f.attempts == attempts)
+            #expect(f.moves.isEmpty)
+        }
     }
 
     @Test("停用取消尚未执行的移动，仅还原尚未接管的按下")
