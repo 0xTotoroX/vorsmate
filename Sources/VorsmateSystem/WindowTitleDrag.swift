@@ -21,6 +21,13 @@ struct WindowTitleDrag: @unchecked Sendable {
     mutating func begin(with drag: CGEvent, post: (CGEvent) -> Void) {
         rewrite(down, at: lastPoint)
         post(down)
+        // 系统以首个拖动采样建立抓取点。先交付零位移，保留确认手势前已走过的距离。
+        if let anchor = drag.copy() {
+            rewrite(anchor, at: lastPoint)
+            anchor.setIntegerValueField(.mouseEventDeltaX, value: 0)
+            anchor.setIntegerValueField(.mouseEventDeltaY, value: 0)
+            post(anchor)
+        }
         update(drag)
     }
 

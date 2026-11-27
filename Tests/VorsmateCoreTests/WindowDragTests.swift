@@ -116,6 +116,23 @@ struct WindowDragTests {
         #expect(f.forwarded.map(\.type) == [.leftMouseDown])
     }
 
+    @Test("单点抖动或原地折返保留点击，连续朝外的两个微小采样才起拖")
+    func earlyDirection() async throws {
+        let f = Fixture()
+        f.titlePoint = .zero
+        var active: WindowTitleDrag?
+        let receive: (WindowTitleDrag) -> Void = { active = $0 }
+        f.send(.leftMouseDown, beginTitleDrag: receive)
+        try await f.waitForResolution()
+        for dy in [1, 1, 0, -1, 0, 1] {
+            f.send(.leftMouseDragged, dy: dy, beginTitleDrag: receive)
+            #expect(active == nil)
+        }
+        #expect(f.send(.leftMouseDragged, dx: 1, dy: 1, beginTitleDrag: receive))
+        #expect(active != nil)
+        #expect(f.rechecks == [.zero])
+    }
+
     @Test("单键与组合精确匹配，忽略大小写锁定和左右键位")
     func modifiers() {
         #expect(WindowDragModifier.option.matches([.maskAlternate, .maskAlphaShift]))
@@ -196,7 +213,10 @@ struct WindowDragTests {
         var session = try #require(active)
         var posted: [CGEvent] = []
         session.begin(with: drag) { posted.append($0) }
-        #expect(posted.count == 1)
+        #expect(posted.map(\.type) == [.leftMouseDown, .leftMouseDragged])
+        #expect(posted.last?.location == title)
+        #expect(posted.last?.getIntegerValueField(.mouseEventDeltaX) == 0)
+        #expect(posted.last?.getIntegerValueField(.mouseEventDeltaY) == 0)
         #expect(posted.first?.type == .leftMouseDown)
         #expect(posted.first?.location == title)
         #expect(posted.first?.getIntegerValueField(.mouseEventClickState) == 1)

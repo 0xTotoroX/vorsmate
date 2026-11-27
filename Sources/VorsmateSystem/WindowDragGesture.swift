@@ -13,10 +13,27 @@ final class WindowDragGesture {
         let hit: WindowDragTarget.Hit
         var candidate: WindowDragTarget?
         var preparedAt: ContinuousClock.Instant?
+        private var firstMotion: CGVector?
 
         init(_ down: CGEvent, _ hit: WindowDragTarget.Hit) {
             self.down = down
             self.hit = hit
+        }
+
+        func startsTitleDrag(dx: CGFloat, dy: CGFloat) -> Bool {
+            let distance = dx * dx + dy * dy
+            if distance >= 4 { return true }
+            guard distance >= 1 else {
+                firstMotion = nil
+                return false
+            }
+            // 单次微动仍算点击。连续朝外移动时无需再等一个鼠标采样。
+            guard let firstMotion else {
+                firstMotion = CGVector(dx: dx, dy: dy)
+                return false
+            }
+            return distance > firstMotion.dx * firstMotion.dx + firstMotion.dy * firstMotion.dy
+                && dx * firstMotion.dx + dy * firstMotion.dy > 0
         }
     }
 
@@ -92,7 +109,7 @@ final class WindowDragGesture {
                 let dy = event.location.y - down.location.y
                 let distanceSquared = dx * dx + dy * dy
                 let hasTitle = beginTitleDrag != nil && press.candidate?.titleBarPoint != nil
-                guard distanceSquared >= (hasTitle ? 4 : 9) else { return true }
+                guard hasTitle ? press.startsTitleDrag(dx: dx, dy: dy) : distanceSquared >= 9 else { return true }
                 guard let target = targetForDrag(press) else {
                     reset(forward: forward)
                     return false
