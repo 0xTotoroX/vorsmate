@@ -2,7 +2,7 @@
 
 # Vorsmate
 
-Input sources, audio devices, fan control, time conversion, and Quick Shutdown in one compact Mac menu bar panel.
+Input sources, audio devices, fan control, time conversion, Quick Shutdown, and Unattended Authorization—plus optional Screenshot Translation and Xiaomi Remote—in one compact Mac menu bar panel.
 
 [简体中文](README.md) · English · [Download](https://github.com/0xTotoroX/vorsmate/releases) · [Issues](https://github.com/0xTotoroX/vorsmate/issues)
 
@@ -33,7 +33,9 @@ Actual app screenshots using sample data. Click to switch; drag to reorder in th
 - **Audio devices** — Reorder and lock microphone and playback devices independently. Fall back when a device disconnects and restore it when it returns. Supported wireless receivers become eligible only when a transmitter connects.
 - **Fan control** — Four direct choices: Automatic, Balanced, Enhanced, and Custom. Balanced and Enhanced smooth temperature changes and slow down gradually; Custom sets a fixed speed. Background readings refresh without interrupting the controls.
 - **Quick Shutdown** — Clean up apps before shutting down or restarting, with a cancellable five-second countdown and per-app exclusions.
-- **Modules** — Enable or disable all six modules independently; disabling stops their background work.
+- **Unattended Authorization** — Verify and store the admin password in the local Keychain to automatically approve matching Apple-signed system prompts during a timed or open session, while leaving pre-existing and Privacy & Security prompts for manual confirmation.
+- **Screenshot & Translation (Optional)** — Capture window-snapping regions via hotkey, annotate with vector tools, copy offline OCR text, translate in place via macOS Translation or a custom endpoint, and pin scalable translucent desktop stickers.
+- **Modules** — Browse across Devices, Tools, and System tabs, and enable, disable, or reorder modules within each category under `更多 → 功能模块…`; disabling stops their background work.
 - **App updates** — Check a fixed signed feed and verify both the feed and installer. Clear timeout errors offer a retry while keeping your settings and fan helper authorization.
 - **Time comparison** — View local and US Pacific time side by side. Convert dates and times with daylight saving handled for both locations.
 
@@ -45,7 +47,7 @@ Requires **macOS 14 or later**. The universal app includes Apple Silicon and Int
 
 1. Download `Vorsmate-0.3.2.dmg` from [GitHub Releases](https://github.com/0xTotoroX/vorsmate/releases/tag/v0.3.2).
 2. Open the disk image and drag **Vorsmate** into **Applications**.
-3. Launch it from Applications and click the **V** icon in the menu bar.
+3. Launch it from Applications and click the soaring gull icon in the menu bar.
 
 **Upgrading from v0.3.2 or earlier:** These versions use the old installer naming rule. Install the next release manually from GitHub Releases; that release includes the new rule for subsequent in-app updates. Existing settings and fan helper authorization are retained.
 
@@ -65,13 +67,13 @@ Fans offer four parallel choices: Automatic, Balanced, Enhanced, and Custom. Aut
 
 The left clock follows the Mac’s current time zone; the right shows US Pacific local time (PST / PDT). Click either clock to edit a date or use the slider to compare times. “Now” or closing the panel returns to the current time without changing the system time zone.
 
-Open Quick Shutdown in the menu bar to choose which apps to quit in advance. With more than six apps, search and select the matching results together. Shut Down and Restart start a five-second countdown. Cancel, Escape, Back, or closing the panel cancels it. Force Quit is enabled by default and can discard unsaved work. Turn it off in Options to stop if an app is still running. macOS handles unselected or newly opened apps at shutdown or restart. The enabled helper releases the fans before submitting the request. Without the helper, Vorsmate uses System Events and may need automation permission. Preview uses simulated apps.
+Open Quick Shutdown in the menu bar to choose which apps to quit in advance. With more than six apps, search and select the matching results together. Shut Down and Restart start a five-second countdown that continues running if you close the panel or navigate away; click Cancel, right-click the menu bar countdown, press Escape while the panel is visible, or disable the Quick Shutdown module to cancel it. Force Quit is enabled by default and can discard unsaved work. Turn it off in Options to stop if an app is still running. macOS handles unselected or newly opened apps at shutdown or restart. The enabled helper releases the fans before submitting the request. Without the helper, Vorsmate uses System Events and may need automation permission. Preview uses simulated apps.
 
-The panel closes when the pointer leaves; background management continues. The top-right menu contains independent switches for all six modules, Launch at Login, Check for Updates, About, and Quit.
+The panel closes when the pointer leaves; background management continues. The top-right menu opens `功能模块…` to toggle and reorder all built-in and optional modules, alongside Launch at Login, Check for Updates, About, and Quit.
 
-The optional Xiaomi remote plugin is off by default. Place the built `VorsmateRemote.app` beside `Vorsmate.app` and enable the remote in the modules menu to configure per-app shortcuts and hold-to-repeat. Voice input requires an existing MiRemoteV 2ch virtual audio device. [Remote setup and key migration (Chinese)](docs/remote.md)
+The optional Xiaomi remote and Screenshot modules are off by default. Place the built `VorsmateRemote.app` beside `Vorsmate.app` and enable the remote under `功能模块…` to configure per-app shortcuts and hold-to-repeat. Voice input requires an existing MiRemoteV 2ch virtual audio device. [Remote setup and key migration (Chinese)](docs/remote.md)
 
-Updates are checked one minute after startup and every 12 hours, or manually through the top-right menu. You confirm downloading and restarting. Checks time out after 20 seconds; downloads with no progress for 60 seconds and preparation exceeding 120 seconds stop waiting and offer a retry. Installation itself is never interrupted by a timer. Both the feed and installer require valid signatures. See [update behavior and publishing](docs/updates.md).
+Updates are checked one minute after startup and every 12 hours, or manually through the top-right menu. You confirm downloading and restarting. Checks time out after 20 seconds and stalled downloads cancel and offer a retry after 60 seconds; once Sparkle enters preparation, the window keeps non-reentrant waiting feedback without interrupting the background installer. Both the feed and installer require valid signatures. See [update behavior and publishing](docs/updates.md).
 
 ## Build from source
 
