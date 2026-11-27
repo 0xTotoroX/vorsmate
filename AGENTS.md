@@ -28,6 +28,7 @@ Swift 6 + Swift Package Manager + SwiftUI / AppKit + Sparkle + TIS + CoreAudio +
 
 - 小米遥控器是独立、默认关闭的可选插件。配套包与宿主同目录，拥有自己的输入权限；RC003 全键映射、配置导入、左右修饰键、遥控器音频与实机验收见 [docs/remote.md](docs/remote.md)。
 - 截图是默认关闭的可选插件，支持全屏窗口吸附与聚焦框选、矩形 / 箭头 / 画笔矢量标注、Apple Vision 文字识别复制、按需原场景译文回填（支持原图对照与复制译文）、图片保存以及可缩放调透明度的纯图标桌面贴图；默认采用 macOS 系统离线翻译，并可选配置自定义 OpenAI 兼容模型接口（内置 DeepSeek / OpenAI / Ollama 预设，密钥仅存本机非同步钥匙串，不写配置或日志）；停用立即注销热键并销毁叠层与贴图窗口。
+- 待办是「工具」分类下默认关闭的可选插件，仅连接本机 `0xTotoro` Local Hub（`~/.local/share/0xTotoro/runtime.json`），在缺少配置或服务未启动时保持未连接状态且不阻塞主程序；启用后按 `Project` 分组列表展示未完成待办、分区标签（如 `测试分区`）、一键完成、1 行快速添加与 `codex://` 跳转，停用立即停止轮询与请求。
 
 ## 地图
 

@@ -33,10 +33,20 @@ struct PanelView: View {
         self.protectInteraction = protectInteraction
         self.onHeightChange = onHeightChange
         let initialSection: PluginID? =
-            model.preview && CommandLine.arguments.contains("--preview-unattended-detail")
-            ? .unattendedAuth : nil
+            if model.preview && CommandLine.arguments.contains("--preview-unattended-detail") {
+                .unattendedAuth
+            } else if model.preview && CommandLine.arguments.contains("--preview-tasks-detail") {
+                .tasks
+            } else {
+                nil
+            }
         _expandedSection = State(initialValue: initialSection)
-        let previewTools = model.preview && CommandLine.arguments.contains("--preview-translate")
+        let previewTools =
+            model.preview
+            && (CommandLine.arguments.contains("--preview-translate")
+                || CommandLine.arguments.contains("--preview-tasks")
+                || CommandLine.arguments.contains("--preview-tasks-detail")
+                || CommandLine.arguments.contains("--preview-tasks-offline"))
         _previewCategoryOverride = State(initialValue: previewTools ? .tools : nil)
     }
 
@@ -73,6 +83,18 @@ struct PanelView: View {
             } else if expandedSection == .unattendedAuth {
                 UnattendedAuthView(
                     controller: model.unattendedAuth,
+                    maximumHeight: maximumHeight,
+                    protectInteraction: protectInteraction
+                ) {
+                    expandedSection = nil
+                }
+                .background(
+                    GeometryReader { geometry in
+                        Color.clear.preference(key: PanelHeightKey.self, value: geometry.size.height)
+                    })
+            } else if expandedSection == .tasks {
+                TasksDetailView(
+                    model: model.tasks,
                     maximumHeight: maximumHeight,
                     protectInteraction: protectInteraction
                 ) {
@@ -153,6 +175,7 @@ struct PanelView: View {
                 guard let section,
                     section != .quickShutdown,
                     section != .unattendedAuth,
+                    section != .tasks,
                     remotePage == .home,
                     !showingTypelessRecovery,
                     !showingPluginManager
@@ -384,6 +407,8 @@ struct PanelView: View {
                 model: model.translation,
                 expanded: expansion(for: id),
                 protectInteraction: protectInteraction)
+        case .tasks:
+            TasksSummaryRow(model: model.tasks) { expandedSection = .tasks }
         }
     }
 

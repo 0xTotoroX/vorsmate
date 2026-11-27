@@ -29,7 +29,7 @@ public enum PluginCategory: String, CaseIterable, Codable, Sendable, Identifiabl
 }
 
 public enum PluginID: String, Codable, CaseIterable, Sendable, Identifiable {
-    case time, inputSource, audioInput, audioOutput, fan, quickShutdown, unattendedAuth, remote, translate
+    case time, inputSource, audioInput, audioOutput, fan, quickShutdown, unattendedAuth, remote, translate, tasks
     public var id: Self { self }
     public var title: String {
         switch self {
@@ -42,6 +42,7 @@ public enum PluginID: String, Codable, CaseIterable, Sendable, Identifiable {
         case .unattendedAuth: "无人值守授权"
         case .remote: "遥控器"
         case .translate: "截图"
+        case .tasks: "待办"
         }
     }
     public var symbol: String {
@@ -55,13 +56,14 @@ public enum PluginID: String, Codable, CaseIterable, Sendable, Identifiable {
         case .unattendedAuth: "lock.shield"
         case .remote: "appletvremote.gen4"
         case .translate: "viewfinder"
+        case .tasks: "checklist"
         }
     }
     public var defaultCategory: PluginCategory {
         switch self {
         case .time, .inputSource, .audioInput, .audioOutput, .fan:
             .devices
-        case .translate, .remote:
+        case .translate, .remote, .tasks:
             .tools
         case .quickShutdown, .unattendedAuth:
             .system

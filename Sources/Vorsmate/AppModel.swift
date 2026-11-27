@@ -65,6 +65,10 @@ final class AppModel: ObservableObject {
         [weak self] prefs in
         try self?.save { $0.translation = prefs }
     }
+    lazy var tasks = TasksModel(
+        preview: preview,
+        offlinePreview: CommandLine.arguments.contains("--preview-tasks-offline")
+    )
     lazy var typelessRecovery: TypelessRecoveryModel = {
         if preview {
             return .preview(
@@ -128,6 +132,13 @@ final class AppModel: ObservableObject {
         {
             preferences.translateEnabled = true
         }
+        if preview
+            && (CommandLine.arguments.contains("--preview-tasks")
+                || CommandLine.arguments.contains("--preview-tasks-detail")
+                || CommandLine.arguments.contains("--preview-tasks-offline"))
+        {
+            preferences.tasksEnabled = true
+        }
         for channel in Channel.allCases {
             let driver: any SourceDriver = preview ? PreviewDriver(channel: channel) : Self.driver(for: channel)
             if channel == .audioInput, let input = driver as? AudioDeviceDriver {
@@ -166,6 +177,7 @@ final class AppModel: ObservableObject {
                 unattendedAuth.objectWillChange,
                 remote.objectWillChange,
                 translation.objectWillChange,
+                tasks.objectWillChange,
                 typelessRecovery.objectWillChange,
                 plugins.objectWillChange,
             ]
@@ -218,6 +230,7 @@ final class AppModel: ObservableObject {
                 visibility: { unattendedAuth.panelDidChangeVisibility($0) }))
         result.append(remote)
         result.append(translation)
+        result.append(tasks)
         return result
     }
     enum CategoryIndicator {
@@ -307,6 +320,13 @@ final class AppModel: ObservableObject {
                 }
             case .remote:
                 break
+            case .tasks:
+                if tasks.actionError != nil {
+                    return .error
+                }
+                if tasks.loading || tasks.mutating {
+                    hasActive = true
+                }
             }
         }
         return hasActive ? .active : .none

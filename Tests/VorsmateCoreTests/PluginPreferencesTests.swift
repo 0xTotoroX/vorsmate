@@ -13,7 +13,8 @@ struct PluginPreferencesTests {
         for json in [#"{"version":1,"policies":{}}"#, #"{"version":1,"policies":{},"disabledPlugins":null}"#] {
             let value = try JSONDecoder().decode(Preferences.self, from: Data(json.utf8))
             #expect(value == Preferences())
-            #expect(value.disabledAtRuntime == [.remote, .translate])
+            #expect(!value.tasksEnabled)
+            #expect(value.disabledAtRuntime == [.remote, .translate, .tasks])
         }
     }
     @Test("完整新配置原子保存、重新加载且冲突不覆盖")
@@ -27,6 +28,7 @@ struct PluginPreferencesTests {
         value.disabledPlugins = [.time, .audioOutput]
         value.remoteEnabled = true
         value.translateEnabled = true
+        value.tasksEnabled = true
         value.translation.engine = .openAICompatible
         value.translation.targetLanguage = .japanese
         value.fanProfiles = [0: FanProfile(mode: .fixed, rpm: 2800), 1: FanCurvePreset.balanced.profile]
@@ -61,23 +63,27 @@ struct PluginPreferencesTests {
     func optionalPlugins() throws {
         var value = Preferences()
         value.disabledPlugins = [.fan]
-        #expect(value.disabledAtRuntime == [.fan, .remote, .translate])
+        #expect(value.disabledAtRuntime == [.fan, .remote, .translate, .tasks])
         value.disabledAtRuntime.remove(.remote)
         let data = try JSONEncoder().encode(value)
         let restored = try JSONDecoder().decode(Preferences.self, from: data)
         #expect(restored.remoteEnabled)
         #expect(!restored.translateEnabled)
+        #expect(!restored.tasksEnabled)
         #expect(restored.disabledPlugins == [.fan])
         value.disabledAtRuntime.insert(.remote)
         value.disabledAtRuntime.remove(.translate)
+        value.disabledAtRuntime.remove(.tasks)
         #expect(!value.remoteEnabled)
         #expect(value.translateEnabled)
+        #expect(value.tasksEnabled)
         #expect(value.disabledPlugins == [.fan])
     }
     @Test("可选模块排在内置模块之后")
     func order() {
         let expected: [PluginID] = [
-            .time, .inputSource, .audioInput, .audioOutput, .fan, .quickShutdown, .unattendedAuth, .remote, .translate,
+            .time, .inputSource, .audioInput, .audioOutput, .fan, .quickShutdown, .unattendedAuth, .remote,
+            .translate, .tasks,
         ]
         #expect(PluginID.allCases == expected)
         #expect(PluginID.audioInput.channel == .audioInput)
@@ -85,6 +91,8 @@ struct PluginPreferencesTests {
         #expect(PluginID.quickShutdown.symbol == "sunset")
         #expect(PluginID.translate.title == "截图")
         #expect(PluginID.translate.symbol == "viewfinder")
+        #expect(PluginID.tasks.title == "待办")
+        #expect(PluginID.tasks.symbol == "checklist")
     }
     @Test("插件分类元数据与自定义排序规则")
     func categoriesAndPluginOrder() throws {
@@ -103,6 +111,7 @@ struct PluginPreferencesTests {
         #expect(PluginID.fan.defaultCategory == .devices)
         #expect(PluginID.translate.defaultCategory == .tools)
         #expect(PluginID.remote.defaultCategory == .tools)
+        #expect(PluginID.tasks.defaultCategory == .tools)
         #expect(PluginID.quickShutdown.defaultCategory == .system)
         #expect(PluginID.unattendedAuth.defaultCategory == .system)
 

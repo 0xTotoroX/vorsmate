@@ -36,17 +36,20 @@ public struct Preferences: Codable, Equatable, Sendable {
     public var disabledPlugins: Set<PluginID> = []
     public var remoteEnabled = false
     public var translateEnabled = false
+    public var tasksEnabled = false
     public var disabledAtRuntime: Set<PluginID> {
         get {
             var disabled = disabledPlugins
             if !remoteEnabled { disabled.insert(.remote) } else { disabled.remove(.remote) }
             if !translateEnabled { disabled.insert(.translate) } else { disabled.remove(.translate) }
+            if !tasksEnabled { disabled.insert(.tasks) } else { disabled.remove(.tasks) }
             return disabled
         }
         set {
             remoteEnabled = !newValue.contains(.remote)
             translateEnabled = !newValue.contains(.translate)
-            disabledPlugins = newValue.subtracting([.remote, .translate])
+            tasksEnabled = !newValue.contains(.tasks)
+            disabledPlugins = newValue.subtracting([.remote, .translate, .tasks])
         }
     }
     public var fanProfiles: [Int: FanProfile] = [:]
@@ -56,8 +59,8 @@ public struct Preferences: Codable, Equatable, Sendable {
     public var pluginOrder: [PluginID] = []
     public init() {}
     private enum CodingKeys: String, CodingKey {
-        case version, policies, disabledPlugins, remoteEnabled, translateEnabled, fanProfiles, shutdownPolicy,
-            translation, unattendedAuth, pluginOrder
+        case version, policies, disabledPlugins, remoteEnabled, translateEnabled, tasksEnabled, fanProfiles,
+            shutdownPolicy, translation, unattendedAuth, pluginOrder
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -66,6 +69,7 @@ public struct Preferences: Codable, Equatable, Sendable {
         disabledPlugins = try values.decodeIfPresent(Set<PluginID>.self, forKey: .disabledPlugins) ?? []
         remoteEnabled = try values.decodeIfPresent(Bool.self, forKey: .remoteEnabled) ?? false
         translateEnabled = try values.decodeIfPresent(Bool.self, forKey: .translateEnabled) ?? false
+        tasksEnabled = try values.decodeIfPresent(Bool.self, forKey: .tasksEnabled) ?? false
         fanProfiles = try values.decodeIfPresent([Int: FanProfile].self, forKey: .fanProfiles) ?? [:]
         shutdownPolicy = try values.decodeIfPresent(ShutdownPolicy.self, forKey: .shutdownPolicy) ?? ShutdownPolicy()
         translation =

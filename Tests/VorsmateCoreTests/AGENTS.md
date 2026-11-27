@@ -14,7 +14,8 @@
 
 - UpdateTests.swift：语义版本、对应官方新旧安装包命名匹配与外部域名 / 仓库、协议、路径和异常版本拒绝。
 
-- PluginPreferencesTests.swift：旧版配置默认回退、新字段原子保存往返 / 冲突、可选插件的独立开关及模块顺序（含无人值守授权、截图）。
+- PluginPreferencesTests.swift：旧版配置默认回退、新字段原子保存往返 / 冲突、可选插件的独立开关及模块顺序（含无人值守授权、截图、待办）。
+- TasksPolicyTests.swift：runtime.json 解析 / 离线回退、Reminders tree 投影、codex:// 校验与 Mock Hub HTTP 客户端测试。
 - TranslationPolicyTests.swift：快捷键校验、语种解析、DeepSeek 预设与 OpenAI 地址校验、旧配置兼容解码、OCR 区块合并、选区几何与标注合成渲染、预览保存及 Mock 批量翻译测试。
 - ShutdownTests.swift：Mock 验证倒计时与 15 种取消组合、清理与回读期间取消、批量排除、固定应用范围、退出顺序、终端强制退出回读 / 超时和等待回执防重。
 - UnattendedAuthTests.swift：内存替身与可注入时钟验证重启默认关闭、可选截止与状态文案、锁屏保持与到期 / 失效核对、受阻不伪装批准、密码变更 / 删除、活动记录脱敏往返与停用清理。

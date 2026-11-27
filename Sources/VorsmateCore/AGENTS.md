@@ -9,7 +9,8 @@
 - RemoteApplicationMaps.swift：前台应用的逐手势覆盖、默认继承、按住模式与配置编辑。
 - RemoteEditor.swift：宿主与插件的按键编辑消息、实体键反馈、配置校验与单手势更新。
 - RemoteModifiers.swift / RemoteVoice.swift：左右修饰键解析、16 kHz 能力识别、独立 IMA ADPCM 解码、语音包超时与既有音频 UID。
-- PluginID.swift：内置与可选模块顺序、标题、图标与通道映射（含无人值守授权、截图）。
+- PluginID.swift：内置与可选模块顺序、标题、图标与通道映射（含无人值守授权、截图、待办）。
+- TasksPolicy.swift：0xTotoro Local Hub runtime.json 解析、ReminderTree 模型、Project 分组投影、codex:// 校验与摘要格式化。
 - ShutdownPolicy.swift：关机 / 重启动作、强制退出 / 窗口恢复偏好、按 Bundle ID 聚合的应用条目与菜单栏倒计时格式化。
 - UnattendedAuthPolicy.swift：无人值守授权的弹窗分类（常规管理员 / 隐私与安全 / 软件权限许可 / 密码与通行密钥）、自动批准选项（默认全开）、可选截止策略、状态文案格式化、脱敏摘要与本机有界活动记录存储；不持有或落盘密码。
 - TranslationPolicy.swift：截图快捷键与修饰键映射、双引擎、DeepSeek / OpenAI / Ollama 预设、目标语种解析、OpenAI 兼容接口地址校验、文本折行整理与 OCR 同行相邻区块合并。

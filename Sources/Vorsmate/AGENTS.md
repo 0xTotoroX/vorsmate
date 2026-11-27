@@ -7,7 +7,7 @@
 - DevelopmentFanHelper.swift：固定签名开发包的助手移交、系统登记与应答进程路径核对。
 - PanelDismissal.swift：鼠标离开约半秒收起，原生菜单范围 / 拖动 / 键盘 / 自动化保护；仅面板可见时观察，不影响后台管理。
 - BrandIcon.swift：加载包内的单色海鸥矢量图，菜单栏使用 18 点、面板顶部居中使用 28 点模板图像；开发裸程序无资源时回退到字母符号。
-- AppModel.swift：插件装配（含无人值守授权、截图及预览参数）、兼容配置和模块开关保存、冲突保护与恢复、面板显隐、退出停止、内存预览与维护入口；关机前先释放已授权助手再走 System Events，失败时恢复风扇档位；开发版沿用设备和偏好、支持固定包路径的登录项管理，仅限制应用内更新和临时签名下的助手访问。
+- AppModel.swift：插件装配（含无人值守授权、截图、待办及预览参数）、兼容配置和模块开关保存、冲突保护与恢复、面板显隐、退出停止、内存预览与维护入口；关机前先释放已授权助手再走 System Events，失败时恢复风扇档位；开发版沿用设备和偏好、支持固定包路径的登录项管理，仅限制应用内更新和临时签名下的助手访问。
 - PanelView.swift：顶部居中单色图标与右侧更多菜单、纯图标三分类切换栏（设备 / 工具 / 系统）与微点状态、分组卡片容器、动态插件列表、单项展开、无人值守授权总览一键关闭与详情切换、统一的「功能模块…」启停与排序管理页；内容超过屏幕适配上限后滚动，登录授权入口仅在需要时出现；正常/开发版不再在更多菜单重复展示 Typeless 入口。
 - ChannelView.swift：三通道共用模式和单份选择 / 拖动列表装配，8 项及以内完整展开，超过 8 项以 7.5 行（330pt）露半行暗示滚动；不显示排序入口或移动图标，等待与错误反馈保留。
 - SourceList.swift：AppKit 无滚动条隐式滚动列表桥（`SilentScrollView` + `ZeroScroller` 锁定 `.overlay` 且零占位宽度），三点起拖、预览让位、松手一次保存；取消 / 外部配置变化回滚、关闭清理、边缘滚动、点击与键盘选择分离。
@@ -19,6 +19,8 @@
 - RemoteCompanion.swift：发现并验证同目录配套应用，按开关管理子进程、控制管道、配置回执与当前生效方案名称，传递遥控器语音的就绪状态。
 - TranslationModel.swift：截图工作流状态机，编排全局截图热键注册、矢量标注、按需 OCR／双引擎翻译回填、图片保存与桌面贴图生命周期。
 - TranslationPanelView.swift：总览内「截图」摘要行、就地展开「开始截图」入口及统一内联卡片中的快捷键 / 双引擎预设 / 密钥 / 语种设置。
+- TasksModel.swift：待办插件状态机；停用零开销释放轮询与在途请求，连接 0xTotoro Local Hub 并支持离线回退与预览替身。
+- TasksView.swift：总览内「待办」摘要行与同宽详情页（Project 分组、测试分区标签、完成切换、1 行快速添加与 codex:// 打开）。
 - SystemTranslationBridge.swift：macOS 15+ Apple `Translation` 框架 `.translationTask` 离线批量翻译桥接与离线预览替身。
 - ScreenshotOverlayWindow.swift：全屏框选与浮动贴图协调器（OverlayKeyWindow、ScreenshotOverlayController）。
 - ScreenshotCaptureCanvas.swift：全屏窗口吸附框选画布、三分线与实时矢量标注绘制（CaptureCanvasView）。
