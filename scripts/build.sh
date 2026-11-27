@@ -17,11 +17,9 @@ esac
 if "$DEVELOPMENT" && [[ -z "${VORSMATE_DIST_DIR:-}" ]]; then
     VORSMATE_DIST_DIR="$PROJECT_ROOT/artifacts/dev/build"
 fi
-SHOW_BIN_ARGS=("${BUILD_ARGS[@]}")
 SDK_VERSION="$(xcrun --show-sdk-version 2>/dev/null || echo 14.0)"
-BUILD_ARGS+=(-Xlinker -platform_version -Xlinker macos -Xlinker 14.0 -Xlinker "$SDK_VERSION")
 swift build "${BUILD_ARGS[@]}"
-BIN_PATH="$(swift build "${SHOW_BIN_ARGS[@]}" --show-bin-path)"
+BIN_PATH="$(swift build "${BUILD_ARGS[@]}" --show-bin-path)"
 DIST_DIR="${VORSMATE_DIST_DIR:-$PROJECT_ROOT/dist}"
 mkdir -p "$DIST_DIR"
 DIST_DIR="$(cd "$DIST_DIR" && pwd -P)"
@@ -75,6 +73,14 @@ mkdir -p "$REMOTE/Contents/MacOS" "$REMOTE/Contents/Resources"
 cp "$BIN_PATH/VorsmateRemote" "$REMOTE/Contents/MacOS/"
 cp "$PROJECT_ROOT/Resources/Remote/Info.plist" "$REMOTE/Contents/"
 cp "$PROJECT_ROOT/Resources/Remote/RC003.png" "$PROJECT_ROOT/LICENSE" "$REMOTE/Contents/Resources/"
+# 用 vtool 写入最低系统版本与当前 SDK 版本，兼容 SwiftPM 与 Xcode SwiftBuild 的 universal 链接路径。
+for BIN in \
+    "$STAGED_APP/Contents/MacOS/Vorsmate" \
+    "$STAGED_APP/Contents/MacOS/VorsmateFanHelper" \
+    "$REMOTE/Contents/MacOS/VorsmateRemote"; do
+    xcrun vtool -set-build-version macos 14.0 "$SDK_VERSION" -replace -output "$BIN" "$BIN"
+    chmod +x "$BIN"
+done
 codesign "${SIGN_ARGS[@]}" "$REMOTE"
 codesign --verify --strict "$REMOTE"
 if [[ "$VORSMATE_SIGN_IDENTITY" == "-" ]]; then
