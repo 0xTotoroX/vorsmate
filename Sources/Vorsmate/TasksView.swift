@@ -130,7 +130,7 @@ struct TasksDetailView: View {
                     .padding(.horizontal, 16)
             }
 
-            if let error = model.actionError {
+            if let error = model.actionError, model.connectionState != .readFailed {
                 PanelInlineNotice(text: error, symbol: "exclamationmark.triangle.fill", isError: true)
                     .padding(.horizontal, 20)
                     .accessibilityIdentifier("tasks.error")
@@ -184,21 +184,23 @@ struct TasksDetailView: View {
 
     @ViewBuilder
     private var scrollContent: some View {
-        if model.connectionState == .offline {
+        if model.connectionState == .offline || model.connectionState == .readFailed {
             PanelSectionCard {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 8) {
-                        Image(systemName: "wifi.slash")
-                            .font(.system(size: 14))
-                            .foregroundStyle(.secondary)
-                        Text("未连接本地 Hub")
+                        Image(
+                            systemName: model.connectionState == .offline ? "link.badge.plus" : "exclamationmark.circle"
+                        )
+                        .font(.system(size: 14))
+                        .foregroundStyle(.secondary)
+                        Text(model.connectionState == .offline ? "未连接待办服务" : "暂时无法读取 Apple 提醒事项")
                             .font(.callout.weight(.semibold))
                     }
-                    Text("未检测到 0xTotoro 本地待办服务，不会影响 Vorsmate 其他功能。")
+                    Text(model.actionError ?? "Vos 通过这台 Mac 上的待办服务读取 Apple 提醒事项。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
-                    Button("重新连接") {
+                    Button(model.connectionState == .offline ? "重新连接" : "重试") {
                         model.refresh()
                     }
                     .buttonStyle(.bordered)
@@ -212,7 +214,7 @@ struct TasksDetailView: View {
             PanelSectionCard {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
-                    Text("正在连接本地 Hub…")
+                    Text("正在读取 Apple 提醒事项…")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }

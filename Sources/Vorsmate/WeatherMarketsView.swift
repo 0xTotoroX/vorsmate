@@ -1,5 +1,5 @@
 // [INPUT]: 用户选择的城市、可见面板的天气及行情读数。
-// [OUTPUT]: 工具页的天气摘要与原地换城、按来源标记时间的三行行情。
+// [OUTPUT]: 工具页可原地展开的天气与行情，提供换城和三项报价。
 // [POS]: 复用总览模块样式，天气及行情独立启停。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import SwiftUI
@@ -128,21 +128,37 @@ struct MarketsSection: View {
     let feeds: [MarketInstrument: PanelFeed<MarketQuote>]
     let client: WeatherMarketClient
     let visible: Bool
+    @Binding var expanded: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Label("行情", systemImage: PluginID.markets.symbol).font(.system(size: 14, weight: .semibold))
-            ForEach(MarketInstrument.allCases, id: \.self) { instrument in
-                if let feed = feeds[instrument] {
-                    MarketPriceRow(instrument: instrument, feed: feed)
-                        .task(id: visible) {
-                            guard visible else { return }
-                            await feed.watch { try await client.quote(instrument) }
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                expanded.toggle()
+            } label: {
+                PanelSummaryRow(
+                    title: PluginID.markets.title, symbol: PluginID.markets.symbol,
+                    status: "纳指 100 · SOL · 美元汇率", value: "",
+                    navigation: .disclosure(expanded: expanded))
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("markets.summary")
+            .accessibilityLabel(PluginID.markets.title)
+            .accessibilityValue(expanded ? "已展开" : "已收起")
+            if expanded {
+                VStack(alignment: .leading, spacing: 7) {
+                    ForEach(MarketInstrument.allCases, id: \.self) { instrument in
+                        if let feed = feeds[instrument] {
+                            MarketPriceRow(instrument: instrument, feed: feed)
+                                .task(id: visible) {
+                                    guard visible else { return }
+                                    await feed.watch { try await client.quote(instrument) }
+                                }
                         }
+                    }
                 }
+                .padding(.horizontal, 20).padding(.bottom, 12)
             }
         }
-        .padding(.horizontal, 20).padding(.vertical, 12)
     }
 }
 

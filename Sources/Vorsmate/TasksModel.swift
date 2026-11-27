@@ -130,7 +130,7 @@ final class TasksModel: ObservableObject, VorsmatePlugin {
                 guard !Task.isCancelled, self.active, self.lifecycleGeneration == generation else { return }
                 self.mutating = false
                 self.mutationTask = nil
-                self.handleMutationFailure(error)
+                self.handleFailure(error)
             }
         }
     }
@@ -157,7 +157,7 @@ final class TasksModel: ObservableObject, VorsmatePlugin {
                 guard !Task.isCancelled, self.active, self.lifecycleGeneration == generation else { return }
                 self.mutating = false
                 self.mutationTask = nil
-                self.handleMutationFailure(error)
+                self.handleFailure(error)
             }
         }
     }
@@ -182,7 +182,7 @@ final class TasksModel: ObservableObject, VorsmatePlugin {
         let requestID = fetchGeneration
         if showLoading || connectionState != .connected {
             loading = true
-            if connectionState == .offline {
+            if showLoading && connectionState != .connected {
                 connectionState = .connecting
             }
         }
@@ -209,7 +209,7 @@ final class TasksModel: ObservableObject, VorsmatePlugin {
                 else { return }
                 self.loading = false
                 self.fetchTask = nil
-                self.handleFetchFailure(error)
+                self.handleFailure(error)
             }
         }
     }
@@ -247,30 +247,20 @@ final class TasksModel: ObservableObject, VorsmatePlugin {
         }
     }
 
-    private func handleFetchFailure(_ error: Error) {
-        if let hubError = error as? TasksHubError, hubError.isOfflineLike {
+    private func handleFailure(_ error: Error) {
+        if let hubError = error as? TasksHubError, hubError.isOfflineLike || hubError == .unauthorized {
             projection = ProjectTasksProjection()
             selectedQuickAddListID = ""
-            connectionState = .offline
-            actionError = nil
+            connectionState = hubError.isOfflineLike ? .offline : .readFailed
+            actionError = hubError.isOfflineLike ? nil : hubError.localizedDescription
         } else {
             if connectionState != .connected {
-                connectionState = .offline
+                connectionState = .readFailed
             }
             actionError = error.localizedDescription
         }
     }
 
-    private func handleMutationFailure(_ error: Error) {
-        if let hubError = error as? TasksHubError, hubError.isOfflineLike {
-            projection = ProjectTasksProjection()
-            selectedQuickAddListID = ""
-            connectionState = .offline
-            actionError = nil
-        } else {
-            actionError = error.localizedDescription
-        }
-    }
 }
 
 actor PreviewTasksHubClient: TasksHubClientProtocol {

@@ -443,7 +443,9 @@ struct PanelView: View {
                 visible: model.panelVisible, expanded: expansion(for: id),
                 selectCity: model.selectWeatherCity, protectInteraction: protectInteraction)
         case .markets:
-            MarketsSection(feeds: model.marketFeeds, client: model.informationClient, visible: model.panelVisible)
+            MarketsSection(
+                feeds: model.marketFeeds, client: model.informationClient,
+                visible: model.panelVisible, expanded: expansion(for: id))
         }
     }
 

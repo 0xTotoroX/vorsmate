@@ -63,18 +63,18 @@ public enum TasksHubError: LocalizedError, Equatable, Sendable {
 
     public var isOfflineLike: Bool {
         switch self {
-        case .unconfigured, .unreachable, .unauthorized: true
-        case .invalidResponse, .httpError: false
+        case .unconfigured, .unreachable: true
+        case .unauthorized, .invalidResponse, .httpError: false
         }
     }
 
     public var errorDescription: String? {
         switch self {
-        case .unconfigured: "未检测到本地 0xTotoro Hub 配置"
-        case .unreachable: "未能连接到本地 0xTotoro Hub"
-        case .unauthorized: "本地 Hub 鉴权失败"
-        case .invalidResponse: "本地 Hub 返回格式异常"
-        case .httpError(let code): "本地 Hub 请求失败（HTTP \(code)）"
+        case .unconfigured: "这台 Mac 尚未配置待办服务。"
+        case .unreachable: "无法连接这台 Mac 的待办服务。"
+        case .unauthorized: "本机待办服务拒绝了当前配对。"
+        case .invalidResponse: "本机待办服务返回了无法识别的数据。"
+        case .httpError(let code): "本机待办服务未能完成请求（HTTP \(code)）。"
         }
     }
 }

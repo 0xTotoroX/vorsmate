@@ -71,6 +71,28 @@ struct TasksModelTests {
         model.deactivate()
     }
 
+    @Test("待办服务返回 500 时显示读取失败，重试成功后恢复实际列表")
+    func serverErrorCanRecover() async {
+        let mock = MockTasksHubClient(failure: .httpError(500))
+        let model = TasksModel(client: mock)
+        model.activate()
+        await waitUntil { !model.loading }
+        #expect(model.connectionState == .readFailed)
+        #expect(model.actionError?.contains("500") == true)
+        await mock.setFailure(nil)
+        model.refresh()
+        await waitUntil { !model.loading }
+        #expect(model.connectionState == .connected)
+        #expect(model.projection.totalIncompleteCount == 1)
+        #expect(model.actionError == nil)
+        await mock.setFailure(.unauthorized)
+        model.refresh()
+        await waitUntil { model.connectionState == .readFailed }
+        #expect(model.projection.projectLists.isEmpty)
+        #expect(model.actionError == TasksHubError.unauthorized.localizedDescription)
+        model.deactivate()
+    }
+
     @Test("快速添加、一键完成与打开 codex:// URL 正常工作")
     func quickAddCompleteAndOpenCodexURL() async throws {
         let mock = MockTasksHubClient()
@@ -127,7 +149,7 @@ private actor MockTasksHubClient: TasksHubClientProtocol {
     var createdItems: [CreatedItem] = []
     var completedIDs: [String] = []
     private var delay: Duration = .zero
-    private let failure: TasksHubError?
+    private var failure: TasksHubError?
 
     private let groups = [
         ReminderGroup(id: "grp-project", title: "Project")
@@ -156,6 +178,10 @@ private actor MockTasksHubClient: TasksHubClientProtocol {
 
     func setDelay(_ delay: Duration) {
         self.delay = delay
+    }
+
+    func setFailure(_ failure: TasksHubError?) {
+        self.failure = failure
     }
 
     func fetchTree(includeCompleted: Bool) async throws -> ReminderTree {

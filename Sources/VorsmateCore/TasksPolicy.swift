@@ -463,6 +463,7 @@ public enum TasksConnectionState: Equatable, Sendable {
     case connecting
     case connected
     case offline
+    case readFailed
 }
 
 public enum TasksSummaryFormatter {
@@ -472,13 +473,14 @@ public enum TasksSummaryFormatter {
         case .connecting: "连接中"
         case .connected: "Project"
         case .offline: "未连接"
+        case .readFailed: "读取失败"
         }
     }
 
     public static func valueText(state: TasksConnectionState, incompleteCount: Int) -> String? {
         switch state {
         case .connected: "\(max(0, incompleteCount)) 项未完成"
-        case .disabled, .connecting, .offline: nil
+        case .disabled, .connecting, .offline, .readFailed: nil
         }
     }
 
@@ -488,6 +490,7 @@ public enum TasksSummaryFormatter {
         case .connecting: "连接中"
         case .connected: "待办 · \(max(0, incompleteCount)) 项未完成"
         case .offline: "未连接"
+        case .readFailed: "读取失败"
         }
     }
 }

@@ -36,7 +36,7 @@ Disabled by default; enable them from `功能模块…` in the top-right menu.
 | Module | What it does |
 | --- | --- |
 | Weather | Shows current conditions in a selected city. Expand to see today's temperature range and the observation time from Open-Meteo. |
-| Markets | Shows the Nasdaq-100, SOL in USD, and the USD/CNY reference rate, each with its source and quote time. |
+| Markets | Expand to see the Nasdaq-100, SOL in USD, and the USD/CNY reference rate with sources and quote times. Click again to collapse. |
 | Screenshot & Translation | Trigger window-snapping screen capture by hotkey, annotate with rectangles, arrows, or freehand ink, copy offline OCR text, translate in place via macOS Translation or a custom OpenAI-compatible endpoint, and pin scalable translucent stickers. |
 | Window Drag | Grant Vorsmate Accessibility access, then hold Option and drag anywhere inside a movable window with the left mouse button. Choose a different modifier under Tools → Window Drag. |
 | Xiaomi Remote | Place the built `VorsmateRemote.app` beside `Vorsmate.app` to map RC003 buttons to per-app shortcuts, gestures, and hold-to-repeat, with voice input via MiRemoteV 2ch. |
