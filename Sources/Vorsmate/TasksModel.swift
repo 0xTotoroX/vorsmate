@@ -1,5 +1,5 @@
 // [INPUT]: TasksHubClientProtocol、ProjectTasksProjection、VorsmatePlugin 生命周期与 NSWorkspace 打开回调。
-// [OUTPUT]: 待办插件状态机；管理零开销启停、面板可见时轮询、Project 待办投影、完成切换、快速添加与 codex:// 打开。
+// [OUTPUT]: 待办插件状态机；管理零开销启停、面板可见时轮询、Project 待办投影、勾选完成和速记保存回执。
 // [POS]: AppModel 装配的可选工具模块；默认关闭，停用时立即取消全部轮询与在途请求。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import AppKit
@@ -163,7 +163,7 @@ final class TasksModel: ObservableObject, VorsmatePlugin {
         }
     }
 
-    func addItem(title: String) {
+    func addItem(title: String, onSaved: @escaping @MainActor () -> Void = {}) {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard active, !mutating, !trimmed.isEmpty, let listID = resolvedQuickAddListID() else { return }
         beginMutation()
@@ -173,6 +173,8 @@ final class TasksModel: ObservableObject, VorsmatePlugin {
             guard let self else { return }
             do {
                 try await client.createItem(title: trimmed, listID: listID)
+                guard !Task.isCancelled, self.active, self.lifecycleGeneration == generation else { return }
+                onSaved()
                 let tree = try await client.fetchTree(includeCompleted: false)
                 guard !Task.isCancelled, self.active, self.lifecycleGeneration == generation else { return }
                 self.apply(tree: tree)
@@ -187,12 +189,6 @@ final class TasksModel: ObservableObject, VorsmatePlugin {
                 self.handleFailure(error)
             }
         }
-    }
-
-    @discardableResult
-    func openCodexURL(_ item: ReminderItem) -> Bool {
-        guard active, let url = item.codexURL else { return false }
-        return openURL(url)
     }
 
     private func resolvedQuickAddListID() -> String? {
@@ -286,7 +282,6 @@ final class TasksModel: ObservableObject, VorsmatePlugin {
     private func handleFailure(_ error: Error) {
         if let hubError = error as? TasksHubError, hubError.isOfflineLike || hubError == .unauthorized {
             projection = ProjectTasksProjection()
-            selectedQuickAddListID = ""
             connectionState = hubError.isOfflineLike ? .offline : .readFailed
             actionError = hubError.isOfflineLike ? nil : hubError.localizedDescription
         } else {
@@ -312,7 +307,7 @@ actor PreviewTasksHubClient: TasksHubClientProtocol {
     private let lists = [
         ReminderList(id: "list-palboo", title: "Palboo", groupID: "grp-project"),
         ReminderList(id: "list-vorsmate", title: "Vorsmate", groupID: "grp-project"),
-        ReminderList(id: "list-0xtotoro", title: "0xTotoro", groupID: "grp-project"),
+        ReminderList(id: "list-0xtotoro", title: "Chibi", groupID: "grp-project"),
         ReminderList(id: "list-daily", title: "提醒", groupID: "grp-daily"),
     ]
 
@@ -333,14 +328,14 @@ actor PreviewTasksHubClient: TasksHubClientProtocol {
             ),
             ReminderItem(
                 id: "item-2",
-                title: "检查可选待办模块与本地 Hub 离线回退",
+                title: "试用菜单栏里的速记",
                 url: "codex://threads/019d3e8f-1234-7000-8000-000000000002",
                 completed: false,
                 listID: "list-vorsmate"
             ),
             ReminderItem(
                 id: "item-3",
-                title: "核对 LaunchAgent 鉴权与 SSE 同步延迟",
+                title: "整理新标签页收藏",
                 completed: false,
                 listID: "list-0xtotoro"
             ),

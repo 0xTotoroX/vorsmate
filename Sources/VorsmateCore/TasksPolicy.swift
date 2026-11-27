@@ -214,6 +214,21 @@ public struct ReminderItem: Codable, Equatable, Sendable, Identifiable {
         self.sectionID = sectionID
     }
 
+    /// Keep authored titles intact in storage while omitting chat links from the checklist.
+    public var displayTitle: String {
+        let address =
+            #"(?i)(?:codex://|https?://(?:chatgpt\.com|chat\.openai\.com)/codex(?:/|(?=[?#\s)>]|$)))[^\s<>()\[\]，。；！？、」』】）]*"#
+        guard title.range(of: address, options: .regularExpression) != nil else { return title }
+        let markdown = #"\[([^\]]*)\]\(\s*<?"# + address + #">?\s*\)"#
+        let text =
+            title
+            .replacingOccurrences(of: markdown, with: "$1", options: .regularExpression)
+            .replacingOccurrences(of: "<?" + address + ">?", with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"[ \t]+(?=[，。；！？、])"#, with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? "无标题待办" : text
+    }
+
     public var codexURL: URL? {
         guard let raw = url?.trimmingCharacters(in: .whitespacesAndNewlines),
             !raw.isEmpty,

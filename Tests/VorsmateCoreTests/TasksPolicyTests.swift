@@ -9,6 +9,18 @@ import VorsmateSystem
 
 @Suite("待办 Hub 解析与客户端")
 struct TasksPolicyTests {
+    @Test("清单只显示标题正文，原始链接与普通网站完整保留")
+    func checklistTitle() {
+        let title = "按[设计稿](codex://threads/test)核对"
+        let item = ReminderItem(id: "1", title: title)
+        #expect(item.displayTitle == "按设计稿核对")
+        #expect(item.title == title)
+        #expect(ReminderItem(id: "2", title: "<https://chatgpt.com/codex/tasks/test>").displayTitle == "无标题待办")
+        #expect(
+            ReminderItem(id: "3", title: "Codex CLI 与 https://example.com").displayTitle
+                == "Codex CLI 与 https://example.com")
+    }
+
     @Test("新旧客户端共用配对，并优先发现独立连接器")
     func sharedConnectorDiscovery() throws {
         let fm = FileManager.default

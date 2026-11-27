@@ -1,5 +1,5 @@
 // [INPUT]: TasksModel、PluginHost 与内存 Mock TasksHubClientProtocol。
-// [OUTPUT]: 默认关闭与 PluginHost 启停零开销生命周期、离线回退、快速添加、完成切换与 codex:// 打开回归。
+// [OUTPUT]: 默认关闭与 PluginHost 启停零开销生命周期、离线回退、速记保存回执和勾选回归。
 // [POS]: UI 层待办状态机测试，不连接真实本地 Hub 或真实 Apple Reminders。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import Foundation
@@ -93,27 +93,25 @@ struct TasksModelTests {
         model.deactivate()
     }
 
-    @Test("快速添加、一键完成与打开 codex:// URL 正常工作")
-    func quickAddCompleteAndOpenCodexURL() async throws {
+    @Test("速记只在写入成功后确认，一键完成使用原事项")
+    func quickAddAndComplete() async throws {
         let mock = MockTasksHubClient()
-        var openedURLs: [URL] = []
-        let model = TasksModel(
-            client: mock,
-            openURL: { url in
-                openedURLs.append(url)
-                return true
-            }
-        )
+        let model = TasksModel(client: mock)
         model.activate()
         await waitUntil { model.connectionState == .connected }
 
         let initialItem = try #require(model.projection.buckets.first?.items.first?.item)
-        #expect(model.openCodexURL(initialItem))
-        #expect(openedURLs.map(\.absoluteString) == ["codex://threads/019d3e8f"])
-
         model.selectedQuickAddListID = "list-vorsmate"
-        model.addItem(title: "  编写单元测试  ")
+        var saved = 0
+        await mock.setFailure(.httpError(500))
+        model.addItem(title: "编写单元测试") { saved += 1 }
+        await waitUntil { !model.mutating }
+        #expect(saved == 0)
+        #expect(model.selectedQuickAddListID == "list-vorsmate")
+        await mock.setFailure(nil)
+        model.addItem(title: "  编写单元测试  ") { saved += 1 }
         await waitUntil { model.projection.totalIncompleteCount == 2 }
+        #expect(saved == 1)
         let created = await mock.createdItems
         #expect(created.count == 1)
         #expect(created.first?.title == "编写单元测试")

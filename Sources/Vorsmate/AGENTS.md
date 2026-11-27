@@ -21,7 +21,7 @@
 - TranslationPanelView.swift：总览内「截图」摘要行、就地展开「开始截图」入口及统一内联卡片中的快捷键 / 双引擎预设 / 密钥 / 语种设置。
 - WindowDragSectionView.swift：工具分类中的窗口拖动摘要行、修饰键菜单和辅助功能授权入口，复用面板原地展开。
 - TasksModel.swift 管理待办读取与勾选，按需打开随附或已安装的提醒事项连接器。停用时取消轮询与在途请求。
-- TasksView.swift：总览内「待办」摘要行与同宽详情页（Project 分组、测试分区标签、完成切换、1 行快速添加与 codex:// 打开）。
+- TasksView.swift 在同宽菜单栏内显示项目清单、勾选和一行速记，按系统外观呈现。
 - SystemTranslationBridge.swift：macOS 15+ Apple `Translation` 框架 `.translationTask` 离线批量翻译桥接与离线预览替身。
 - ScreenshotOverlayWindow.swift：全屏框选与浮动贴图协调器（OverlayKeyWindow、ScreenshotOverlayController）。
 - ScreenshotCaptureCanvas.swift：全屏窗口吸附框选画布、三分线与实时矢量标注绘制（CaptureCanvasView）。
