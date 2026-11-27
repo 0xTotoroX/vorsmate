@@ -15,6 +15,7 @@ final class WindowDragGesture {
         var preparedAt: ContinuousClock.Instant?
         private var firstMotion: CGVector?
         private var checkedFocus = false
+        private var deliveredFirstMotion = false
         private(set) var titlePress: WindowTitleDrag?
 
         init(_ down: CGEvent, _ hit: WindowDragTarget.Hit) {
@@ -43,11 +44,21 @@ final class WindowDragGesture {
             return candidate
         }
 
-        func prepareTitlePress(stillExposed: (WindowDragTarget.Hit, CGPoint) -> Bool, forward: (CGEvent) -> Void) {
+        func prepareTitlePress(
+            for event: CGEvent, stillExposed: (WindowDragTarget.Hit, CGPoint) -> Bool, forward: (CGEvent) -> Void
+        ) {
+            if var title = titlePress {
+                guard !deliveredFirstMotion, event.location != down.location else { return }
+                // 系统在首个实际移动采样建立抓取偏移。只交付这一笔，单击仍可还原。
+                deliveredFirstMotion = true
+                title.update(event)
+                forward(event)
+                titlePress = title
+                return
+            }
             guard !checkedFocus, let target = freshCandidate, let point = target.titleBarPoint else { return }
             checkedFocus = true
             // 首个系统拖动事件可先在已聚焦窗口按住空白标题栏，避免启动时丢失抓取点。
-            // 确认手势前不发送任何位移，后台窗口也不会被这个准备步骤激活。
             guard target.isFocused(), stillExposed(hit, point), let copy = down.copy() else { return }
             var title = WindowTitleDrag(down: copy, title: point, window: hit.number)
             title.press(post: forward)
@@ -134,7 +145,7 @@ final class WindowDragGesture {
                 let hasTitle = beginTitleDrag != nil && press.candidate?.titleBarPoint != nil
                 if hasTitle {
                     guard press.startsTitleDrag(dx: dx, dy: dy) else {
-                        press.prepareTitlePress(stillExposed: stillExposed, forward: forward)
+                        press.prepareTitlePress(for: event, stillExposed: stillExposed, forward: forward)
                         return true
                     }
                     if let started = press.titlePress, let beginTitleDrag {
