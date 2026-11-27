@@ -133,12 +133,9 @@ struct QuickShutdownView: View {
                 }
                 Spacer(minLength: 6)
                 if !options {
-                    ShutdownMark(
-                        progress: controller.executing ? 1 : 0,
-                        destructive: controller.policy.forceCloseApps && controller.appCount > 0
-                    )
-                    .frame(width: 78, height: 42).accessibilityHidden(true)
-                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.3), value: controller.executing)
+                    SunsetMark(progress: controller.executing ? 1 : 0)
+                        .frame(width: 78, height: 42).accessibilityHidden(true)
+                        .animation(reduceMotion ? nil : .easeInOut(duration: 0.3), value: controller.executing)
                 }
             }
         }.padding(.horizontal, 20).padding(.top, 14).padding(.bottom, 18)
@@ -370,61 +367,51 @@ private struct ShutdownAppIcon: View {
     }
 }
 
-private struct ShutdownMark: View, Animatable {
+private struct SunsetMark: View, Animatable {
     nonisolated var progress: Double
-    let destructive: Bool
-
     nonisolated var animatableData: Double {
         get { progress }
         set { progress = newValue }
     }
-
     var body: some View {
-        let baseTone: Color = destructive ? .red : .accentColor
         Canvas { ctx, size in
-            let center = CGPoint(x: size.width * 0.62, y: size.height * 0.5)
-            let radius: CGFloat = 13.5
-            let fade = max(0.32, 1.0 - 0.55 * progress)
-
-            let aura = Path(
-                ellipseIn: CGRect(x: center.x - 16.5, y: center.y - 16.5, width: 33, height: 33))
-            ctx.fill(aura, with: .color(baseTone.opacity(0.11 * fade)))
-            ctx.stroke(aura, with: .color(baseTone.opacity(0.22 * fade)), lineWidth: 1)
-
-            // 左右平衡细刻度，让 78×42 水平留白保持重心稳定。
-            for side in [-1.0, 1.0] {
-                var tick = Path()
-                let xStart = center.x + CGFloat(side) * 20.5
-                let xEnd = center.x + CGFloat(side) * 26.5
-                tick.move(to: CGPoint(x: xStart, y: center.y))
-                tick.addLine(to: CGPoint(x: xEnd, y: center.y))
-                ctx.stroke(
-                    tick,
-                    with: .color(baseTone.opacity(0.28 * fade)),
+            let w = size.width
+            let h = size.height
+            let r = h * 0.39
+            let x = w * 0.59
+            let y = h * (0.58 + 0.65 * progress)
+            var ridge = Path()
+            ridge.move(to: CGPoint(x: 1, y: h * 0.68))
+            ridge.addCurve(
+                to: CGPoint(x: w - 1, y: h * 0.64),
+                control1: CGPoint(x: w * 0.35, y: h * 0.99), control2: CGPoint(x: w * 0.66, y: h * 0.49))
+            var above = ridge
+            above.addLine(to: CGPoint(x: w, y: 0))
+            above.addLine(to: .zero)
+            above.closeSubpath()
+            var sky = ctx
+            sky.clip(to: above)
+            let sun = Path(ellipseIn: CGRect(x: x - r, y: y - r, width: 2 * r, height: 2 * r))
+            sky.fill(
+                sun,
+                with: .linearGradient(
+                    Gradient(colors: [
+                        Color(red: 1, green: 0.75, blue: 0.38), Color(red: 0.95, green: 0.43, blue: 0.22),
+                    ]), startPoint: CGPoint(x: x, y: y - r), endPoint: CGPoint(x: x, y: y + r)))
+            for angle in [-150.0, -115, -72, -34] {
+                let a = angle * .pi / 180
+                var ray = Path()
+                ray.move(to: CGPoint(x: x + (r + 3) * cos(a), y: y + (r + 3) * sin(a)))
+                ray.addLine(to: CGPoint(x: x + (r + 6) * cos(a), y: y + (r + 6) * sin(a)))
+                sky.stroke(
+                    ray, with: .color(.orange.opacity(0.65 * (1 - progress))),
                     style: StrokeStyle(lineWidth: 1.3, lineCap: .round))
             }
-
-            let sweep = 280.0 * (1.0 - 0.14 * progress)
-            let start = -90.0 + (360.0 - sweep) / 2.0
-            let end = start + sweep
-            var ring = Path()
-            ring.addArc(
-                center: center, radius: radius,
-                startAngle: .degrees(start), endAngle: .degrees(end), clockwise: false)
-            ctx.stroke(
-                ring,
-                with: .color(baseTone.opacity(0.92 * fade)),
-                style: StrokeStyle(lineWidth: 2.3, lineCap: .round))
-
-            var stem = Path()
-            let stemTop = center.y - radius - 2.0 + 2.2 * progress
-            let stemBottom = center.y - 2.5 + 1.8 * progress
-            stem.move(to: CGPoint(x: center.x, y: stemTop))
-            stem.addLine(to: CGPoint(x: center.x, y: stemBottom))
-            ctx.stroke(
-                stem,
-                with: .color(baseTone.opacity(fade)),
-                style: StrokeStyle(lineWidth: 2.3, lineCap: .round))
+            ctx.stroke(ridge, with: .color(.orange.opacity(0.8)), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+            var near = Path()
+            near.move(to: CGPoint(x: w * 0.19, y: h * 0.96))
+            near.addQuadCurve(to: CGPoint(x: w * 0.80, y: h * 0.84), control: CGPoint(x: w * 0.52, y: h * 0.97))
+            ctx.stroke(near, with: .color(.orange.opacity(0.45)), style: StrokeStyle(lineWidth: 1.2, lineCap: .round))
         }
     }
 }

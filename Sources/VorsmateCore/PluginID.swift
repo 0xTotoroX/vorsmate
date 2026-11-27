@@ -51,7 +51,7 @@ public enum PluginID: String, Codable, CaseIterable, Sendable, Identifiable {
         case .audioInput: "mic"
         case .audioOutput: "speaker.wave.2"
         case .fan: "fan"
-        case .quickShutdown: "power"
+        case .quickShutdown: "sunset"
         case .unattendedAuth: "lock.shield"
         case .remote: "appletvremote.gen4"
         case .translate: "viewfinder"

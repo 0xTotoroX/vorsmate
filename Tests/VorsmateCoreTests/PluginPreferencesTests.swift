@@ -64,7 +64,7 @@ struct PluginPreferencesTests {
         #expect(PluginID.allCases == expected)
         #expect(PluginID.audioInput.channel == .audioInput)
         #expect(PluginID.quickShutdown.title == "一键关机")
-        #expect(PluginID.quickShutdown.symbol == "power")
+        #expect(PluginID.quickShutdown.symbol == "sunset")
         #expect(PluginID.translate.title == "截图")
         #expect(PluginID.translate.symbol == "viewfinder")
     }
