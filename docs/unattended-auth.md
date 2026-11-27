@@ -38,10 +38,11 @@
 除常规系统管理员授权弹窗（`SecurityAgent`、`CoreServicesUIAgent`、`coreautha` 等）外，详情页内「自动批准选项」可按类别配置并持久化到 `Preferences`（version 1，默认全部开启）：
 
 - **隐私与安全**：系统设置「隐私与安全」内嵌权限修改弹层（`com.apple.settings.PrivacySecurity.extension` / `com.apple.systempreferences`）。
+- **软件权限许可**：应用申请访问提醒事项、日历、通讯录、照片、文件夹等隐私权限时弹出的无密码“不允许 / 允许”系统许可弹窗（仅处理经 `anchor apple` 验签的 `com.apple.UserNotificationCenter`、`com.apple.tcc.AuthorizationPromptService` 或系统代理窗口；必须同时具备显式允许按钮与拒绝/取消按钮且文本匹配权限请求句式，排除 Gatekeeper / 恶意软件拦截弹窗，绝不回退 `kAXDefaultButtonAttribute` 也绝不模拟移动或点击系统鼠标，仅通过 `AXPress` 触发并做关闭复核）。
 - **密码与通行密钥**：浏览器或应用内嵌的通行密钥、Apple 密码与账号授权弹层（仅在输入或切换控件经 `anchor apple` 验证属于 `AuthenticationServices.Helper`、`AuthenticationServicesAgent`、`LocalAuthenticationRemoteService` 或 `AKAuthorizationRemoteViewService` 等 Apple 授权服务时才提交，绝不向普通应用或浏览器自身输入框写入密码）。
 - **已弹出的请求**：开启无人值守授权前屏幕上已出现的授权弹窗。
 
-上述选项开启时进入自动处理与关闭复核流程；若对应选项被关闭，或遇到系统安全策略拦截导致弹窗未关闭、无密码输入框、触控 ID 界面切换失败、钥匙串读取失败等情况，一律保留由本人确认并如实记录原因（如「隐私与安全请求由本人确认」「密码与通行密钥请求由本人确认」「开启前已存在的请求由本人确认」或「自动批准受阻，保留本人确认」），且不对同一滞留窗口循环重试，**绝不伪装为已批准**。
+上述选项开启时进入自动处理与关闭复核流程；若对应选项被关闭，或遇到系统安全策略拦截导致弹窗未关闭、无密码输入框、无安全匹配的许可按钮、触控 ID 界面切换失败、钥匙串读取失败等情况，一律保留由本人确认并如实记录原因（如「隐私与安全请求由本人确认」「软件权限许可请求由本人确认」「密码与通行密钥请求由本人确认」「开启前已存在的请求由本人确认」或「自动批准受阻，保留本人确认」），且不对同一滞留窗口循环重试，**绝不伪装为已批准**。
 
 关闭状态下完全不介入系统弹窗。开启状态下仅在确认原弹窗确实关闭后，才记录为「已自动批准」。
 
@@ -76,6 +77,7 @@
 以下能力与场景**尚未完成实机验证**，实机运行中遇到受阻或未覆盖弹窗一律保留由本人确认，绝不伪装为已批准：
 
 - 在实机授予辅助功能权限后，向真实系统授权弹窗以及 `LocalAuthenticationRemoteService` 远程密码框（通行密钥 / Apple 密码内嵌弹层）自动填入密码与自动提交批准的可行性（包括 `AXSecureTextField` 的 `kAXValueAttribute` 可写性及系统安全机制对写值或 `CGEvent` 键盘事件的拦截表现）。
+- 实机环境下 macOS 对 `UserNotificationCenter`、`AuthorizationPromptService` 等 TCC 软件权限许可弹窗执行 `AXPress` 自动点击的拦截表现与跨系统版本控件层级稳定性（受阻时保留由本人确认，绝不伪装为已批准）。
 - 锁屏期间 macOS 是否会实际弹出管理员授权弹窗，以及锁屏状态下事件监测与自动处理能否生效。
 - 真实管理员密码录入 / 更换 / 删除、物理锁屏解锁端到端表现、以及真实菜单栏常驻状态与右键一键关闭实测。
 - 其他系统授权界面与第三方应用管理员弹窗的覆盖率。

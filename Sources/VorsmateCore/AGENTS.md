@@ -11,7 +11,7 @@
 - RemoteModifiers.swift / RemoteVoice.swift：左右修饰键解析、16 kHz 能力识别、独立 IMA ADPCM 解码、语音包超时与既有音频 UID。
 - PluginID.swift：内置与可选模块顺序、标题、图标与通道映射（含无人值守授权、截图）。
 - ShutdownPolicy.swift：关机 / 重启动作、强制退出 / 窗口恢复偏好、按 Bundle ID 聚合的应用条目与菜单栏倒计时格式化。
-- UnattendedAuthPolicy.swift：无人值守授权的弹窗分类（常规管理员 / 隐私与安全 / 密码与通行密钥）、自动批准选项（默认全开）、可选截止策略、状态文案格式化、脱敏摘要与本机有界活动记录存储；不持有或落盘密码。
+- UnattendedAuthPolicy.swift：无人值守授权的弹窗分类（常规管理员 / 隐私与安全 / 软件权限许可 / 密码与通行密钥）、自动批准选项（默认全开）、可选截止策略、状态文案格式化、脱敏摘要与本机有界活动记录存储；不持有或落盘密码。
 - TranslationPolicy.swift：截图快捷键与修饰键映射、双引擎、DeepSeek / OpenAI / Ollama 预设、目标语种解析、OpenAI 兼容接口地址校验、文本折行整理与 OCR 同行相邻区块合并。
 - ScreenshotAnnotation.swift：截图矢量标注工具（矩形 / 箭头 / 画笔）、Apple 调色板、线宽规格、归一化标注模型与选区命中 / 缩放 / 微调 / 窗口吸附几何计算。
 - Preferences.swift：兼容 version 1 的插件禁用、风扇档位、关机偏好、翻译偏好与 PreferencesStore；配置版本检查、目录锁内核对预期值并原子写入 JSON；遥控器配置与导入工具沿用同一锁约定。

@@ -1,5 +1,5 @@
 // [INPUT]: ApplicationServices 辅助功能元素、CoreGraphics 键盘事件与 Security 代码签名核验。
-// [OUTPUT]: Apple 系统进程验签、有界 AX 弹窗/弹层遍历、窗口存活判定与受控键盘提交辅助函数。
+// [OUTPUT]: Apple 系统进程验签、有界 AX 弹窗/弹层遍历、软件权限许可识别、窗口存活判定与受控键盘提交辅助函数。
 // [POS]: VorsmateSystem 无人值守授权底层 AX / 签名工具；仅供 SystemUnattendedAuthDriver 调用，不读取密码框内容。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import AppKit
@@ -10,8 +10,10 @@ import Security
 
 struct UnattendedAuthInspectedDialog {
     let texts: [String]
+    let buttonTitles: [String]
     let passwordField: AXUIElement?
     let approveButton: AXUIElement?
+    let permissionApproveButton: AXUIElement?
     let usePasswordButton: AXUIElement?
 }
 
@@ -24,6 +26,33 @@ enum UnattendedAuthAX {
     private static let usePasswordButtonTitles: Set<String> = [
         "使用密码…", "使用密码...", "使用密码", "输入密码",
         "Use Password…", "Use Password...", "Use Password", "Enter Password",
+    ]
+    private static let permissionPrimaryApproveTitles: Set<String> = [
+        "允许", "允许访问", "允许完全访问", "允许访问所有照片", "继续允许",
+        "Allow", "Allow Access", "Allow Full Access", "Allow All Photos", "Continue Allowing",
+    ]
+    private static let permissionFallbackApproveTitles: Set<String> = ["好", "OK"]
+    private static let permissionDenyTitles: Set<String> = [
+        "不允许", "拒绝", "以后", "取消",
+        "Don’t Allow", "Don't Allow", "Deny", "Not Now", "Cancel",
+    ]
+    private static let blockedPromptKeywords = [
+        "恶意软件", "无法验证开发者", "移到废纸篓", "Move to Trash", "malware", "cannot be verified",
+    ]
+    private static let chinesePermissionActionWords = [
+        "访问", "使用", "控制", "接收", "录制", "捕捉", "查找", "共享", "修改", "读取", "添加", "连接", "追踪", "关联",
+    ]
+    private static let chinesePermissionPhrases = [
+        "想访问", "想要访问", "想使用", "想要使用", "想控制", "想要控制", "想修改", "想要修改",
+        "想要捕捉", "想录制", "想要录制", "想查找", "想要查找", "想接收", "想要接收", "想获得授权",
+    ]
+    private static let englishPermissionActionWords = [
+        "access", "control", "use", "capture", "record", "find", "modify", "receive", "add", "read",
+        "administer", "update",
+    ]
+    private static let englishPermissionAllowPhrases = [
+        "access", "to access", "to use", "to control", "to find", "to receive", "to add",
+        "to capture", "to record", "full access",
     ]
 
     static func isVerifiedAppleProcess(pid: pid_t) -> Bool {
@@ -47,8 +76,11 @@ enum UnattendedAuthAX {
         fallbackPasswordField: AXUIElement? = nil
     ) -> UnattendedAuthInspectedDialog {
         var texts: [String] = []
+        var rawButtonTitles: [String] = []
         var passwordField: AXUIElement?
         var approveButton: AXUIElement? = copyElementAttribute(window, kAXDefaultButtonAttribute)
+        var primaryPermissionApproveButton: AXUIElement?
+        var fallbackPermissionApproveButton: AXUIElement?
         var usePasswordButton: AXUIElement?
 
         if let title = copyStringAttribute(window, kAXTitleAttribute), !title.isEmpty {
@@ -57,13 +89,13 @@ enum UnattendedAuthAX {
 
         var queue: [(AXUIElement, Int)] = [(window, 0)]
         var visited = 0
-        while !queue.isEmpty && visited < 200 {
+        while !queue.isEmpty && visited < 250 {
             let (node, depth) = queue.removeFirst()
             visited += 1
             let role = copyStringAttribute(node, kAXRoleAttribute) ?? ""
             let subrole = copyStringAttribute(node, kAXSubroleAttribute) ?? ""
 
-            if role == kAXStaticTextRole {
+            if role == kAXStaticTextRole || role == kAXTextAreaRole {
                 if let value = copyStringAttribute(node, kAXValueAttribute), !value.isEmpty {
                     texts.append(value)
                 } else if let title = copyStringAttribute(node, kAXTitleAttribute), !title.isEmpty {
@@ -73,15 +105,24 @@ enum UnattendedAuthAX {
                 // 绝不读取密码框内容，只记录控件引用。
                 if passwordField == nil { passwordField = node }
             } else if role == kAXButtonRole {
-                let title = copyStringAttribute(node, kAXTitleAttribute) ?? ""
+                let title = buttonTitle(for: node)
+                if !title.isEmpty {
+                    rawButtonTitles.append(title)
+                }
                 if usePasswordButton == nil && usePasswordButtonTitles.contains(title) {
                     usePasswordButton = node
                 } else if approveButton == nil && approveButtonTitles.contains(title) {
                     approveButton = node
                 }
+                // 绝不回退到 kAXDefaultButtonAttribute，防止默认焦点为“不允许”时误点。
+                if primaryPermissionApproveButton == nil && permissionPrimaryApproveTitles.contains(title) {
+                    primaryPermissionApproveButton = node
+                } else if fallbackPermissionApproveButton == nil && permissionFallbackApproveTitles.contains(title) {
+                    fallbackPermissionApproveButton = node
+                }
             }
 
-            guard depth < 8 else { continue }
+            guard depth < 10 else { continue }
             for child in copyChildren(node) {
                 queue.append((child, depth + 1))
             }
@@ -96,10 +137,77 @@ enum UnattendedAuthAX {
 
         return UnattendedAuthInspectedDialog(
             texts: deduplicatePreservingOrder(texts),
+            buttonTitles: deduplicatePreservingOrder(rawButtonTitles),
             passwordField: passwordField,
             approveButton: approveButton,
+            permissionApproveButton: primaryPermissionApproveButton ?? fallbackPermissionApproveButton,
             usePasswordButton: usePasswordButton
         )
+    }
+
+    static func matchesAppPermissionPrompt(texts: [String], buttonTitles: [String]) -> Bool {
+        let hasAllowButton = buttonTitles.contains {
+            permissionPrimaryApproveTitles.contains($0) || permissionFallbackApproveTitles.contains($0)
+        }
+        let hasDenyButton = buttonTitles.contains { permissionDenyTitles.contains($0) }
+        guard hasAllowButton && hasDenyButton else { return false }
+
+        let combinedAll = (texts + buttonTitles).joined(separator: " ")
+        if blockedPromptKeywords.contains(where: { combinedAll.localizedCaseInsensitiveContains($0) }) {
+            return false
+        }
+
+        let joinedTexts = texts.joined(separator: " ")
+        let matchesChinese =
+            (joinedTexts.contains("允许")
+                && chinesePermissionActionWords.contains(where: { joinedTexts.contains($0) }))
+            || chinesePermissionPhrases.contains(where: { joinedTexts.contains($0) })
+        if matchesChinese { return true }
+
+        let lower = joinedTexts.lowercased()
+        let matchesEnglishVerb =
+            (lower.contains("would like to ") || lower.contains("wants to "))
+            && englishPermissionActionWords.contains(where: { lower.contains($0) })
+        let matchesEnglishAllow =
+            lower.contains("allow ")
+            && englishPermissionAllowPhrases.contains(where: { lower.contains($0) })
+        return matchesEnglishVerb || matchesEnglishAllow
+    }
+
+    private static func buttonTitle(for button: AXUIElement) -> String {
+        if let title = copyStringAttribute(button, kAXTitleAttribute)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            !title.isEmpty
+        {
+            return title
+        }
+        if let desc = copyStringAttribute(button, kAXDescriptionAttribute)?.trimmingCharacters(
+            in: .whitespacesAndNewlines),
+            !desc.isEmpty
+        {
+            return desc
+        }
+        var queue = copyChildren(button)
+        var visited = 0
+        while !queue.isEmpty && visited < 12 {
+            let child = queue.removeFirst()
+            visited += 1
+            if copyStringAttribute(child, kAXRoleAttribute) == kAXStaticTextRole {
+                if let value = copyStringAttribute(child, kAXValueAttribute)?.trimmingCharacters(
+                    in: .whitespacesAndNewlines),
+                    !value.isEmpty
+                {
+                    return value
+                }
+                if let title = copyStringAttribute(child, kAXTitleAttribute)?.trimmingCharacters(
+                    in: .whitespacesAndNewlines),
+                    !title.isEmpty
+                {
+                    return title
+                }
+            }
+            queue.append(contentsOf: copyChildren(child))
+        }
+        return ""
     }
 
     @MainActor

@@ -34,6 +34,7 @@ struct PluginPreferencesTests {
         value.shutdownPolicy.forceCloseApps = false
         value.unattendedAuth = UnattendedAuthPreferences(
             approvePrivacySettings: false,
+            approveAppPermissions: false,
             approveCredentialAndAppAuth: true,
             approveExistingDialogs: false
         )
@@ -51,6 +52,7 @@ struct PluginPreferencesTests {
         let decoded = try JSONDecoder().decode(Preferences.self, from: Data(legacyJSON.utf8))
         #expect(decoded.unattendedAuth == UnattendedAuthPreferences())
         #expect(decoded.unattendedAuth.approvePrivacySettings)
+        #expect(decoded.unattendedAuth.approveAppPermissions)
         #expect(decoded.unattendedAuth.approveCredentialAndAppAuth)
         #expect(decoded.unattendedAuth.approveExistingDialogs)
         #expect(decoded.unattendedAuth.optionsSummaryText == "全部")

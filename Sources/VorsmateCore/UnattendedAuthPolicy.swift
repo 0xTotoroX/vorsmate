@@ -1,5 +1,5 @@
 // [INPUT]: Foundation 日期、Codable 与 Preferences 同目录文件锁。
-// [OUTPUT]: 无人值守授权的截止时间策略、状态文案格式化、脱敏活动记录与本地有界存储。
+// [OUTPUT]: 无人值守授权的弹窗分类（含软件权限许可）、截止时间策略、状态文案格式化、脱敏活动记录与本地有界存储。
 // [POS]: VorsmateCore 纯数据与规则层；不持有密码、不访问辅助功能或系统通知。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import Foundation
@@ -11,26 +11,31 @@ public enum UnattendedAuthPolicy {
 public enum UnattendedAuthDialogCategory: String, Codable, Equatable, Sendable {
     case systemAdmin
     case privacySettings
+    case appPermissions
     case credentialAndAppAuth
 }
 
 public struct UnattendedAuthPreferences: Codable, Equatable, Sendable {
     public var approvePrivacySettings = true
+    public var approveAppPermissions = true
     public var approveCredentialAndAppAuth = true
     public var approveExistingDialogs = true
 
     public init(
         approvePrivacySettings: Bool = true,
+        approveAppPermissions: Bool = true,
         approveCredentialAndAppAuth: Bool = true,
         approveExistingDialogs: Bool = true
     ) {
         self.approvePrivacySettings = approvePrivacySettings
+        self.approveAppPermissions = approveAppPermissions
         self.approveCredentialAndAppAuth = approveCredentialAndAppAuth
         self.approveExistingDialogs = approveExistingDialogs
     }
 
     private enum CodingKeys: String, CodingKey {
         case approvePrivacySettings
+        case approveAppPermissions
         case approveCredentialAndAppAuth
         case approveExistingDialogs
     }
@@ -38,6 +43,7 @@ public struct UnattendedAuthPreferences: Codable, Equatable, Sendable {
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         approvePrivacySettings = try values.decodeIfPresent(Bool.self, forKey: .approvePrivacySettings) ?? true
+        approveAppPermissions = try values.decodeIfPresent(Bool.self, forKey: .approveAppPermissions) ?? true
         approveCredentialAndAppAuth =
             try values.decodeIfPresent(Bool.self, forKey: .approveCredentialAndAppAuth) ?? true
         approveExistingDialogs = try values.decodeIfPresent(Bool.self, forKey: .approveExistingDialogs) ?? true
@@ -52,17 +58,25 @@ public struct UnattendedAuthPreferences: Codable, Equatable, Sendable {
             return nil
         case .privacySettings:
             return approvePrivacySettings ? nil : "隐私与安全请求由本人确认"
+        case .appPermissions:
+            return approveAppPermissions ? nil : "软件权限许可请求由本人确认"
         case .credentialAndAppAuth:
             return approveCredentialAndAppAuth ? nil : "密码与通行密钥请求由本人确认"
         }
     }
 
     public var optionsSummaryText: String {
-        let enabledCount = [approvePrivacySettings, approveCredentialAndAppAuth, approveExistingDialogs].filter(\.self)
-            .count
-        if enabledCount == 3 { return "全部" }
+        let enabledCount = [
+            approvePrivacySettings,
+            approveAppPermissions,
+            approveCredentialAndAppAuth,
+            approveExistingDialogs,
+        ]
+        .filter(\.self)
+        .count
+        if enabledCount == 4 { return "全部" }
         if enabledCount == 0 { return "仅常规管理员" }
-        return "已选 \(enabledCount)/3"
+        return "已选 \(enabledCount)/4"
     }
 }
 
@@ -199,14 +213,31 @@ public enum UnattendedAuthSanitizer {
     public static func extractRequester(from promptText: String, fallback: String) -> String {
         let text = sanitizeText(promptText)
         let markers = [
-            " 想要", "想要进行更改", "想要安装", "想要修改", "正试图", "试图",
-            " wants to ", " is trying to ",
+            " 想要", "想要进行更改", "想要安装", "想要修改", "想访问", "想修改", "想使用", "想控制",
+            "正试图", "试图", " wants to ", " is trying to ", " would like to ",
         ]
         for marker in markers {
             if let range = text.range(of: marker) {
                 let prefix = text[..<range.lowerBound].trimmingCharacters(in: CharacterSet(charactersIn: " “”\"'「」『』"))
                 if !prefix.isEmpty && prefix.count <= 48 {
                     return prefix
+                }
+            }
+        }
+        let quotedPrefixes: [(prefix: String, closing: Character, caseInsensitive: Bool)] = [
+            ("允许“", "”", false),
+            ("允许\"", "\"", false),
+            ("Allow “", "”", true),
+            ("Allow \"", "\"", true),
+        ]
+        for item in quotedPrefixes {
+            let options: String.CompareOptions = item.caseInsensitive ? [.caseInsensitive] : []
+            if let start = text.range(of: item.prefix, options: options),
+                let end = text[start.upperBound...].firstIndex(of: item.closing)
+            {
+                let quoted = text[start.upperBound..<end].trimmingCharacters(in: .whitespacesAndNewlines)
+                if !quoted.isEmpty && quoted.count <= 48 {
+                    return quoted
                 }
             }
         }

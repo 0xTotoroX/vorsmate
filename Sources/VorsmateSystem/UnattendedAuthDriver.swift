@@ -1,6 +1,6 @@
 // [INPUT]: UnattendedAuthAX 辅助功能 / 验签工具、NSWorkspace 与锁屏/唤醒通知。
-// [OUTPUT]: 授权弹窗模型、驱动协议、事件驱动系统监听/批准实现与纯内存预览驱动。
-// [POS]: VorsmateSystem 无人值守授权驱动核心；已有弹窗和「隐私与安全」内嵌请求仅记录由本人确认，受阻绝不伪装已批准。
+// [OUTPUT]: 授权弹窗模型、驱动协议、事件驱动系统监听/批准实现（含软件权限许可）与纯内存预览驱动。
+// [POS]: VorsmateSystem 无人值守授权驱动核心；已有弹窗和未匹配请求仅保留本人确认或忽略，受阻绝不伪装已批准。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import AppKit
 import ApplicationServices
@@ -145,6 +145,14 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
     ]
     private nonisolated static let privacyExtensionID = "com.apple.settings.PrivacySecurity.extension"
     private nonisolated static let systemSettingsID = "com.apple.systempreferences"
+    private nonisolated static let appPermissionHostBundleIDs: Set<String> = [
+        "com.apple.UserNotificationCenter",
+        "com.apple.tcc.AuthorizationPromptService",
+    ]
+    private nonisolated static let appPermissionHostNameFragments = [
+        "UserNotificationCenter",
+        "AuthorizationPromptService",
+    ]
 
     private struct TrackedDialog {
         let id: String
@@ -172,6 +180,7 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
     private var handledWindows: [pid_t: [AXUIElement]] = [:]
     private var embeddedAuthApplicationObserver: NSKeyValueObservation?
     private var embeddedAuthScanTask: Task<Void, Never>?
+    private var appPermissionScanTask: Task<Void, Never>?
     private var monitoringID: UUID?
     private var monitoring = false
     private let clock: @Sendable () -> Date
@@ -218,16 +227,25 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
         registerScreenLockObservers()
         registerEmbeddedAuthObserver(monitoringID: id)
         attachEmbeddedAuthObservers()
+        attachAppPermissionHostObservers()
     }
 
     public func checkExistingDialogs() {
         guard monitoring else { return }
         for app in NSWorkspace.shared.runningApplications where !app.isTerminated && isAuthHost(app) {
             attachAXObserver(for: app)
-            inspectApplicationWindows(
+            _ = inspectApplicationWindows(
                 pid: app.processIdentifier,
                 fallbackName: app.localizedName ?? "系统授权",
                 category: .systemAdmin,
+                isExisting: true)
+        }
+        for app in NSWorkspace.shared.runningApplications where !app.isTerminated && isAppPermissionHost(app) {
+            attachAXObserver(for: app)
+            _ = inspectApplicationWindows(
+                pid: app.processIdentifier,
+                fallbackName: app.localizedName ?? "软件权限许可",
+                category: .appPermissions,
                 isExisting: true)
         }
         attachEmbeddedAuthObservers()
@@ -241,6 +259,8 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
         embeddedAuthApplicationObserver = nil
         embeddedAuthScanTask?.cancel()
         embeddedAuthScanTask = nil
+        appPermissionScanTask?.cancel()
+        appPermissionScanTask = nil
         for observer in workspaceObservers {
             NSWorkspace.shared.notificationCenter.removeObserver(observer)
         }
@@ -290,6 +310,11 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
         }
 
         if let unavailable = checkWindowPresentOrStop(tracked) { return unavailable }
+
+        if tracked.category == .appPermissions {
+            return await approveAppPermissionDialog(
+                tracked, monitoringID: capturedMonitoringID, deadline: deadline)
+        }
 
         var inspected = UnattendedAuthAX.inspectWindow(
             tracked.window, fallbackPasswordField: tracked.fallbackPasswordField)
@@ -370,6 +395,21 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
         guard let bundleIdentifier else { return false }
         return bundleIdentifier.caseInsensitiveCompare(privacyExtensionID) == .orderedSame
             || bundleIdentifier.caseInsensitiveCompare(systemSettingsID) == .orderedSame
+    }
+
+    public nonisolated static func matchesAppPermissionHost(bundleIdentifier: String?, processNames: [String]) -> Bool {
+        if let bundleID = bundleIdentifier,
+            appPermissionHostBundleIDs.contains(where: { $0.caseInsensitiveCompare(bundleID) == .orderedSame })
+        {
+            return true
+        }
+        return processNames.contains { name in
+            !name.isEmpty && appPermissionHostNameFragments.contains { name.localizedCaseInsensitiveContains($0) }
+        }
+    }
+
+    public static func matchesAppPermissionPrompt(texts: [String], buttonTitles: [String]) -> Bool {
+        UnattendedAuthAX.matchesAppPermissionPrompt(texts: texts, buttonTitles: buttonTitles)
     }
 
     public static func isPasswordRejectedText(_ text: String) -> Bool {
@@ -457,19 +497,30 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
     private func registerEmbeddedAuthObserver(monitoringID id: UUID) {
         embeddedAuthApplicationObserver = NSWorkspace.shared.observe(\.runningApplications, options: [.old, .new]) {
             [weak self] _, change in
-            let previous = Set(
-                (change.oldValue ?? []).filter(Self.isObservedEmbeddedProcess).map(\.processIdentifier))
-            let current = Set(
-                (change.newValue ?? []).filter(Self.isObservedEmbeddedProcess).map(\.processIdentifier))
-            guard current != previous else { return }
+            let previousApps = change.oldValue ?? []
+            let currentApps = change.newValue ?? []
+            let previousEmbedded = Set(previousApps.filter(Self.isObservedEmbeddedProcess).map(\.processIdentifier))
+            let currentEmbedded = Set(currentApps.filter(Self.isObservedEmbeddedProcess).map(\.processIdentifier))
+            let previousPermission = Set(
+                previousApps.filter(Self.isObservedAppPermissionProcess).map(\.processIdentifier))
+            let currentPermission = Set(
+                currentApps.filter(Self.isObservedAppPermissionProcess).map(\.processIdentifier))
+            guard currentEmbedded != previousEmbedded || currentPermission != previousPermission else { return }
             Task { @MainActor [weak self] in
                 guard let self, self.monitoringID == id else { return }
-                for pid in previous.subtracting(current) {
+                let removed =
+                    previousEmbedded.subtracting(currentEmbedded)
+                    .union(previousPermission.subtracting(currentPermission))
+                for pid in removed {
                     self.detachAXObserver(for: pid)
                 }
-                if !current.subtracting(previous).isEmpty {
+                if !currentEmbedded.subtracting(previousEmbedded).isEmpty {
                     self.attachEmbeddedAuthObservers()
                     self.scheduleEmbeddedAuthScan()
+                }
+                if !currentPermission.subtracting(previousPermission).isEmpty {
+                    self.attachAppPermissionHostObservers()
+                    self.scheduleAppPermissionScan()
                 }
             }
         }
@@ -506,6 +557,8 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
                 (Self.matchesPrivacyAuthHost(bundleIdentifier: app.bundleIdentifier) || isEmbeddedAuthService(app)
                 || isAuthHost(app))
                 && Self.isVerifiedAppleProcess(pid: app.processIdentifier)
+        case .appPermissions:
+            return isAppPermissionHost(app) || isAuthHost(app)
         case .credentialAndAppAuth:
             // 通行密钥 / 应用内验证弹层可能挂载在普通宿主应用窗口上，控制元素自身会再做 Apple 签名校验。
             return true
@@ -531,9 +584,47 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
                 (Self.matchesPrivacyAuthHost(bundleIdentifier: controlApp.bundleIdentifier)
                 || isEmbeddedAuthService(controlApp)
                 || isAuthHost(controlApp)) ? controlPID : nil
+        case .appPermissions:
+            return (isAppPermissionHost(controlApp) || isAuthHost(controlApp)) ? controlPID : nil
         case .credentialAndAppAuth:
             return (isEmbeddedAuthService(controlApp) || isAuthHost(controlApp)) ? controlPID : nil
         }
+    }
+
+    private func approveAppPermissionDialog(
+        _ tracked: TrackedDialog,
+        monitoringID capturedMonitoringID: UUID,
+        deadline: Date?
+    ) async -> AuthDialogApprovalResult {
+        let inspected = UnattendedAuthAX.inspectWindow(tracked.window)
+        guard Self.matchesAppPermissionPrompt(texts: inspected.texts, buttonTitles: inspected.buttonTitles),
+            let allowButton = inspected.permissionApproveButton
+        else {
+            markWindowHandled(tracked.window, pid: tracked.pid)
+            return .leftForUser(reason: "未识别到可安全批准的许可按钮，已保留由本人确认")
+        }
+
+        guard
+            verifiedControlPID(for: allowButton, category: .appPermissions, fallbackHostPID: tracked.pid) != nil
+        else {
+            markWindowHandled(tracked.window, pid: tracked.pid)
+            return .blocked(reason: "无法验证许可按钮所属系统进程，已保留由本人确认")
+        }
+
+        if let stopped = checkSubmissionAllowed(monitoringID: capturedMonitoringID, deadline: deadline) {
+            return stopped
+        }
+
+        guard AXUIElementPerformAction(allowButton, kAXPressAction as CFString) == .success else {
+            markWindowHandled(tracked.window, pid: tracked.pid)
+            return .blocked(reason: "系统限制自动点击许可按钮，已保留由本人确认")
+        }
+
+        return await verifyDialogDismissed(
+            tracked,
+            monitoringID: capturedMonitoringID,
+            checkPasswordRejection: false,
+            approvedDetail: "已点击允许且弹窗已关闭")
     }
 
     private func submitPassword(
@@ -553,9 +644,12 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
         return UnattendedAuthAX.typePasswordAndReturn(password, into: passwordField, pid: inputPID)
     }
 
-    private func verifyDialogDismissed(_ tracked: TrackedDialog, monitoringID expectedID: UUID) async
-        -> AuthDialogApprovalResult
-    {
+    private func verifyDialogDismissed(
+        _ tracked: TrackedDialog,
+        monitoringID expectedID: UUID,
+        checkPasswordRejection: Bool = true,
+        approvedDetail: String = "已提交授权且弹窗已关闭"
+    ) async -> AuthDialogApprovalResult {
         // 有界复核：仅在明确确认弹窗已消失时才判为已批准，AX 报错或未知状态绝不假阳性报告。
         var sawUnknown = false
         for _ in 0..<10 {
@@ -565,7 +659,7 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
             }
             switch UnattendedAuthAX.windowPresence(tracked.window, pid: tracked.pid) {
             case .absent:
-                return .approved(detail: "已提交授权且弹窗已关闭")
+                return .approved(detail: approvedDetail)
             case .present:
                 sawUnknown = false
             case .unknown:
@@ -577,11 +671,13 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
         if sawUnknown {
             return .blocked(reason: "无法确认弹窗是否关闭，已保留由本人确认")
         }
-        let afterTexts = UnattendedAuthAX.inspectWindow(
-            tracked.window, fallbackPasswordField: tracked.fallbackPasswordField
-        ).texts.joined(separator: " ")
-        if Self.isPasswordRejectedText(afterTexts) {
-            return .passwordRejected(reason: "系统提示密码未通过验证")
+        if checkPasswordRejection {
+            let afterTexts = UnattendedAuthAX.inspectWindow(
+                tracked.window, fallbackPasswordField: tracked.fallbackPasswordField
+            ).texts.joined(separator: " ")
+            if Self.isPasswordRejectedText(afterTexts) {
+                return .passwordRejected(reason: "系统提示密码未通过验证")
+            }
         }
         return .blocked(reason: "弹窗未关闭，已保留由本人确认")
     }
@@ -597,6 +693,11 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
         return names.contains { name in
             !name.isEmpty && embeddedAuthServiceNameFragments.contains { name.localizedCaseInsensitiveContains($0) }
         }
+    }
+
+    private nonisolated static func isObservedAppPermissionProcess(_ app: NSRunningApplication) -> Bool {
+        let names = [app.localizedName, app.executableURL?.lastPathComponent].compactMap { $0 }
+        return matchesAppPermissionHost(bundleIdentifier: app.bundleIdentifier, processNames: names)
     }
 
     private func hasRunningEmbeddedAuthService() -> Bool {
@@ -845,11 +946,23 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
     private func handleApplicationEvent(_ app: NSRunningApplication) {
         if isAuthHost(app) {
             attachAXObserver(for: app)
-            inspectApplicationWindows(
+            _ = inspectApplicationWindows(
                 pid: app.processIdentifier,
                 fallbackName: app.localizedName ?? "系统授权",
                 category: .systemAdmin,
                 isExisting: false)
+            return
+        }
+        if isAppPermissionHost(app) {
+            attachAXObserver(for: app)
+            if !inspectApplicationWindows(
+                pid: app.processIdentifier,
+                fallbackName: app.localizedName ?? "软件权限许可",
+                category: .appPermissions,
+                isExisting: false)
+            {
+                scheduleAppPermissionScan()
+            }
             return
         }
         if (Self.isObservedEmbeddedProcess(app) || Self.matchesPrivacyAuthHost(bundleIdentifier: app.bundleIdentifier))
@@ -870,6 +983,48 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
             return false
         }
         return Self.isVerifiedAppleProcess(pid: app.processIdentifier)
+    }
+
+    private func isAppPermissionHost(_ app: NSRunningApplication) -> Bool {
+        let names = [app.localizedName, app.executableURL?.lastPathComponent].compactMap { $0 }
+        guard Self.matchesAppPermissionHost(bundleIdentifier: app.bundleIdentifier, processNames: names) else {
+            return false
+        }
+        return Self.isVerifiedAppleProcess(pid: app.processIdentifier)
+    }
+
+    private func attachAppPermissionHostObservers() {
+        for app in NSWorkspace.shared.runningApplications where !app.isTerminated && isAppPermissionHost(app) {
+            attachAXObserver(for: app)
+        }
+    }
+
+    private func scheduleAppPermissionScan() {
+        guard let expectedID = monitoringID else { return }
+        appPermissionScanTask?.cancel()
+        appPermissionScanTask = Task { @MainActor [weak self] in
+            for delay in [150, 450, 900] {
+                try? await Task.sleep(for: .milliseconds(delay))
+                guard !Task.isCancelled, let self, self.monitoring, self.monitoringID == expectedID else { return }
+                if self.inspectRunningAppPermissionDialogs(isExisting: false) { return }
+            }
+        }
+    }
+
+    private func inspectRunningAppPermissionDialogs(isExisting: Bool) -> Bool {
+        var found = false
+        for app in NSWorkspace.shared.runningApplications where !app.isTerminated && isAppPermissionHost(app) {
+            attachAXObserver(for: app)
+            if inspectApplicationWindows(
+                pid: app.processIdentifier,
+                fallbackName: app.localizedName ?? "软件权限许可",
+                category: .appPermissions,
+                isExisting: isExisting)
+            {
+                found = true
+            }
+        }
+        return found
     }
 
     private func isEmbeddedAuthService(_ app: NSRunningApplication) -> Bool {
@@ -942,6 +1097,28 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
             _ = inspectEmbeddedAuthDialogs(isExisting: false)
             return
         }
+        if let app, !app.isTerminated, isAppPermissionHost(app) {
+            let fallback = app.localizedName ?? "软件权限许可"
+            let role = UnattendedAuthAX.copyStringAttribute(element, kAXRoleAttribute)
+            let targetWindow =
+                (role == kAXWindowRole || role == kAXSheetRole)
+                ? element
+                : UnattendedAuthAX.enclosingWindowOrSheet(for: element)
+            var found = false
+            if let targetWindow {
+                found = report(
+                    window: targetWindow, pid: pid, fallbackName: fallback, category: .appPermissions,
+                    isExisting: false, inspected: UnattendedAuthAX.inspectWindow(targetWindow))
+            }
+            if !found {
+                found = inspectApplicationWindows(
+                    pid: pid, fallbackName: fallback, category: .appPermissions, isExisting: false)
+            }
+            if !found {
+                scheduleAppPermissionScan()
+            }
+            return
+        }
         guard let app, !app.isTerminated, isAuthHost(app) else { return }
         let fallback = app.localizedName ?? "系统授权"
         report(
@@ -949,12 +1126,13 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
             isExisting: false, inspected: UnattendedAuthAX.inspectWindow(element))
     }
 
+    @discardableResult
     private func inspectApplicationWindows(
         pid: pid_t,
         fallbackName: String,
         category: UnattendedAuthDialogCategory,
         isExisting: Bool
-    ) {
+    ) -> Bool {
         let appElement = AXUIElementCreateApplication(pid)
         var value: CFTypeRef?
         _ = AXUIElementCopyAttributeValue(appElement, kAXWindowsAttribute as CFString, &value)
@@ -964,11 +1142,16 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
         {
             windows.append(focused)
         }
+        var reported = false
         for window in windows {
-            report(
+            if report(
                 window: window, pid: pid, fallbackName: fallbackName, category: category,
                 isExisting: isExisting, inspected: UnattendedAuthAX.inspectWindow(window))
+            {
+                reported = true
+            }
         }
+        return reported
     }
 
     private func markWindowHandled(_ window: AXUIElement, pid: pid_t) {
@@ -979,6 +1162,7 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
         }
     }
 
+    @discardableResult
     private func report(
         window: AXUIElement,
         pid: pid_t,
@@ -988,28 +1172,47 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
         inspected: UnattendedAuthInspectedDialog,
         fallbackPasswordField: AXUIElement? = nil,
         manualReason: String? = nil
-    ) {
+    ) -> Bool {
         if let existing = handledWindows[pid] {
             let alive = existing.filter { UnattendedAuthAX.windowPresence($0, pid: pid) != .absent }
             handledWindows[pid] = alive.isEmpty ? nil : alive
-            if alive.contains(where: { CFEqual($0, window) }) { return }
+            if alive.contains(where: { CFEqual($0, window) }) { return false }
         }
-        if trackedDialogs.values.contains(where: { $0.pid == pid && CFEqual($0.window, window) }) { return }
+        if trackedDialogs.values.contains(where: { $0.pid == pid && CFEqual($0.window, window) }) { return false }
         let hasPassword = inspected.passwordField != nil
         let isTouchIDOnly = !hasPassword && inspected.usePasswordButton != nil
-        if (category == .privacySettings || category == .credentialAndAppAuth || manualReason != nil)
-            && !hasPassword && !isTouchIDOnly
+        var effectiveCategory = category
+        if category == .systemAdmin
+            && !hasPassword
+            && !isTouchIDOnly
+            && inspected.permissionApproveButton != nil
+            && Self.matchesAppPermissionPrompt(texts: inspected.texts, buttonTitles: inspected.buttonTitles)
         {
-            return
+            effectiveCategory = .appPermissions
         }
-        guard hasPassword || isTouchIDOnly || !inspected.texts.isEmpty else { return }
-        guard hasPassword || isTouchIDOnly || inspected.approveButton != nil else { return }
+        if effectiveCategory == .appPermissions {
+            guard !hasPassword,
+                !isTouchIDOnly,
+                inspected.permissionApproveButton != nil,
+                Self.matchesAppPermissionPrompt(texts: inspected.texts, buttonTitles: inspected.buttonTitles)
+            else { return false }
+        } else {
+            if (effectiveCategory == .privacySettings || effectiveCategory == .credentialAndAppAuth
+                || manualReason != nil)
+                && !hasPassword && !isTouchIDOnly
+            {
+                return false
+            }
+            guard hasPassword || isTouchIDOnly || !inspected.texts.isEmpty else { return false }
+            guard hasPassword || isTouchIDOnly || inspected.approveButton != nil else { return false }
+        }
 
         let joinedText = inspected.texts.joined(separator: " ")
         let defaultPrompt =
-            switch category {
+            switch effectiveCategory {
             case .systemAdmin: "\(fallbackName) 管理员授权请求"
             case .privacySettings: "隐私与安全 管理员授权请求"
+            case .appPermissions: "\(fallbackName) 软件权限许可请求"
             case .credentialAndAppAuth: "\(fallbackName) 密码与通行密钥验证请求"
             }
         let summary = UnattendedAuthSanitizer.sanitizeText(joinedText.isEmpty ? defaultPrompt : joinedText)
@@ -1017,8 +1220,8 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
 
         let now = clock()
         recentFingerprints = recentFingerprints.filter { now.timeIntervalSince($0.value) < 6 }
-        let fingerprint = "\(category.rawValue)::\(summary)"
-        if recentFingerprints[fingerprint] != nil { return }
+        let fingerprint = "\(effectiveCategory.rawValue)::\(summary)"
+        if recentFingerprints[fingerprint] != nil { return false }
         recentFingerprints[fingerprint] = now
 
         let dialogID = UUID().uuidString
@@ -1029,7 +1232,7 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
                 id: dialogID,
                 pid: pid,
                 window: window,
-                category: category,
+                category: effectiveCategory,
                 fallbackPasswordField: fallbackPasswordField,
                 detectedAt: now
             )
@@ -1038,12 +1241,13 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
             id: dialogID,
             source: source,
             summary: summary,
-            category: category,
+            category: effectiveCategory,
             isExisting: isExisting,
             isTouchIDOnly: isTouchIDOnly,
             hasPasswordField: hasPassword,
             manualConfirmationReason: manualReason
         )
         onDialog?(detected)
+        return true
     }
 }

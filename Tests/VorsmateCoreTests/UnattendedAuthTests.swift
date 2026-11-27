@@ -462,7 +462,7 @@ struct UnattendedAuthTests {
         )
         controller.activate()
 
-        // 1. 默认选项下全部类别（含开启前已存在、隐私与安全、密码与通行密钥）均进入自动批准
+        // 1. 默认选项下全部类别（含开启前已存在、隐私与安全、软件权限许可、密码与通行密钥）均进入自动批准
         #expect(controller.preferences.optionsSummaryText == "全部")
         #expect(controller.enable(deadlineChoice: .none))
         await settle()
@@ -476,21 +476,31 @@ struct UnattendedAuthTests {
         await settle()
         driver.emitDialog(
             DetectedAuthDialog(
+                id: "permission-auto", source: "ChatGPT.app", summary: "允许“ChatGPT.app”访问提醒事项？",
+                category: .appPermissions, hasPasswordField: false))
+        await settle()
+        driver.emitDialog(
+            DetectedAuthDialog(
                 id: "passkey-auto", source: "ego lite", summary: "通过“user@example.com”登录。输入密码以解锁。",
                 category: .credentialAndAppAuth))
         await settle()
-        #expect(driver.approvalCalls.map(\.id) == ["existing-admin", "privacy-auto", "passkey-auto"])
-        #expect(controller.currentSession?.events.count == 3)
+        #expect(
+            driver.approvalCalls.map(\.id) == [
+                "existing-admin", "privacy-auto", "permission-auto", "passkey-auto",
+            ])
+        #expect(controller.currentSession?.events.count == 4)
         #expect(controller.currentSession?.events.allSatisfy { $0.outcome == .approved } == true)
 
         // 2. 运行中逐项关闭对应选项后，仅未勾选类别保留本人确认并释放弹窗追踪
         controller.updatePreferences { $0.approvePrivacySettings = false }
-        #expect(controller.preferences.optionsSummaryText == "已选 2/3")
+        #expect(controller.preferences.optionsSummaryText == "已选 3/4")
+        controller.updatePreferences { $0.approveAppPermissions = false }
+        #expect(controller.preferences.optionsSummaryText == "已选 2/4")
         controller.updatePreferences { $0.approveCredentialAndAppAuth = false }
-        #expect(controller.preferences.optionsSummaryText == "已选 1/3")
+        #expect(controller.preferences.optionsSummaryText == "已选 1/4")
         controller.updatePreferences { $0.approveExistingDialogs = false }
         #expect(controller.preferences.optionsSummaryText == "仅常规管理员")
-        #expect(persisted.count == 3)
+        #expect(persisted.count == 4)
 
         driver.emitDialog(
             DetectedAuthDialog(
@@ -499,6 +509,14 @@ struct UnattendedAuthTests {
         await settle()
         #expect(controller.currentSession?.events.first?.outcome == .leftForUser)
         #expect(controller.currentSession?.events.first?.detail == "隐私与安全请求由本人确认")
+
+        driver.emitDialog(
+            DetectedAuthDialog(
+                id: "permission-manual", source: "ChatGPT.app", summary: "允许“ChatGPT.app”访问提醒事项？",
+                category: .appPermissions, hasPasswordField: false))
+        await settle()
+        #expect(controller.currentSession?.events.first?.outcome == .leftForUser)
+        #expect(controller.currentSession?.events.first?.detail == "软件权限许可请求由本人确认")
 
         driver.emitDialog(
             DetectedAuthDialog(
@@ -523,7 +541,10 @@ struct UnattendedAuthTests {
         await settle()
         #expect(controller.currentSession?.events.first?.outcome == .leftForUser)
         #expect(controller.currentSession?.events.first?.detail == "显式要求本人确认")
-        #expect(driver.releasedDialogIDs == ["privacy-manual", "passkey-manual", "existing-manual", "explicit-manual"])
+        #expect(
+            driver.releasedDialogIDs == [
+                "privacy-manual", "permission-manual", "passkey-manual", "existing-manual", "explicit-manual",
+            ])
 
         // 3. 常规系统管理员弹窗仍照常自动批准
         driver.emitDialog(DetectedAuthDialog(id: "new-auth", source: "brew", summary: "brew 想要安装软件"))
@@ -859,9 +880,81 @@ struct UnattendedAuthTests {
             SystemUnattendedAuthDriver.matchesPrivacyAuthHost(
                 bundleIdentifier: "com.apple.settings.PrivacySecurity.extension"))
         #expect(!SystemUnattendedAuthDriver.matchesPrivacyAuthHost(bundleIdentifier: "com.apple.finder"))
+        #expect(
+            SystemUnattendedAuthDriver.matchesAppPermissionHost(
+                bundleIdentifier: "com.apple.UserNotificationCenter", processNames: []))
+        #expect(
+            SystemUnattendedAuthDriver.matchesAppPermissionHost(
+                bundleIdentifier: "com.apple.tcc.AuthorizationPromptService", processNames: []))
+        #expect(
+            SystemUnattendedAuthDriver.matchesAppPermissionHost(
+                bundleIdentifier: nil, processNames: ["UserNotificationCenter"]))
+        #expect(
+            !SystemUnattendedAuthDriver.matchesAppPermissionHost(
+                bundleIdentifier: "com.apple.finder", processNames: ["Finder"]))
         #expect(!SystemUnattendedAuthDriver.isVerifiedAppleProcess(pid: -1))
         #expect(!SystemUnattendedAuthDriver.isVerifiedAppleProcess(pid: 0))
         #expect(!SystemUnattendedAuthDriver.isVerifiedAppleProcess(pid: getpid()))
+    }
+
+    @Test("软件权限许可弹窗正反文案识别与请求方提取准确")
+    func appPermissionPromptMatchingAndRequesterExtraction() {
+        #expect(
+            SystemUnattendedAuthDriver.matchesAppPermissionPrompt(
+                texts: [
+                    "允许“ChatGPT.app”访问提醒事项？",
+                    "Allow access so that ChatGPT can read and update your reminders when you ask.",
+                ],
+                buttonTitles: ["不允许", "允许"]
+            ))
+        #expect(
+            SystemUnattendedAuthDriver.matchesAppPermissionPrompt(
+                texts: ["“终端”想访问“桌面”文件夹中的文件。"],
+                buttonTitles: ["不允许", "好"]
+            ))
+        #expect(
+            SystemUnattendedAuthDriver.matchesAppPermissionPrompt(
+                texts: ["允许“PhotosTest”访问照片图库？"],
+                buttonTitles: ["不允许", "选择照片", "允许完全访问"]
+            ))
+        #expect(
+            SystemUnattendedAuthDriver.matchesAppPermissionPrompt(
+                texts: ["Allow “ChatGPT.app” to access your reminders?"],
+                buttonTitles: ["Don’t Allow", "Allow"]
+            ))
+
+        // 负向用例：单按钮系统提示、重启确认框与 Gatekeeper 恶意软件拦截弹窗绝不误匹配
+        #expect(
+            !SystemUnattendedAuthDriver.matchesAppPermissionPrompt(
+                texts: ["磁盘未正常推出"],
+                buttonTitles: ["好"]
+            ))
+        #expect(
+            !SystemUnattendedAuthDriver.matchesAppPermissionPrompt(
+                texts: ["确定要立即重新启动电脑吗？"],
+                buttonTitles: ["取消", "重新启动"]
+            ))
+        #expect(
+            !SystemUnattendedAuthDriver.matchesAppPermissionPrompt(
+                texts: ["“BadApp.app”包含恶意软件，无法打开。"],
+                buttonTitles: ["移到废纸篓", "好"]
+            ))
+        #expect(
+            !SystemUnattendedAuthDriver.matchesAppPermissionPrompt(
+                texts: ["“Unknown.app” cannot be verified because it may contain malware."],
+                buttonTitles: ["Move to Trash", "OK"]
+            ))
+
+        #expect(
+            UnattendedAuthSanitizer.extractRequester(
+                from: "允许“ChatGPT.app”访问提醒事项？", fallback: "UserNotificationCenter") == "ChatGPT.app")
+        #expect(
+            UnattendedAuthSanitizer.extractRequester(
+                from: "Allow “ChatGPT.app” to access your reminders?", fallback: "UserNotificationCenter")
+                == "ChatGPT.app")
+        #expect(
+            UnattendedAuthSanitizer.extractRequester(
+                from: "“终端”想访问“桌面”文件夹中的文件。", fallback: "UserNotificationCenter") == "终端")
     }
 
     @Test("窗口存在性三态分类对 AX 报错返回未知而不误报已关闭")

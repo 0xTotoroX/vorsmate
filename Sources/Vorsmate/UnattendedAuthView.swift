@@ -557,6 +557,13 @@ struct UnattendedAuthView: View {
                     )
                     Divider()
                     approvalOptionRow(
+                        "软件权限许可",
+                        hint: "应用访问提醒事项、文件等系统许可弹窗",
+                        key: \.approveAppPermissions,
+                        id: "appPermissions"
+                    )
+                    Divider()
+                    approvalOptionRow(
                         "密码与通行密钥",
                         hint: "通行密钥、Apple 密码及应用内验证",
                         key: \.approveCredentialAndAppAuth,

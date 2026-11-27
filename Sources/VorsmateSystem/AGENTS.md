@@ -11,8 +11,8 @@
 - ShutdownController.swift：五秒倒计时、批量选择保存、开始时固定待退出进程、收起面板继续执行、取消反馈、强制退出有界回读与系统提交。
 - ShutdownDriver.swift：常规应用枚举、退出前资格复核、温和退出与 SIGKILL 强制退出、原进程内核存活回读、CFPreferences 窗口恢复设置与 ByHost 列表清理、后台线程 System Events 动作与权限错误归类及纯内存预览。
 - UnattendedAuthCredentials.swift：本机非同步钥匙串密码存储、OpenDirectory 本地口令核验及内存 / 固定值测试替身。
-- UnattendedAuthAccessibility.swift：Apple 进程签名核验（`anchor apple`）、有界 AX 弹窗 / 嵌套弹层遍历、焦点远程控件归属查询、窗口存活判定与受控键盘提交辅助函数。
-- UnattendedAuthDriver.swift：无人值守授权事件监听（含系统管理员弹窗、隐私与安全及通行密钥 / Apple 密码内嵌远程验证服务）、开启时补查、审批流程协调、控件所属进程验签与内存预览驱动。
+- UnattendedAuthAccessibility.swift：Apple 进程签名核验（`anchor apple`）、有界 AX 弹窗 / 嵌套弹层遍历、软件权限许可弹窗识别、焦点远程控件归属查询、窗口存活判定与受控键盘提交辅助函数。
+- UnattendedAuthDriver.swift：无人值守授权事件监听（含系统管理员弹窗、隐私与安全、应用软件权限许可及通行密钥 / Apple 密码内嵌远程验证服务）、开启时补查、审批流程协调、控件所属进程验签与内存预览驱动。
 - UnattendedAuthController.swift：主线程无人值守授权状态机；重启默认关闭、按选项持久化并路由自动批准或保留本人确认、可选截止定时、锁屏状态保持与到期 / 失效核对、密码失效自动停用及脱敏活动记录。
 - TranslationDriver.swift：ScreenCaptureKit 桌面快照与 CGWindowList 窗口矩形采集、录屏权限预检 / 引导、Vision 带位置框 OCR 区块提取、剪贴板图文读写、PNG 保存面板与离线预览替身。
 - SceneImageRenderer.swift：屏幕选区像素裁切、局部背景 / 前景对比色采样、原场景文字回填与矢量标注叠加合成图像。
