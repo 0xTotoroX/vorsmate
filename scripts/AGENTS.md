@@ -8,7 +8,7 @@
 - dev.sh：先构建和验签，再重开同路径实例；本机选用助手跟随时，核对包内助手与实际应答进程、按需重新登记。打开失败恢复上一份包，--build-only 仅构建验收包。
 - package.sh：验证应用及助手的两种架构、签名和许可，将应用、Applications 链接及安装说明打包为 Vorsmate-<版本>.dmg；不自动签名、公证或上传。
 - prepare-release.sh：从已验收的版本标签独立构建，签名并核验发行应用、DMG 与更新清单，保存到 artifacts/releases/<标签>/。
-- make-icon.swift：从 Resources/AppIcon-Source.png 导出各尺寸透明应用图标，并生成单色矢量 StatusIcon.pdf；保留已选折面材质与小尺寸轮廓。
+- make-icon.swift：从 Resources/AppIcon-Source.png 导出 AppIcon.png、iconset 与 AppIcon.icns，并生成同轮廓单色矢量 StatusIcon.pdf。
 
 - appcast.sh：核对包内公钥与钥匙串的更新密钥，签署发行 DMG 与完整 appcast.xml，在 dist/updates/ 生成对应官方安装包的双重签名描述，不上传 Release 附件。
 - verify-update.swift：只使用应用公钥核验 feed / 安装包签名、长度与版本 / 构建号，不访问钥匙串或写入文件。

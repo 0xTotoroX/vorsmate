@@ -45,7 +45,7 @@ Swift 6 + Swift Package Manager + SwiftUI / AppKit + Sparkle + TIS + CoreAudio +
 | [Tests/VorsmateUITests](Tests/VorsmateUITests/AGENTS.md) | AppKit 合成事件的拖动与取消回归，不访问真实硬件 |
 | scripts/build.sh / scripts/package.sh | 构建本机或 Universal 签名应用，打包 DMG；不安装、不上传 |
 | scripts/appcast.sh / Package.resolved | 签名更新描述与 Sparkle 依赖锁定；私钥留在钥匙串 |
-| scripts/make-icon.swift / Resources/AppIcon* / Resources/StatusIcon.pdf | “折影”母版、应用图标各尺寸导出和菜单栏单色矢量标记 |
+| scripts/make-icon.swift / Resources/AppIcon* / Resources/StatusIcon.pdf | 展翼应用图标母版、各尺寸导出和同轮廓菜单栏单色矢量标记 |
 | Resources/Remote/ | 可选插件元数据、原创 RC003 Blender 模型及正面按键投影 |
 | Resources/Info.plist / Resources/Vorsmate.entitlements / Resources/Install.txt | 应用身份、最低系统、版本、系统动作回退声明与双语安装说明 |
 | Resources/LaunchDaemons/ | SMAppService 助手注册描述；注册不等于授权通过 |
