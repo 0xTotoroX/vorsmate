@@ -20,7 +20,8 @@ public final class WindowDragMonitor: ObservableObject {
     private let preview: Bool
     private var enabled = false
     private let gesture = WindowDragGesture()
-    private var tap: MouseTap?
+    private var tap: WindowDragEventTap?
+    private var tapGeneration = 0
     private var activation: AnyCancellable?
 
     public init(modifier: WindowDragModifier, preview: Bool) {
@@ -32,6 +33,7 @@ public final class WindowDragMonitor: ObservableObject {
         guard value != modifier else { return }
         gesture.interrupt { $0.post(tap: .cgAnnotatedSessionEventTap) }
         modifier = value
+        tap?.setModifier(value)
     }
 
     public func start() {
@@ -63,7 +65,28 @@ public final class WindowDragMonitor: ObservableObject {
             return
         }
         activation = nil
-        if tap == nil { tap = MouseTap(owner: self) }
+        if tap == nil {
+            let generation = tapGeneration
+            tap = WindowDragEventTap(
+                modifier: modifier,
+                decide: { [weak self] type, event, trigger in
+                    guard let self, self.enabled, self.tapGeneration == generation, self.modifier == trigger else {
+                        return WindowDragDecision()
+                    }
+                    var native: WindowTitleDrag?
+                    var replay: [CGEvent] = []
+                    let consumed = self.gesture.consumes(
+                        type, event: event, modifier: trigger, beginTitleDrag: { native = $0 },
+                        forward: { replay.append($0) })
+                    return WindowDragDecision(
+                        consumed: consumed, tracking: self.gesture.isTracking, replay: replay, native: native)
+                },
+                recover: { [weak self] in
+                    guard let self, self.enabled, self.tapGeneration == generation else { return }
+                    self.gesture.reset { $0.post(tap: .cgAnnotatedSessionEventTap) }
+                    self.refresh()
+                })
+        }
         if let tap, !CGEvent.tapIsEnabled(tap: tap.port) { CGEvent.tapEnable(tap: tap.port, enable: true) }
         if let tap, CGEvent.tapIsEnabled(tap: tap.port) {
             setStatus(.ready)
@@ -97,51 +120,8 @@ public final class WindowDragMonitor: ObservableObject {
     }
 
     private func detachTap() {
+        tapGeneration &+= 1
         tap = nil
         gesture.reset { $0.post(tap: .cgAnnotatedSessionEventTap) }
-    }
-
-    private func consumes(proxy: CGEventTapProxy, type: CGEventType, event: CGEvent) -> Bool {
-        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            gesture.reset { $0.tapPostEvent(proxy) }
-            refresh()
-            return false
-        }
-        return gesture.consumes(type, event: event, modifier: modifier) { $0.tapPostEvent(proxy) }
-    }
-
-    private final class MouseTap {
-        let port: CFMachPort
-        let source: CFRunLoopSource
-
-        @MainActor init?(owner: WindowDragMonitor) {
-            let types: [CGEventType] = [.leftMouseDown, .leftMouseDragged, .leftMouseUp, .flagsChanged]
-            let mask = types.reduce(CGEventMask(0)) { $0 | (1 << $1.rawValue) }
-            guard
-                let port = CGEvent.tapCreate(
-                    tap: .cgSessionEventTap, place: .headInsertEventTap, options: .defaultTap, eventsOfInterest: mask,
-                    callback: { proxy, type, event, context in
-                        guard let context else { return Unmanaged.passUnretained(event) }
-                        let owner = Unmanaged<WindowDragMonitor>.fromOpaque(context).takeUnretainedValue()
-                        let consumed = MainActor.assumeIsolated {
-                            owner.consumes(proxy: proxy, type: type, event: event)
-                        }
-                        return consumed ? nil : Unmanaged.passUnretained(event)
-                    }, userInfo: Unmanaged.passUnretained(owner).toOpaque())
-            else { return nil }
-            guard let source = CFMachPortCreateRunLoopSource(nil, port, 0) else {
-                CFMachPortInvalidate(port)
-                return nil
-            }
-            self.port = port
-            self.source = source
-            CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
-            CGEvent.tapEnable(tap: port, enable: true)
-        }
-
-        deinit {
-            CFMachPortInvalidate(port)
-            CFRunLoopSourceInvalidate(source)
-        }
     }
 }

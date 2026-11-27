@@ -23,6 +23,11 @@ final class WindowDragGesture {
     private var nextWrite: ContinuousClock.Instant?
     private var delivery: Task<Void, Never>?
 
+    var isTracking: Bool {
+        if case .idle = phase { return false }
+        return true
+    }
+
     init(
         hitTest: @escaping @MainActor (CGPoint) -> WindowDragTarget.Hit? = WindowDragTarget.hit,
         resolve: @escaping @MainActor (WindowDragTarget.Hit, CGPoint) -> WindowDragTarget? = WindowDragTarget.resolve
@@ -32,8 +37,10 @@ final class WindowDragGesture {
     }
 
     // true 表示该鼠标事件已由拖动处理。flagsChanged 始终传给系统。
-    func consumes(_ type: CGEventType, event: CGEvent, modifier: WindowDragModifier, forward: (CGEvent) -> Void) -> Bool
-    {
+    func consumes(
+        _ type: CGEventType, event: CGEvent, modifier: WindowDragModifier,
+        beginTitleDrag: ((WindowTitleDrag) -> Void)? = nil, forward: (CGEvent) -> Void
+    ) -> Bool {
         let matches = modifier.matches(event.flags)
         switch type {
         case .leftMouseDown:
@@ -61,6 +68,11 @@ final class WindowDragGesture {
                 guard let target = resolve(hit, down.location) else {
                     reset(forward: forward)
                     return false
+                }
+                if let title = target.titleBarPoint, let beginTitleDrag {
+                    phase = .idle
+                    beginTitleDrag(WindowTitleDrag(down: down, title: title, window: hit.number))
+                    return true
                 }
                 let position = CGPoint(x: target.origin.x + dx, y: target.origin.y + dy)
                 guard moveOrRetry(position, on: target, retryIfBusy: true) else {

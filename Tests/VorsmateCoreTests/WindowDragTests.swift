@@ -18,6 +18,7 @@ struct WindowDragTests {
         var number: CGWindowID? = 17
         var movable = true
         var moveResult = WindowDragTarget.MoveResult.moved
+        var titlePoint: CGPoint?
         var hits: [CGPoint] = []
         var resolutions: [CGWindowID] = []
         var attempts = 0
@@ -32,7 +33,7 @@ struct WindowDragTests {
                 self.resolutions.append(hit.number)
                 #expect(point == self.anchor)
                 guard self.movable else { return nil }
-                return WindowDragTarget(origin: self.origin) { point in
+                return WindowDragTarget(origin: self.origin, titleBarPoint: self.titlePoint) { point in
                     self.attempts += 1
                     if self.moveResult == .moved { self.moves.append(point) }
                     return self.moveResult
@@ -120,6 +121,46 @@ struct WindowDragTests {
         }
         #expect(f.forwarded.map(\.type) == [.leftMouseDown, .leftMouseDown])
         #expect(f.moves.isEmpty)
+    }
+
+    @Test("从内容区在同一窗口标题栏起拖，连续移动及松手保留位移")
+    func nativeTitleDrag() throws {
+        let f = Fixture()
+        let title = CGPoint(x: -213, y: -41)
+        f.titlePoint = title
+        f.send(.leftMouseDown)
+        let drag = try #require(CGEvent(source: nil))
+        drag.type = .leftMouseDragged
+        drag.location = CGPoint(x: f.anchor.x + 10, y: f.anchor.y - 4)
+        drag.flags = [.maskAlternate, .maskAlphaShift]
+        var active: WindowTitleDrag?
+        #expect(
+            f.gesture.consumes(
+                .leftMouseDragged, event: drag, modifier: .option, beginTitleDrag: { active = $0 },
+                forward: { f.forwarded.append($0) }))
+        var session = try #require(active)
+        var posted: [CGEvent] = []
+        session.begin(with: drag) { posted.append($0) }
+        #expect(posted.count == 1)
+        #expect(posted.first?.type == .leftMouseDown)
+        #expect(posted.first?.location == title)
+        #expect(posted.first?.getIntegerValueField(.mouseEventClickState) == 1)
+        #expect(drag.location == CGPoint(x: title.x + 10, y: title.y - 4))
+        #expect(drag.flags == .maskAlphaShift)
+        #expect(drag.getIntegerValueField(.mouseEventWindowUnderMousePointerThatCanHandleThisEvent) == 17)
+        let next = try #require(CGEvent(source: nil))
+        next.type = .leftMouseDragged
+        next.location = CGPoint(x: f.anchor.x - 34, y: f.anchor.y + 75)
+        session.update(next)
+        #expect(next.location == CGPoint(x: title.x - 34, y: title.y + 75))
+        session.end(at: 12345) { posted.append($0) }
+        #expect(posted.last?.type == .leftMouseUp)
+        #expect(posted.last?.location == next.location)
+        #expect(posted.last?.timestamp == 12345)
+        #expect(posted.last?.getIntegerValueField(.mouseEventWindowUnderMousePointer) == 17)
+        #expect(f.attempts == 0)
+        #expect(!f.gesture.isTracking)
+        #expect(f.forwarded.isEmpty)
     }
 
     @Test("松开修饰键后立即停止，按住鼠标重新按键不会转移手势")
