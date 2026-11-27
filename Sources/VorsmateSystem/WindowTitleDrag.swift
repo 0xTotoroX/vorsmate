@@ -10,6 +10,7 @@ struct WindowTitleDrag: @unchecked Sendable {
     private let window: CGWindowID
     private let offset: CGVector
     private var lastPoint: CGPoint
+    private var pressed = false
 
     init(down: CGEvent, title: CGPoint, window: CGWindowID) {
         self.down = down
@@ -18,16 +19,15 @@ struct WindowTitleDrag: @unchecked Sendable {
         lastPoint = title
     }
 
-    mutating func begin(with drag: CGEvent, post: (CGEvent) -> Void) {
+    mutating func press(post: (CGEvent) -> Void) {
+        guard !pressed else { return }
+        pressed = true
         rewrite(down, at: lastPoint)
         post(down)
-        // 系统以首个拖动采样建立抓取点。先交付零位移，保留确认手势前已走过的距离。
-        if let anchor = drag.copy() {
-            rewrite(anchor, at: lastPoint)
-            anchor.setIntegerValueField(.mouseEventDeltaX, value: 0)
-            anchor.setIntegerValueField(.mouseEventDeltaY, value: 0)
-            post(anchor)
-        }
+    }
+
+    mutating func begin(with drag: CGEvent, post: (CGEvent) -> Void) {
+        press(post: post)
         update(drag)
     }
 

@@ -20,6 +20,7 @@ struct WindowDragTests {
         var moveResult = WindowDragTarget.MoveResult.moved
         var titlePoint: CGPoint?
         var exposed = true
+        var focused = false
         var rechecks: [CGPoint] = []
         var hits: [CGPoint] = []
         var resolutions: [CGWindowID] = []
@@ -35,11 +36,13 @@ struct WindowDragTests {
                 self.resolutions.append(hit.number)
                 #expect(point == self.anchor)
                 guard self.movable else { return nil }
-                return WindowDragTarget(origin: self.origin, titleBarPoint: self.titlePoint) { point in
-                    self.attempts += 1
-                    if self.moveResult == .moved { self.moves.append(point) }
-                    return self.moveResult
-                }
+                return WindowDragTarget(
+                    origin: self.origin, titleBarPoint: self.titlePoint, isFocused: { self.focused },
+                    move: { point in
+                        self.attempts += 1
+                        if self.moveResult == .moved { self.moves.append(point) }
+                        return self.moveResult
+                    })
             },
             stillExposed: { [unowned self] _, point in
                 self.rechecks.append(point)
@@ -133,6 +136,56 @@ struct WindowDragTests {
         #expect(f.rechecks == [.zero])
     }
 
+    @Test("在聚焦窗口预按标题栏，松手、松键和停用均恢复一次原内容点击")
+    func primedClick() async throws {
+        enum Ending: CaseIterable { case mouseUp, modifierUp, stop }
+        for ending in Ending.allCases {
+            let f = Fixture()
+            let title = CGPoint(x: 30, y: -20)
+            f.titlePoint = title
+            f.focused = true
+            let receive: (WindowTitleDrag) -> Void = { _ in Issue.record("轻微移动不应接管拖动") }
+            f.send(.leftMouseDown, beginTitleDrag: receive)
+            try await f.waitForResolution()
+            #expect(f.forwarded.isEmpty)
+            f.send(.leftMouseDragged, dx: 1, beginTitleDrag: receive)
+            #expect(f.forwarded.map(\.type) == [.leftMouseDown])
+            switch ending {
+            case .mouseUp: #expect(!f.send(.leftMouseUp))
+            case .modifierUp: #expect(!f.send(.flagsChanged, flags: []))
+            case .stop: f.reset()
+            }
+            #expect(f.forwarded.map(\.type) == [.leftMouseDown, .leftMouseUp, .leftMouseDown])
+            #expect(f.forwarded.map(\.location) == [title, title, f.anchor])
+            #expect(f.forwarded.last?.flags == .maskAlternate)
+            #expect(f.forwarded.last?.getIntegerValueField(.mouseEventClickState) == 2)
+            #expect(f.moves.isEmpty)
+        }
+    }
+
+    @Test("标题栏预按只发一次，持续位移和松手从同一原点传递")
+    func primedDrag() async throws {
+        let f = Fixture()
+        f.titlePoint = .zero
+        f.focused = true
+        var active: WindowTitleDrag?
+        let receive: (WindowTitleDrag) -> Void = { active = $0 }
+        f.send(.leftMouseDown, beginTitleDrag: receive)
+        try await f.waitForResolution()
+        f.send(.leftMouseDragged, beginTitleDrag: receive)
+        f.send(.leftMouseDragged, dx: 12, beginTitleDrag: receive)
+        var title = try #require(active)
+        let drag = try #require(CGEvent(source: nil))
+        drag.type = .leftMouseDragged
+        drag.location = CGPoint(x: f.anchor.x + 12, y: f.anchor.y)
+        title.begin(with: drag) { f.forwarded.append($0) }
+        #expect(drag.location == CGPoint(x: 12, y: 0))
+        title.end(at: 123) { f.forwarded.append($0) }
+        #expect(f.forwarded.map(\.type) == [.leftMouseDown, .leftMouseUp])
+        #expect(f.forwarded.last?.location == drag.location)
+        #expect(f.rechecks == [.zero])
+    }
+
     @Test("单键与组合精确匹配，忽略大小写锁定和左右键位")
     func modifiers() {
         #expect(WindowDragModifier.option.matches([.maskAlternate, .maskAlphaShift]))
@@ -213,10 +266,7 @@ struct WindowDragTests {
         var session = try #require(active)
         var posted: [CGEvent] = []
         session.begin(with: drag) { posted.append($0) }
-        #expect(posted.map(\.type) == [.leftMouseDown, .leftMouseDragged])
-        #expect(posted.last?.location == title)
-        #expect(posted.last?.getIntegerValueField(.mouseEventDeltaX) == 0)
-        #expect(posted.last?.getIntegerValueField(.mouseEventDeltaY) == 0)
+        #expect(posted.map(\.type) == [.leftMouseDown])
         #expect(posted.first?.type == .leftMouseDown)
         #expect(posted.first?.location == title)
         #expect(posted.first?.getIntegerValueField(.mouseEventClickState) == 1)

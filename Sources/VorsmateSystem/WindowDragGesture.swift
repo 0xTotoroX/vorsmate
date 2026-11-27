@@ -8,12 +8,14 @@ import VorsmateCore
 
 @MainActor
 final class WindowDragGesture {
-    private final class Press {
+    @MainActor private final class Press {
         let down: CGEvent
         let hit: WindowDragTarget.Hit
         var candidate: WindowDragTarget?
         var preparedAt: ContinuousClock.Instant?
         private var firstMotion: CGVector?
+        private var checkedFocus = false
+        private(set) var titlePress: WindowTitleDrag?
 
         init(_ down: CGEvent, _ hit: WindowDragTarget.Hit) {
             self.down = down
@@ -34,6 +36,27 @@ final class WindowDragGesture {
             }
             return distance > firstMotion.dx * firstMotion.dx + firstMotion.dy * firstMotion.dy
                 && dx * firstMotion.dx + dy * firstMotion.dy > 0
+        }
+
+        var freshCandidate: WindowDragTarget? {
+            guard let preparedAt, ContinuousClock.now - preparedAt < .milliseconds(350) else { return nil }
+            return candidate
+        }
+
+        func prepareTitlePress(stillExposed: (WindowDragTarget.Hit, CGPoint) -> Bool, forward: (CGEvent) -> Void) {
+            guard !checkedFocus, let target = freshCandidate, let point = target.titleBarPoint else { return }
+            checkedFocus = true
+            // 首个系统拖动事件可先在已聚焦窗口按住空白标题栏，避免启动时丢失抓取点。
+            // 确认手势前不发送任何位移，后台窗口也不会被这个准备步骤激活。
+            guard target.isFocused(), stillExposed(hit, point), let copy = down.copy() else { return }
+            var title = WindowTitleDrag(down: copy, title: point, window: hit.number)
+            title.press(post: forward)
+            titlePress = title
+        }
+
+        func restoreClick(forward: (CGEvent) -> Void) {
+            titlePress?.end(at: DispatchTime.now().uptimeNanoseconds, post: forward)
+            forward(down)
         }
     }
 
@@ -109,7 +132,19 @@ final class WindowDragGesture {
                 let dy = event.location.y - down.location.y
                 let distanceSquared = dx * dx + dy * dy
                 let hasTitle = beginTitleDrag != nil && press.candidate?.titleBarPoint != nil
-                guard hasTitle ? press.startsTitleDrag(dx: dx, dy: dy) : distanceSquared >= 9 else { return true }
+                if hasTitle {
+                    guard press.startsTitleDrag(dx: dx, dy: dy) else {
+                        press.prepareTitlePress(stillExposed: stillExposed, forward: forward)
+                        return true
+                    }
+                    if let started = press.titlePress, let beginTitleDrag {
+                        phase = .idle
+                        beginTitleDrag(started)
+                        return true
+                    }
+                } else if distanceSquared < 9 {
+                    return true
+                }
                 guard let target = targetForDrag(press) else {
                     reset(forward: forward)
                     return false
@@ -143,8 +178,7 @@ final class WindowDragGesture {
     }
 
     private func targetForDrag(_ press: Press) -> WindowDragTarget? {
-        if let candidate = press.candidate, let prepared = press.preparedAt,
-            ContinuousClock.now - prepared < .milliseconds(350),
+        if let candidate = press.freshCandidate,
             stillExposed(press.hit, candidate.titleBarPoint ?? press.down.location)
         {
             return candidate
@@ -198,7 +232,7 @@ final class WindowDragGesture {
         switch phase {
         case .pending(let press):
             phase = .idle
-            forward(press.down)
+            press.restoreClick(forward: forward)
         case .moving:
             flush()
             phase = .untilMouseUp
@@ -208,7 +242,7 @@ final class WindowDragGesture {
     }
 
     func reset(forward: (CGEvent) -> Void) {
-        if case .pending(let press) = phase { forward(press.down) }
+        if case .pending(let press) = phase { press.restoreClick(forward: forward) }
         phase = .idle
         latestPosition = nil
         lastWritten = nil

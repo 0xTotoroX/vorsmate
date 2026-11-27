@@ -15,6 +15,7 @@ struct WindowDragTarget {
 
     let origin: CGPoint
     var titleBarPoint: CGPoint? = nil
+    var isFocused: () -> Bool = { false }
     let move: (CGPoint) -> MoveResult
 
     struct Hit {
@@ -60,7 +61,7 @@ struct WindowDragTarget {
                 window.styleMask.contains(.titled), !window.styleMask.contains(.fullScreen)
             else { return nil }
             let origin = appKitPoint(CGPoint(x: window.frame.minX, y: window.frame.maxY))
-            let title = titleBarPoint(in: hitWindow, origin: origin) { point in
+            let title = titleBarPoint(in: hitWindow, origin: origin, pointerX: point.x) { point in
                 let local = window.convertPoint(fromScreen: appKitPoint(point))
                 guard !window.contentLayoutRect.contains(local), let frame = window.contentView?.superview else {
                     return false
@@ -72,11 +73,13 @@ struct WindowDragTarget {
                 }
                 return true
             }
-            return Self(origin: origin, titleBarPoint: title) { [weak window] position in
-                guard let window, window.isVisible else { return .unavailable }
-                window.setFrameTopLeftPoint(appKitPoint(position))
-                return .moved
-            }
+            return Self(
+                origin: origin, titleBarPoint: title, isFocused: { [weak window] in window?.isKeyWindow == true },
+                move: { [weak window] position in
+                    guard let window, window.isVisible else { return .unavailable }
+                    window.setFrameTopLeftPoint(appKitPoint(position))
+                    return .moved
+                })
         }
 
         // 针对目标进程限时，避免改变宿主其他辅助功能模块的全局超时。
@@ -104,24 +107,32 @@ struct WindowDragTarget {
             writable.boolValue, let value = attribute(kAXPositionAttribute, of: window),
             CFGetTypeID(value) == AXValueGetTypeID(), AXValueGetValue(value as! AXValue, .cgPoint, &origin)
         else { return nil }
-        let title = externalTitleBarPoint(in: hitWindow, origin: origin, app: app, window: window)
-        return Self(origin: origin, titleBarPoint: title) { position in
-            var position = position
-            guard let value = AXValueCreate(.cgPoint, &position) else { return .unavailable }
-            switch AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, value) {
-            case .success: return .moved
-            case .cannotComplete: return .busy
-            default: return .unavailable
-            }
-        }
+        let title = externalTitleBarPoint(in: hitWindow, origin: origin, pointerX: point.x, app: app, window: window)
+        return Self(
+            origin: origin, titleBarPoint: title,
+            isFocused: {
+                guard NSWorkspace.shared.frontmostApplication?.processIdentifier == hitWindow.pid,
+                    let focused = attribute(kAXFocusedWindowAttribute, of: app)
+                else { return false }
+                return CFEqual(focused, window)
+            },
+            move: { position in
+                var position = position
+                guard let value = AXValueCreate(.cgPoint, &position) else { return .unavailable }
+                switch AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, value) {
+                case .success: return .moved
+                case .cannotComplete: return .busy
+                default: return .unavailable
+                }
+            })
     }
 
     private static func externalTitleBarPoint(
-        in hit: Hit, origin: CGPoint, app: AXUIElement, window: AXUIElement
+        in hit: Hit, origin: CGPoint, pointerX: CGFloat, app: AXUIElement, window: AXUIElement
     ) -> CGPoint? {
         let titleElement = attribute(kAXTitleUIElementAttribute, of: window)
         guard titleElement != nil || attribute(kAXCloseButtonAttribute, of: window) != nil else { return nil }
-        return titleBarPoint(in: hit, origin: origin) { point in
+        return titleBarPoint(in: hit, origin: origin, pointerX: pointerX) { point in
             var element: AXUIElement?
             guard AXUIElementCopyElementAtPosition(app, Float(point.x), Float(point.y), &element) == .success,
                 let element
@@ -135,12 +146,15 @@ struct WindowDragTarget {
         }
     }
 
-    private static func titleBarPoint(in hit: Hit, origin: CGPoint, accepts: (CGPoint) -> Bool) -> CGPoint? {
+    private static func titleBarPoint(in hit: Hit, origin: CGPoint, pointerX: CGFloat, accepts: (CGPoint) -> Bool)
+        -> CGPoint?
+    {
         guard var frame = hit.bounds, frame.width >= 100, frame.height >= 28 else { return nil }
         frame.origin = origin
         // 顶边留出调整大小区域，左右留出交通灯和工具栏按钮。
-        for fraction in [0.5, 0.75, 0.32, 0.85] {
-            let point = CGPoint(x: frame.minX + max(75, frame.width * fraction), y: frame.minY + 10)
+        let candidates = [pointerX.rounded()] + [0.5, 0.75, 0.32, 0.85].map { frame.minX + frame.width * $0 }
+        for x in candidates {
+            let point = CGPoint(x: max(frame.minX + 75, x), y: frame.minY + 10)
             if point.x < frame.maxX - 12, windowNumber(at: point) == hit.number, accepts(point) { return point }
         }
         return nil
