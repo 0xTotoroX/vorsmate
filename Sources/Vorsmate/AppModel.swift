@@ -53,7 +53,11 @@ final class AppModel: ObservableObject {
             driver: SystemUnattendedAuthDriver(),
             passwordStore: KeychainUnattendedPasswordStore(),
             passwordVerifier: OpenDirectoryPasswordVerifier(),
-            historyStore: .standard
+            historyStore: .standard,
+            preferences: preferences.unattendedAuth,
+            persist: { [weak self] prefs in
+                try self?.save { $0.unattendedAuth = prefs }
+            }
         )
     }()
     lazy var remote = RemoteCompanion(preview: preview)
@@ -326,6 +330,7 @@ final class AppModel: ObservableObject {
                 for controller in controllers { controller.reload(preferences[controller.channel], start: false) }
                 fan.reloadSavedProfiles(preferences.fanProfiles)
                 shutdown.reloadPolicy(preferences.shutdownPolicy)
+                unattendedAuth.reloadPreferences(preferences.unattendedAuth)
                 translation.reloadPreferences(preferences.translation)
                 plugins.reloadDisabled(preferences.disabledAtRuntime)
                 plugins.start()

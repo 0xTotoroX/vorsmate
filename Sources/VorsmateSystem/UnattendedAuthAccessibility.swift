@@ -22,7 +22,8 @@ enum UnattendedAuthAX {
         "Install Helper", "Continue", "Approve",
     ]
     private static let usePasswordButtonTitles: Set<String> = [
-        "使用密码…", "使用密码...", "使用密码", "Use Password…", "Use Password...", "Use Password",
+        "使用密码…", "使用密码...", "使用密码", "输入密码",
+        "Use Password…", "Use Password...", "Use Password", "Enter Password",
     ]
 
     static func isVerifiedAppleProcess(pid: pid_t) -> Bool {
@@ -41,7 +42,10 @@ enum UnattendedAuthAX {
         return SecCodeCheckValidity(guest, [], requirement) == errSecSuccess
     }
 
-    static func inspectWindow(_ window: AXUIElement) -> UnattendedAuthInspectedDialog {
+    static func inspectWindow(
+        _ window: AXUIElement,
+        fallbackPasswordField: AXUIElement? = nil
+    ) -> UnattendedAuthInspectedDialog {
         var texts: [String] = []
         var passwordField: AXUIElement?
         var approveButton: AXUIElement? = copyElementAttribute(window, kAXDefaultButtonAttribute)
@@ -81,6 +85,13 @@ enum UnattendedAuthAX {
             for child in copyChildren(node) {
                 queue.append((child, depth + 1))
             }
+        }
+
+        if passwordField == nil,
+            let fallbackPasswordField,
+            isSecureTextField(fallbackPasswordField)
+        {
+            passwordField = fallbackPasswordField
         }
 
         return UnattendedAuthInspectedDialog(
@@ -160,18 +171,59 @@ enum UnattendedAuthAX {
 
     static func copySheets(_ window: AXUIElement) -> [AXUIElement] {
         var result: [AXUIElement] = []
+        collectNestedSheets(from: window, depth: 0, into: &result)
+        return result
+    }
+
+    private static func collectNestedSheets(from element: AXUIElement, depth: Int, into result: inout [AXUIElement]) {
+        guard depth <= 3 else { return }
+        var directSheets: [AXUIElement] = []
         var value: CFTypeRef?
-        if AXUIElementCopyAttributeValue(window, "AXSheets" as CFString, &value) == .success,
+        if AXUIElementCopyAttributeValue(element, "AXSheets" as CFString, &value) == .success,
             let sheets = value as? [AXUIElement]
         {
-            result.append(contentsOf: sheets)
+            directSheets.append(contentsOf: sheets)
         }
-        for child in copyChildren(window) where copyStringAttribute(child, kAXRoleAttribute) == kAXSheetRole {
-            if !result.contains(where: { CFEqual($0, child) }) {
-                result.append(child)
+        for child in copyChildren(element) where copyStringAttribute(child, kAXRoleAttribute) == kAXSheetRole {
+            directSheets.append(child)
+        }
+        for sheet in directSheets {
+            if !result.contains(where: { CFEqual($0, sheet) }) {
+                result.append(sheet)
             }
+            collectNestedSheets(from: sheet, depth: depth + 1, into: &result)
         }
-        return result
+    }
+
+    static func pid(of element: AXUIElement) -> pid_t {
+        var pid: pid_t = 0
+        AXUIElementGetPid(element, &pid)
+        return pid
+    }
+
+    static func focusedUIElement() -> AXUIElement? {
+        copyElementAttribute(AXUIElementCreateSystemWide(), kAXFocusedUIElementAttribute)
+    }
+
+    static func enclosingWindowOrSheet(for element: AXUIElement) -> AXUIElement? {
+        var current: AXUIElement? = element
+        for _ in 0..<12 {
+            guard let node = current else { break }
+            let role = copyStringAttribute(node, kAXRoleAttribute)
+            if role == kAXSheetRole || role == kAXWindowRole {
+                return node
+            }
+            current = copyElementAttribute(node, kAXParentAttribute)
+        }
+        if let topLevel = copyElementAttribute(element, kAXTopLevelUIElementAttribute) {
+            return topLevel
+        }
+        return copyElementAttribute(element, kAXWindowAttribute)
+    }
+
+    static func isSecureTextField(_ element: AXUIElement) -> Bool {
+        copyStringAttribute(element, kAXRoleAttribute) == kAXTextFieldRole
+            && copyStringAttribute(element, kAXSubroleAttribute) == kAXSecureTextFieldSubrole
     }
 
     static func typePasswordAndReturn(_ password: String, into field: AXUIElement, pid: pid_t) -> Bool {

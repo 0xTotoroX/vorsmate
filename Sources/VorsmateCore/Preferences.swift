@@ -52,11 +52,12 @@ public struct Preferences: Codable, Equatable, Sendable {
     public var fanProfiles: [Int: FanProfile] = [:]
     public var shutdownPolicy = ShutdownPolicy()
     public var translation = TranslationPreferences()
+    public var unattendedAuth = UnattendedAuthPreferences()
     public var pluginOrder: [PluginID] = []
     public init() {}
     private enum CodingKeys: String, CodingKey {
         case version, policies, disabledPlugins, remoteEnabled, translateEnabled, fanProfiles, shutdownPolicy,
-            translation, pluginOrder
+            translation, unattendedAuth, pluginOrder
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -70,6 +71,9 @@ public struct Preferences: Codable, Equatable, Sendable {
         translation =
             try values.decodeIfPresent(TranslationPreferences.self, forKey: .translation)
             ?? TranslationPreferences()
+        unattendedAuth =
+            try values.decodeIfPresent(UnattendedAuthPreferences.self, forKey: .unattendedAuth)
+            ?? UnattendedAuthPreferences()
         pluginOrder = try values.decodeIfPresent([PluginID].self, forKey: .pluginOrder) ?? []
     }
     public func resolvedOrder(from candidates: [PluginID]) -> [PluginID] {

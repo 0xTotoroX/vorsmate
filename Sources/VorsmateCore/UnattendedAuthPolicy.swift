@@ -8,6 +8,64 @@ public enum UnattendedAuthPolicy {
     public static let maxCustomMinutes = 1440
 }
 
+public enum UnattendedAuthDialogCategory: String, Codable, Equatable, Sendable {
+    case systemAdmin
+    case privacySettings
+    case credentialAndAppAuth
+}
+
+public struct UnattendedAuthPreferences: Codable, Equatable, Sendable {
+    public var approvePrivacySettings = true
+    public var approveCredentialAndAppAuth = true
+    public var approveExistingDialogs = true
+
+    public init(
+        approvePrivacySettings: Bool = true,
+        approveCredentialAndAppAuth: Bool = true,
+        approveExistingDialogs: Bool = true
+    ) {
+        self.approvePrivacySettings = approvePrivacySettings
+        self.approveCredentialAndAppAuth = approveCredentialAndAppAuth
+        self.approveExistingDialogs = approveExistingDialogs
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case approvePrivacySettings
+        case approveCredentialAndAppAuth
+        case approveExistingDialogs
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        approvePrivacySettings = try values.decodeIfPresent(Bool.self, forKey: .approvePrivacySettings) ?? true
+        approveCredentialAndAppAuth =
+            try values.decodeIfPresent(Bool.self, forKey: .approveCredentialAndAppAuth) ?? true
+        approveExistingDialogs = try values.decodeIfPresent(Bool.self, forKey: .approveExistingDialogs) ?? true
+    }
+
+    public func manualConfirmationReason(for category: UnattendedAuthDialogCategory, isExisting: Bool) -> String? {
+        if isExisting && !approveExistingDialogs {
+            return "开启前已存在的请求由本人确认"
+        }
+        switch category {
+        case .systemAdmin:
+            return nil
+        case .privacySettings:
+            return approvePrivacySettings ? nil : "隐私与安全请求由本人确认"
+        case .credentialAndAppAuth:
+            return approveCredentialAndAppAuth ? nil : "密码与通行密钥请求由本人确认"
+        }
+    }
+
+    public var optionsSummaryText: String {
+        let enabledCount = [approvePrivacySettings, approveCredentialAndAppAuth, approveExistingDialogs].filter(\.self)
+            .count
+        if enabledCount == 3 { return "全部" }
+        if enabledCount == 0 { return "仅常规管理员" }
+        return "已选 \(enabledCount)/3"
+    }
+}
+
 public enum UnattendedAuthDeadlineChoice: Equatable, Sendable {
     public static let maxCustomMinutes = UnattendedAuthPolicy.maxCustomMinutes
     case none

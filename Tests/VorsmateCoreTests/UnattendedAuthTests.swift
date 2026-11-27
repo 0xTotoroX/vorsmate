@@ -441,47 +441,94 @@ struct UnattendedAuthTests {
         #expect(controller.history.isEmpty)
     }
 
-    @Test("开启前已有弹窗与隐私设置内嵌弹窗仅记录保留本人确认，开启后新弹窗才自动批准")
-    func existingAndPrivacyDialogsLeaveForUserWhileNewSystemDialogAttemptsApproval() async {
+    @Test("默认全部自动批准，按选项区分保留本人确认或放行，并支持运行中切换与持久化")
+    func approvalOptionsRouteCategoriesAndExistingDialogs() async {
         let driver = FakeUnattendedAuthDriver()
         driver.existingDialogs = [
             DetectedAuthDialog(
-                id: "existing", source: "终端", summary: "终端想要进行更改",
-                manualConfirmationReason: "开启前已存在的请求由本人确认")
+                id: "existing-admin", source: "终端", summary: "终端想要进行更改",
+                category: .systemAdmin, isExisting: true)
         ]
         driver.defaultApprovalResult = .approved(detail: "已提交授权且弹窗已关闭")
-        let controller = makeReadyController(driver: driver)
-        #expect(driver.existingDialogChecks == 0)
 
+        var persisted: [UnattendedAuthPreferences] = []
+        let controller = UnattendedAuthController(
+            driver: driver,
+            passwordStore: InMemoryUnattendedPasswordStore(initialPassword: "Admin#2026"),
+            passwordVerifier: MutablePasswordVerifier(expected: "Admin#2026"),
+            historyStore: .inMemory,
+            preferences: UnattendedAuthPreferences(),
+            persist: { persisted.append($0) }
+        )
+        controller.activate()
+
+        // 1. 默认选项下全部类别（含开启前已存在、隐私与安全、密码与通行密钥）均进入自动批准
+        #expect(controller.preferences.optionsSummaryText == "全部")
         #expect(controller.enable(deadlineChoice: .none))
         await settle()
-        #expect(driver.existingDialogChecks == 1)
-        #expect(driver.approvalCalls.isEmpty)
-        #expect(controller.currentSession?.events.first?.source == "终端")
-        #expect(controller.currentSession?.events.first?.outcome == .leftForUser)
-        #expect(controller.currentSession?.events.first?.detail == "开启前已存在的请求由本人确认")
+        #expect(driver.approvalCalls.map(\.id) == ["existing-admin"])
+        #expect(controller.currentSession?.events.first?.outcome == .approved)
 
         driver.emitDialog(
             DetectedAuthDialog(
-                id: "privacy", source: "隐私与安全", summary: "正在尝试修改你的系统设置",
-                manualConfirmationReason: "隐私与安全请求由本人确认"))
+                id: "privacy-auto", source: "隐私与安全", summary: "正在尝试修改你的系统设置",
+                category: .privacySettings))
         await settle()
-        #expect(driver.approvalCalls.isEmpty)
+        driver.emitDialog(
+            DetectedAuthDialog(
+                id: "passkey-auto", source: "ego lite", summary: "通过“user@example.com”登录。输入密码以解锁。",
+                category: .credentialAndAppAuth))
+        await settle()
+        #expect(driver.approvalCalls.map(\.id) == ["existing-admin", "privacy-auto", "passkey-auto"])
+        #expect(controller.currentSession?.events.count == 3)
+        #expect(controller.currentSession?.events.allSatisfy { $0.outcome == .approved } == true)
+
+        // 2. 运行中逐项关闭对应选项后，仅未勾选类别保留本人确认并释放弹窗追踪
+        controller.updatePreferences { $0.approvePrivacySettings = false }
+        #expect(controller.preferences.optionsSummaryText == "已选 2/3")
+        controller.updatePreferences { $0.approveCredentialAndAppAuth = false }
+        #expect(controller.preferences.optionsSummaryText == "已选 1/3")
+        controller.updatePreferences { $0.approveExistingDialogs = false }
+        #expect(controller.preferences.optionsSummaryText == "仅常规管理员")
+        #expect(persisted.count == 3)
+
+        driver.emitDialog(
+            DetectedAuthDialog(
+                id: "privacy-manual", source: "隐私与安全", summary: "正在尝试修改你的系统设置",
+                category: .privacySettings))
+        await settle()
         #expect(controller.currentSession?.events.first?.outcome == .leftForUser)
         #expect(controller.currentSession?.events.first?.detail == "隐私与安全请求由本人确认")
+
+        driver.emitDialog(
+            DetectedAuthDialog(
+                id: "passkey-manual", source: "Safari", summary: "输入密码以使用通行密钥",
+                category: .credentialAndAppAuth))
+        await settle()
+        #expect(controller.currentSession?.events.first?.outcome == .leftForUser)
+        #expect(controller.currentSession?.events.first?.detail == "密码与通行密钥请求由本人确认")
+
+        driver.emitDialog(
+            DetectedAuthDialog(
+                id: "existing-manual", source: "终端", summary: "终端想要进行更改",
+                category: .systemAdmin, isExisting: true))
+        await settle()
+        #expect(controller.currentSession?.events.first?.outcome == .leftForUser)
+        #expect(controller.currentSession?.events.first?.detail == "开启前已存在的请求由本人确认")
 
         driver.emitDialog(
             DetectedAuthDialog(
                 id: "explicit-manual", source: "测试", summary: "仅手动确认弹窗",
                 manualConfirmationReason: "显式要求本人确认"))
         await settle()
-        #expect(driver.approvalCalls.isEmpty)
         #expect(controller.currentSession?.events.first?.outcome == .leftForUser)
         #expect(controller.currentSession?.events.first?.detail == "显式要求本人确认")
+        #expect(driver.releasedDialogIDs == ["privacy-manual", "passkey-manual", "existing-manual", "explicit-manual"])
 
+        // 3. 常规系统管理员弹窗仍照常自动批准
         driver.emitDialog(DetectedAuthDialog(id: "new-auth", source: "brew", summary: "brew 想要安装软件"))
         await settle()
-        #expect(driver.approvalCalls.map(\.id) == ["new-auth"])
+        #expect(driver.approvalCalls.last?.id == "new-auth")
         #expect(controller.currentSession?.events.first?.outcome == .approved)
         controller.disable()
     }
@@ -788,6 +835,30 @@ struct UnattendedAuthTests {
         #expect(
             !SystemUnattendedAuthDriver.matchesAuthHost(
                 bundleIdentifier: "com.apple.finder", processNames: ["Finder"]))
+        #expect(
+            SystemUnattendedAuthDriver.matchesEmbeddedAuthService(
+                bundleIdentifier: "com.apple.LocalAuthenticationRemoteService", processNames: []))
+        #expect(
+            SystemUnattendedAuthDriver.matchesEmbeddedAuthService(
+                bundleIdentifier: "com.apple.AuthenticationServices.Helper", processNames: []))
+        #expect(
+            SystemUnattendedAuthDriver.matchesEmbeddedAuthService(
+                bundleIdentifier: "com.apple.AuthenticationServicesCore.AuthenticationServicesAgent",
+                processNames: []))
+        #expect(
+            SystemUnattendedAuthDriver.matchesEmbeddedAuthService(
+                bundleIdentifier: "com.apple.AuthKitUI.AKAuthorizationRemoteViewService", processNames: []))
+        #expect(
+            !SystemUnattendedAuthDriver.matchesEmbeddedAuthService(
+                bundleIdentifier: "com.apple.Safari", processNames: ["Safari"]))
+        #expect(
+            !SystemUnattendedAuthDriver.matchesEmbeddedAuthService(
+                bundleIdentifier: "com.citrolabs.ego.lite", processNames: ["ego lite"]))
+        #expect(SystemUnattendedAuthDriver.matchesPrivacyAuthHost(bundleIdentifier: "com.apple.systempreferences"))
+        #expect(
+            SystemUnattendedAuthDriver.matchesPrivacyAuthHost(
+                bundleIdentifier: "com.apple.settings.PrivacySecurity.extension"))
+        #expect(!SystemUnattendedAuthDriver.matchesPrivacyAuthHost(bundleIdentifier: "com.apple.finder"))
         #expect(!SystemUnattendedAuthDriver.isVerifiedAppleProcess(pid: -1))
         #expect(!SystemUnattendedAuthDriver.isVerifiedAppleProcess(pid: 0))
         #expect(!SystemUnattendedAuthDriver.isVerifiedAppleProcess(pid: getpid()))
@@ -1012,6 +1083,7 @@ private final class FakeUnattendedAuthDriver: UnattendedAuthSystemDriver {
     var existingDialogChecks = 0
     var existingDialogs: [DetectedAuthDialog] = []
     var approvalCalls: [ApprovalCall] = []
+    var releasedDialogIDs: [String] = []
 
     private var onDialog: (@MainActor (DetectedAuthDialog) -> Void)?
     private var onScreenLockChanged: (@MainActor (Bool) -> Void)?
@@ -1048,6 +1120,10 @@ private final class FakeUnattendedAuthDriver: UnattendedAuthSystemDriver {
         onDialog = nil
         onScreenLockChanged = nil
         onWake = nil
+    }
+
+    func releaseDialog(id: String) {
+        releasedDialogIDs.append(id)
     }
 
     func approveDialog(id: String, password: String) async -> AuthDialogApprovalResult {

@@ -19,12 +19,14 @@ public final class UnattendedAuthController: ObservableObject {
     @Published public private(set) var statusBannerMessage: String?
     @Published public private(set) var passwordInvalidated = false
     @Published public private(set) var errorMessage: String?
+    @Published public private(set) var preferences: UnattendedAuthPreferences
     @Published public private(set) var now: Date
 
     private let driver: any UnattendedAuthSystemDriver
     private let passwordStore: any UnattendedAuthPasswordStore
     private let passwordVerifier: any UnattendedAuthPasswordVerifier
     private let historyStore: UnattendedAuthHistoryStore
+    private let persist: ((UnattendedAuthPreferences) throws -> Void)?
     private let clock: @Sendable () -> Date
     private let sleep: @Sendable (Duration) async throws -> Void
     private let tickInterval: Duration
@@ -69,6 +71,8 @@ public final class UnattendedAuthController: ObservableObject {
         passwordStore: any UnattendedAuthPasswordStore,
         passwordVerifier: any UnattendedAuthPasswordVerifier,
         historyStore: UnattendedAuthHistoryStore = .standard,
+        preferences: UnattendedAuthPreferences = UnattendedAuthPreferences(),
+        persist: ((UnattendedAuthPreferences) throws -> Void)? = nil,
         clock: @escaping @Sendable () -> Date = Date.init,
         sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
         tickInterval: Duration = .seconds(1)
@@ -77,6 +81,8 @@ public final class UnattendedAuthController: ObservableObject {
         self.passwordStore = passwordStore
         self.passwordVerifier = passwordVerifier
         self.historyStore = historyStore
+        self.preferences = preferences
+        self.persist = persist
         self.clock = clock
         self.sleep = sleep
         self.tickInterval = tickInterval
@@ -303,6 +309,23 @@ public final class UnattendedAuthController: ObservableObject {
         persistHistory()
     }
 
+    public func updatePreferences(_ update: (inout UnattendedAuthPreferences) -> Void) {
+        var next = preferences
+        update(&next)
+        guard next != preferences else { return }
+        do {
+            try persist?(next)
+            preferences = next
+            errorMessage = nil
+        } catch {
+            errorMessage = "无法保存选项：\(error.localizedDescription)"
+        }
+    }
+
+    public func reloadPreferences(_ newPreferences: UnattendedAuthPreferences) {
+        preferences = newPreferences
+    }
+
     public func reconcileDeadlineAndHealth() {
         now = clock()
         guard isEnabled else { return }
@@ -372,11 +395,15 @@ public final class UnattendedAuthController: ObservableObject {
         let safeSummary = UnattendedAuthSanitizer.sanitizeText(dialog.summary, excludingSecret: password)
         let safeSource = UnattendedAuthSanitizer.sanitizeText(dialog.source, excludingSecret: password)
 
-        if let reason = dialog.manualConfirmationReason {
+        let manualReason =
+            dialog.manualConfirmationReason
+            ?? preferences.manualConfirmationReason(for: dialog.category, isExisting: dialog.isExisting)
+        if let manualReason {
+            driver.releaseDialog(id: dialog.id)
             appendEvent(
                 UnattendedAuthDialogEvent(
                     timestamp: detectedAt, source: safeSource, summary: safeSummary,
-                    outcome: .leftForUser, detail: reason))
+                    outcome: .leftForUser, detail: manualReason))
             return
         }
 

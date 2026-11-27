@@ -139,6 +139,7 @@ struct UnattendedAuthView: View {
 
     @State private var passwordInput = ""
     @State private var editingPassword = false
+    @State private var optionsExpanded = false
     @State private var deadlineMode: DeadlineMode = .duration
     @State private var durationPreset: DurationPreset = .minutes(30)
     @State private var customMinutesText = "45"
@@ -218,6 +219,8 @@ struct UnattendedAuthView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     PanelSectionCard {
                         VStack(alignment: .leading, spacing: 14) {
+                            let hasControlsAboveOptions =
+                                showsPasswordEditor || !controller.accessibilityTrusted || !controller.isEnabled
                             if showsPasswordEditor {
                                 passwordBar
                             }
@@ -230,10 +233,11 @@ struct UnattendedAuthView: View {
                                 deadlineBar
                             }
 
-                            Text("已弹出的请求和「隐私与安全」请求由本人确认")
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
-                                .accessibilityIdentifier("unattendedAuth.scopeNotice")
+                            if hasControlsAboveOptions {
+                                Divider()
+                            }
+
+                            approvalOptionsSection
                         }
                         .padding(14)
                     }
@@ -520,6 +524,86 @@ struct UnattendedAuthView: View {
                 )
         }
         .buttonStyle(.plain)
+    }
+
+    private var approvalOptionsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button {
+                optionsExpanded.toggle()
+            } label: {
+                HStack(spacing: 8) {
+                    Text("自动批准选项")
+                        .font(.callout.weight(.medium))
+                    Spacer(minLength: 8)
+                    Text(controller.preferences.optionsSummaryText)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    Image(systemName: optionsExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("unattendedAuth.optionsToggle")
+
+            if optionsExpanded {
+                VStack(alignment: .leading, spacing: 10) {
+                    approvalOptionRow(
+                        "隐私与安全",
+                        hint: "系统设置中的权限修改请求",
+                        key: \.approvePrivacySettings,
+                        id: "privacySettings"
+                    )
+                    Divider()
+                    approvalOptionRow(
+                        "密码与通行密钥",
+                        hint: "通行密钥、Apple 密码及应用内验证",
+                        key: \.approveCredentialAndAppAuth,
+                        id: "credentialAndAppAuth"
+                    )
+                    Divider()
+                    approvalOptionRow(
+                        "已弹出的请求",
+                        hint: "开启前屏幕上已出现的弹窗",
+                        key: \.approveExistingDialogs,
+                        id: "existingDialogs"
+                    )
+                }
+                .padding(.top, 2)
+            }
+        }
+    }
+
+    private func approvalOptionRow(
+        _ title: String,
+        hint: String,
+        key: WritableKeyPath<UnattendedAuthPreferences, Bool>,
+        id: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 8) {
+                Text(title)
+                    .font(.callout.weight(.medium))
+                Spacer(minLength: 8)
+                Toggle(
+                    title,
+                    isOn: Binding(
+                        get: { controller.preferences[keyPath: key] },
+                        set: { next in controller.updatePreferences { $0[keyPath: key] = next } }
+                    )
+                )
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+                .accessibilityLabel(title)
+                .accessibilityIdentifier("unattendedAuth.option.\(id)")
+            }
+            Text(hint)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     private func feedbackBar(_ message: String, isAlert: Bool) -> some View {

@@ -12,6 +12,8 @@ public struct DetectedAuthDialog: Equatable, Sendable {
     public let id: String
     public let source: String
     public let summary: String
+    public let category: UnattendedAuthDialogCategory
+    public let isExisting: Bool
     public let isTouchIDOnly: Bool
     public let hasPasswordField: Bool
     public let manualConfirmationReason: String?
@@ -20,6 +22,8 @@ public struct DetectedAuthDialog: Equatable, Sendable {
         id: String,
         source: String,
         summary: String,
+        category: UnattendedAuthDialogCategory = .systemAdmin,
+        isExisting: Bool = false,
         isTouchIDOnly: Bool = false,
         hasPasswordField: Bool = true,
         manualConfirmationReason: String? = nil
@@ -27,6 +31,8 @@ public struct DetectedAuthDialog: Equatable, Sendable {
         self.id = id
         self.source = source
         self.summary = summary
+        self.category = category
+        self.isExisting = isExisting
         self.isTouchIDOnly = isTouchIDOnly
         self.hasPasswordField = hasPasswordField
         self.manualConfirmationReason = manualConfirmationReason
@@ -54,11 +60,14 @@ public protocol UnattendedAuthSystemDriver: AnyObject {
     ) throws
     func checkExistingDialogs()
     func stopMonitoring()
+    func releaseDialog(id: String)
     func approveDialog(id: String, password: String) async -> AuthDialogApprovalResult
     func approveDialog(id: String, password: String, deadline: Date?) async -> AuthDialogApprovalResult
 }
 
 extension UnattendedAuthSystemDriver {
+    public func releaseDialog(id: String) {}
+
     public func approveDialog(id: String, password: String, deadline: Date?) async -> AuthDialogApprovalResult {
         await approveDialog(id: id, password: password)
     }
@@ -122,16 +131,27 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
         "coreautha",
         "CoreAuthenticationUI",
     ]
+    private nonisolated static let embeddedAuthServiceBundleIDs: Set<String> = [
+        "com.apple.LocalAuthenticationRemoteService",
+        "com.apple.AuthenticationServices.Helper",
+        "com.apple.AuthenticationServicesCore.AuthenticationServicesAgent",
+        "com.apple.AuthKitUI.AKAuthorizationRemoteViewService",
+    ]
+    private nonisolated static let embeddedAuthServiceNameFragments = [
+        "LocalAuthenticationRemoteService",
+        "AuthenticationServicesHelper",
+        "AuthenticationServicesAgent",
+        "AKAuthorizationRemoteViewService",
+    ]
     private nonisolated static let privacyExtensionID = "com.apple.settings.PrivacySecurity.extension"
     private nonisolated static let systemSettingsID = "com.apple.systempreferences"
-    private nonisolated static let embeddedAuthServiceID = "com.apple.LocalAuthenticationRemoteService"
-    private static let existingDialogManualReason = "开启前已存在的请求由本人确认"
-    private static let privacyDialogManualReason = "隐私与安全请求由本人确认"
 
     private struct TrackedDialog {
         let id: String
         let pid: pid_t
         let window: AXUIElement
+        let category: UnattendedAuthDialogCategory
+        let fallbackPasswordField: AXUIElement?
         let detectedAt: Date
     }
 
@@ -150,8 +170,8 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
     private var trackedDialogs: [String: TrackedDialog] = [:]
     private var recentFingerprints: [String: Date] = [:]
     private var handledWindows: [pid_t: [AXUIElement]] = [:]
-    private var privacyApplicationObserver: NSKeyValueObservation?
-    private var privacyScanTask: Task<Void, Never>?
+    private var embeddedAuthApplicationObserver: NSKeyValueObservation?
+    private var embeddedAuthScanTask: Task<Void, Never>?
     private var monitoringID: UUID?
     private var monitoring = false
     private let clock: @Sendable () -> Date
@@ -196,7 +216,8 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
 
         registerWorkspaceObservers()
         registerScreenLockObservers()
-        registerPrivacyProcessObserver(monitoringID: id)
+        registerEmbeddedAuthObserver(monitoringID: id)
+        attachEmbeddedAuthObservers()
     }
 
     public func checkExistingDialogs() {
@@ -206,19 +227,20 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
             inspectApplicationWindows(
                 pid: app.processIdentifier,
                 fallbackName: app.localizedName ?? "系统授权",
-                manualReason: Self.existingDialogManualReason)
+                category: .systemAdmin,
+                isExisting: true)
         }
-        attachPrivacyObservers()
-        _ = inspectPrivacySettingsDialogs(manualReason: Self.existingDialogManualReason)
+        attachEmbeddedAuthObservers()
+        _ = inspectEmbeddedAuthDialogs(isExisting: true)
     }
 
     public func stopMonitoring() {
         monitoring = false
         monitoringID = nil
-        privacyApplicationObserver?.invalidate()
-        privacyApplicationObserver = nil
-        privacyScanTask?.cancel()
-        privacyScanTask = nil
+        embeddedAuthApplicationObserver?.invalidate()
+        embeddedAuthApplicationObserver = nil
+        embeddedAuthScanTask?.cancel()
+        embeddedAuthScanTask = nil
         for observer in workspaceObservers {
             NSWorkspace.shared.notificationCenter.removeObserver(observer)
         }
@@ -236,6 +258,11 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
         onDialog = nil
         onScreenLockChanged = nil
         onWake = nil
+    }
+
+    public func releaseDialog(id: String) {
+        guard let tracked = trackedDialogs.removeValue(forKey: id) else { return }
+        markWindowHandled(tracked.window, pid: tracked.pid)
     }
 
     public func approveDialog(id: String, password: String) async -> AuthDialogApprovalResult {
@@ -256,7 +283,7 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
 
         guard let hostApp = NSRunningApplication(processIdentifier: tracked.pid),
             !hostApp.isTerminated,
-            isAuthHost(hostApp)
+            isValidDialogHost(hostApp, category: tracked.category)
         else {
             markWindowHandled(tracked.window, pid: tracked.pid)
             return .blocked(reason: "无法验证系统授权弹窗签名身份，已保留由本人确认")
@@ -264,8 +291,16 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
 
         if let unavailable = checkWindowPresentOrStop(tracked) { return unavailable }
 
-        var inspected = UnattendedAuthAX.inspectWindow(tracked.window)
+        var inspected = UnattendedAuthAX.inspectWindow(
+            tracked.window, fallbackPasswordField: tracked.fallbackPasswordField)
         if inspected.passwordField == nil, let usePasswordButton = inspected.usePasswordButton {
+            guard
+                verifiedControlPID(for: usePasswordButton, category: tracked.category, fallbackHostPID: tracked.pid)
+                    != nil
+            else {
+                markWindowHandled(tracked.window, pid: tracked.pid)
+                return .blocked(reason: "无法验证密码切换按钮所属系统进程，已保留由本人确认")
+            }
             guard AXUIElementPerformAction(usePasswordButton, kAXPressAction as CFString) == .success else {
                 markWindowHandled(tracked.window, pid: tracked.pid)
                 return .blocked(reason: "触控 ID 界面无法切换到密码输入，已保留由本人确认")
@@ -275,7 +310,8 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
                 return stopped
             }
             if let unavailable = checkWindowPresentOrStop(tracked) { return unavailable }
-            inspected = UnattendedAuthAX.inspectWindow(tracked.window)
+            inspected = UnattendedAuthAX.inspectWindow(
+                tracked.window, fallbackPasswordField: tracked.fallbackPasswordField)
         }
 
         guard let passwordField = inspected.passwordField else {
@@ -283,7 +319,10 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
             return .leftForUser(reason: "未识别到管理员密码输入框，已保留由本人确认")
         }
 
-        guard let inputPID = verifiedInputPID(for: passwordField, fallbackHostPID: tracked.pid) else {
+        guard
+            let inputPID = verifiedControlPID(
+                for: passwordField, category: tracked.category, fallbackHostPID: tracked.pid)
+        else {
             markWindowHandled(tracked.window, pid: tracked.pid)
             return .blocked(reason: "无法验证密码输入框所属系统进程，已保留由本人确认")
         }
@@ -314,6 +353,23 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
         return processNames.contains { name in
             !name.isEmpty && authHostNameFragments.contains { name.localizedCaseInsensitiveContains($0) }
         }
+    }
+
+    public static func matchesEmbeddedAuthService(bundleIdentifier: String?, processNames: [String]) -> Bool {
+        if let bundleID = bundleIdentifier,
+            embeddedAuthServiceBundleIDs.contains(where: { $0.caseInsensitiveCompare(bundleID) == .orderedSame })
+        {
+            return true
+        }
+        return processNames.contains { name in
+            !name.isEmpty && embeddedAuthServiceNameFragments.contains { name.localizedCaseInsensitiveContains($0) }
+        }
+    }
+
+    public static func matchesPrivacyAuthHost(bundleIdentifier: String?) -> Bool {
+        guard let bundleIdentifier else { return false }
+        return bundleIdentifier.caseInsensitiveCompare(privacyExtensionID) == .orderedSame
+            || bundleIdentifier.caseInsensitiveCompare(systemSettingsID) == .orderedSame
     }
 
     public static func isPasswordRejectedText(_ text: String) -> Bool {
@@ -398,12 +454,13 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
         }
     }
 
-    private func registerPrivacyProcessObserver(monitoringID id: UUID) {
-        privacyApplicationObserver = NSWorkspace.shared.observe(\.runningApplications, options: [.old, .new]) {
+    private func registerEmbeddedAuthObserver(monitoringID id: UUID) {
+        embeddedAuthApplicationObserver = NSWorkspace.shared.observe(\.runningApplications, options: [.old, .new]) {
             [weak self] _, change in
             let previous = Set(
-                (change.oldValue ?? []).filter(Self.isPrivacyRelatedApplication).map(\.processIdentifier))
-            let current = Set((change.newValue ?? []).filter(Self.isPrivacyRelatedApplication).map(\.processIdentifier))
+                (change.oldValue ?? []).filter(Self.isObservedEmbeddedProcess).map(\.processIdentifier))
+            let current = Set(
+                (change.newValue ?? []).filter(Self.isObservedEmbeddedProcess).map(\.processIdentifier))
             guard current != previous else { return }
             Task { @MainActor [weak self] in
                 guard let self, self.monitoringID == id else { return }
@@ -411,8 +468,8 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
                     self.detachAXObserver(for: pid)
                 }
                 if !current.subtracting(previous).isEmpty {
-                    self.attachPrivacyObservers()
-                    self.checkForNewPrivacyDialog()
+                    self.attachEmbeddedAuthObservers()
+                    self.scheduleEmbeddedAuthScan()
                 }
             }
         }
@@ -440,18 +497,43 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
         }
     }
 
-    private func verifiedInputPID(for passwordField: AXUIElement, fallbackHostPID: pid_t) -> pid_t? {
-        var fieldPID: pid_t = 0
-        AXUIElementGetPid(passwordField, &fieldPID)
-        let inputPID = fieldPID != 0 ? fieldPID : fallbackHostPID
-        if inputPID == fallbackHostPID {
-            return Self.isVerifiedAppleProcess(pid: inputPID) ? inputPID : nil
+    private func isValidDialogHost(_ app: NSRunningApplication, category: UnattendedAuthDialogCategory) -> Bool {
+        switch category {
+        case .systemAdmin:
+            return isAuthHost(app)
+        case .privacySettings:
+            return
+                (Self.matchesPrivacyAuthHost(bundleIdentifier: app.bundleIdentifier) || isEmbeddedAuthService(app)
+                || isAuthHost(app))
+                && Self.isVerifiedAppleProcess(pid: app.processIdentifier)
+        case .credentialAndAppAuth:
+            // 通行密钥 / 应用内验证弹层可能挂载在普通宿主应用窗口上，控制元素自身会再做 Apple 签名校验。
+            return true
         }
-        guard let inputApp = NSRunningApplication(processIdentifier: inputPID),
-            !inputApp.isTerminated,
-            isAuthHost(inputApp)
+    }
+
+    private func verifiedControlPID(
+        for element: AXUIElement,
+        category: UnattendedAuthDialogCategory,
+        fallbackHostPID: pid_t
+    ) -> pid_t? {
+        let rawPID = UnattendedAuthAX.pid(of: element)
+        let controlPID = rawPID != 0 ? rawPID : fallbackHostPID
+        guard Self.isVerifiedAppleProcess(pid: controlPID),
+            let controlApp = NSRunningApplication(processIdentifier: controlPID),
+            !controlApp.isTerminated
         else { return nil }
-        return inputPID
+        switch category {
+        case .systemAdmin:
+            return isAuthHost(controlApp) ? controlPID : nil
+        case .privacySettings:
+            return
+                (Self.matchesPrivacyAuthHost(bundleIdentifier: controlApp.bundleIdentifier)
+                || isEmbeddedAuthService(controlApp)
+                || isAuthHost(controlApp)) ? controlPID : nil
+        case .credentialAndAppAuth:
+            return (isEmbeddedAuthService(controlApp) || isAuthHost(controlApp)) ? controlPID : nil
+        }
     }
 
     private func submitPassword(
@@ -495,39 +577,79 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
         if sawUnknown {
             return .blocked(reason: "无法确认弹窗是否关闭，已保留由本人确认")
         }
-        let afterTexts = UnattendedAuthAX.inspectWindow(tracked.window).texts.joined(separator: " ")
+        let afterTexts = UnattendedAuthAX.inspectWindow(
+            tracked.window, fallbackPasswordField: tracked.fallbackPasswordField
+        ).texts.joined(separator: " ")
         if Self.isPasswordRejectedText(afterTexts) {
             return .passwordRejected(reason: "系统提示密码未通过验证")
         }
         return .blocked(reason: "弹窗未关闭，已保留由本人确认")
     }
 
-    private nonisolated static func isPrivacyRelatedApplication(_ app: NSRunningApplication) -> Bool {
-        app.bundleIdentifier == privacyExtensionID || app.bundleIdentifier == embeddedAuthServiceID
+    private nonisolated static func isObservedEmbeddedProcess(_ app: NSRunningApplication) -> Bool {
+        if let bundleID = app.bundleIdentifier {
+            if bundleID.caseInsensitiveCompare(privacyExtensionID) == .orderedSame { return true }
+            if embeddedAuthServiceBundleIDs.contains(where: { $0.caseInsensitiveCompare(bundleID) == .orderedSame }) {
+                return true
+            }
+        }
+        let names = [app.localizedName, app.executableURL?.lastPathComponent].compactMap { $0 }
+        return names.contains { name in
+            !name.isEmpty && embeddedAuthServiceNameFragments.contains { name.localizedCaseInsensitiveContains($0) }
+        }
     }
 
-    private func checkForNewPrivacyDialog() {
-        privacyScanTask?.cancel()
-        privacyScanTask = Task { @MainActor [weak self] in
-            // 后台服务可能先注册，系统设置随后才显示弹层。
-            for delay in [0, 250, 750, 1_000] {
+    private func hasRunningEmbeddedAuthService() -> Bool {
+        NSWorkspace.shared.runningApplications.contains { app in
+            !app.isTerminated && isEmbeddedAuthService(app)
+        }
+    }
+
+    private func scheduleEmbeddedAuthScan() {
+        embeddedAuthScanTask?.cancel()
+        embeddedAuthScanTask = Task { @MainActor [weak self] in
+            // 后台服务可能先注册，界面弹层与远程密码框随后才挂入窗口树。
+            for delay in [0, 150, 450, 900, 1_500] {
                 if delay > 0 { try? await Task.sleep(for: .milliseconds(delay)) }
                 guard !Task.isCancelled, let self, self.monitoring else { return }
-                if self.inspectPrivacySettingsDialogs() { return }
+                if self.inspectEmbeddedAuthDialogs(isExisting: false) { return }
             }
         }
     }
 
-    private func attachPrivacyObservers() {
-        for bundleID in [Self.privacyExtensionID, Self.systemSettingsID] {
+    private func attachEmbeddedAuthObservers() {
+        let bundleIDs = Array(Self.embeddedAuthServiceBundleIDs) + [Self.privacyExtensionID, Self.systemSettingsID]
+        for bundleID in bundleIDs {
             for app in NSRunningApplication.runningApplications(withBundleIdentifier: bundleID) where !app.isTerminated
             {
                 attachAXObserver(for: app)
             }
         }
+        for app in NSWorkspace.shared.runningApplications where !app.isTerminated && isEmbeddedAuthService(app) {
+            attachAXObserver(for: app)
+        }
     }
 
-    private func inspectPrivacySettingsDialogs(manualReason: String = privacyDialogManualReason) -> Bool {
+    private func inspectEmbeddedAuthDialogs(isExisting: Bool) -> Bool {
+        var found = false
+        if inspectPrivacySettingsDialogs(isExisting: isExisting) {
+            found = true
+        }
+        if inspectRunningEmbeddedAuthServices(isExisting: isExisting) {
+            found = true
+        }
+        if hasRunningEmbeddedAuthService() {
+            if inspectFocusedEmbeddedPasswordField(isExisting: isExisting) {
+                found = true
+            }
+            if inspectFrontmostEmbeddedSheets(isExisting: isExisting) {
+                found = true
+            }
+        }
+        return found
+    }
+
+    private func inspectPrivacySettingsDialogs(isExisting: Bool) -> Bool {
         var found = false
         for app in NSRunningApplication.runningApplications(withBundleIdentifier: Self.privacyExtensionID)
         where !app.isTerminated && Self.isVerifiedAppleProcess(pid: app.processIdentifier) {
@@ -543,7 +665,8 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
             }
             found = true
             report(
-                window: sheet, pid: pid, fallbackName: "隐私与安全", inspected: inspected, manualReason: manualReason)
+                window: sheet, pid: pid, fallbackName: "隐私与安全", category: .privacySettings,
+                isExisting: isExisting, inspected: inspected)
         }
         if !found {
             for app in NSRunningApplication.runningApplications(withBundleIdentifier: Self.systemSettingsID)
@@ -557,31 +680,201 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
                     else { continue }
                     found = true
                     report(
-                        window: sheet, pid: pid, fallbackName: "隐私与安全", inspected: inspected,
-                        manualReason: manualReason)
+                        window: sheet, pid: pid, fallbackName: "隐私与安全", category: .privacySettings,
+                        isExisting: isExisting, inspected: inspected)
                 }
             }
         }
         return found
     }
 
+    private func inspectRunningEmbeddedAuthServices(isExisting: Bool) -> Bool {
+        var found = false
+        for app in NSWorkspace.shared.runningApplications where !app.isTerminated && isEmbeddedAuthService(app) {
+            let pid = app.processIdentifier
+            let appElement = AXUIElementCreateApplication(pid)
+            var candidates: [AXUIElement] = []
+            var value: CFTypeRef?
+            if AXUIElementCopyAttributeValue(appElement, kAXWindowsAttribute as CFString, &value) == .success,
+                let windows = value as? [AXUIElement]
+            {
+                candidates.append(contentsOf: windows)
+            }
+            if let focused = UnattendedAuthAX.copyElementAttribute(appElement, kAXFocusedWindowAttribute),
+                !candidates.contains(where: { CFEqual($0, focused) })
+            {
+                candidates.append(focused)
+            }
+            for sheet in UnattendedAuthAX.collectSheets(of: appElement)
+            where !candidates.contains(where: { CFEqual($0, sheet) }) {
+                candidates.append(sheet)
+            }
+            for window in candidates {
+                let inspected = UnattendedAuthAX.inspectWindow(window)
+                guard inspected.passwordField != nil || inspected.usePasswordButton != nil else { continue }
+                found = true
+                report(
+                    window: window, pid: pid, fallbackName: "密码与通行密钥", category: .credentialAndAppAuth,
+                    isExisting: isExisting, inspected: inspected)
+            }
+        }
+        return found
+    }
+
+    private func inspectFocusedEmbeddedPasswordField(isExisting: Bool) -> Bool {
+        guard let focused = UnattendedAuthAX.focusedUIElement() else { return false }
+        let focusedPID = UnattendedAuthAX.pid(of: focused)
+        guard let focusedApp = NSRunningApplication(processIdentifier: focusedPID),
+            !focusedApp.isTerminated,
+            isEmbeddedAuthService(focusedApp) || isAuthHost(focusedApp)
+        else { return false }
+
+        let fallbackField = UnattendedAuthAX.isSecureTextField(focused) ? focused : nil
+        let frontmost = NSWorkspace.shared.frontmostApplication
+        let fallbackName = frontmost?.localizedName ?? "密码与通行密钥"
+
+        let enclosing = UnattendedAuthAX.enclosingWindowOrSheet(for: focused)
+        if let container = enclosing {
+            let containerPID = UnattendedAuthAX.pid(of: container)
+            let containerRole = UnattendedAuthAX.copyStringAttribute(container, kAXRoleAttribute)
+            let containerIsAuth =
+                NSRunningApplication(processIdentifier: containerPID).map {
+                    isEmbeddedAuthService($0) || isAuthHost($0)
+                } ?? false
+            if containerIsAuth || containerRole == kAXSheetRole {
+                let inspected = UnattendedAuthAX.inspectWindow(container, fallbackPasswordField: fallbackField)
+                if hasTrustedEmbeddedControl(inspected, category: .credentialAndAppAuth, fallbackPID: focusedPID) {
+                    report(
+                        window: container, pid: containerPID, fallbackName: fallbackName,
+                        category: .credentialAndAppAuth, isExisting: isExisting, inspected: inspected,
+                        fallbackPasswordField: fallbackField)
+                    return true
+                }
+            } else {
+                // 若容器是普通宿主应用主窗口，优先取其最内层 AXSheet。
+                let sheets = UnattendedAuthAX.copySheets(container)
+                for sheet in sheets.reversed() {
+                    let sheetPID = UnattendedAuthAX.pid(of: sheet)
+                    let inspected = UnattendedAuthAX.inspectWindow(sheet, fallbackPasswordField: fallbackField)
+                    if hasTrustedEmbeddedControl(inspected, category: .credentialAndAppAuth, fallbackPID: focusedPID) {
+                        report(
+                            window: sheet, pid: sheetPID, fallbackName: fallbackName,
+                            category: .credentialAndAppAuth, isExisting: isExisting, inspected: inspected,
+                            fallbackPasswordField: fallbackField)
+                        return true
+                    }
+                }
+            }
+        }
+
+        // 回退到焦点应用自身的窗口，或前台应用的最内层弹层。
+        let focusedAppElement = AXUIElementCreateApplication(focusedPID)
+        if let appWindow = UnattendedAuthAX.copyElementAttribute(focusedAppElement, kAXFocusedWindowAttribute) {
+            let inspected = UnattendedAuthAX.inspectWindow(appWindow, fallbackPasswordField: fallbackField)
+            if hasTrustedEmbeddedControl(inspected, category: .credentialAndAppAuth, fallbackPID: focusedPID) {
+                report(
+                    window: appWindow, pid: focusedPID, fallbackName: fallbackName,
+                    category: .credentialAndAppAuth, isExisting: isExisting, inspected: inspected,
+                    fallbackPasswordField: fallbackField)
+                return true
+            }
+        }
+        if let frontmost, !frontmost.isTerminated {
+            let sheets = UnattendedAuthAX.collectSheets(of: AXUIElementCreateApplication(frontmost.processIdentifier))
+            for sheet in sheets.reversed() {
+                let sheetPID = UnattendedAuthAX.pid(of: sheet)
+                let inspected = UnattendedAuthAX.inspectWindow(sheet, fallbackPasswordField: fallbackField)
+                if hasTrustedEmbeddedControl(inspected, category: .credentialAndAppAuth, fallbackPID: focusedPID) {
+                    report(
+                        window: sheet, pid: sheetPID, fallbackName: fallbackName,
+                        category: .credentialAndAppAuth, isExisting: isExisting, inspected: inspected,
+                        fallbackPasswordField: fallbackField)
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    private func inspectFrontmostEmbeddedSheets(isExisting: Bool) -> Bool {
+        guard let frontmost = NSWorkspace.shared.frontmostApplication,
+            !frontmost.isTerminated,
+            !isAuthHost(frontmost),
+            !Self.matchesPrivacyAuthHost(bundleIdentifier: frontmost.bundleIdentifier)
+        else { return false }
+
+        let pid = frontmost.processIdentifier
+        let appElement = AXUIElementCreateApplication(pid)
+        var candidates = UnattendedAuthAX.collectSheets(of: appElement)
+        if let focused = UnattendedAuthAX.copyElementAttribute(appElement, kAXFocusedWindowAttribute),
+            UnattendedAuthAX.copyStringAttribute(focused, kAXRoleAttribute) == kAXSheetRole,
+            !candidates.contains(where: { CFEqual($0, focused) })
+        {
+            candidates.append(focused)
+        }
+
+        var found = false
+        let fallbackName = frontmost.localizedName ?? "密码与通行密钥"
+        for sheet in candidates.reversed() {
+            let inspected = UnattendedAuthAX.inspectWindow(sheet)
+            guard hasTrustedEmbeddedControl(inspected, category: .credentialAndAppAuth, fallbackPID: pid) else {
+                continue
+            }
+            found = true
+            report(
+                window: sheet, pid: pid, fallbackName: fallbackName, category: .credentialAndAppAuth,
+                isExisting: isExisting, inspected: inspected)
+        }
+        return found
+    }
+
+    private func hasTrustedEmbeddedControl(
+        _ inspected: UnattendedAuthInspectedDialog,
+        category: UnattendedAuthDialogCategory,
+        fallbackPID: pid_t
+    ) -> Bool {
+        if let passwordField = inspected.passwordField {
+            return verifiedControlPID(for: passwordField, category: category, fallbackHostPID: fallbackPID) != nil
+        }
+        if let usePasswordButton = inspected.usePasswordButton {
+            return verifiedControlPID(for: usePasswordButton, category: category, fallbackHostPID: fallbackPID) != nil
+        }
+        return false
+    }
+
     private func handleApplicationEvent(_ app: NSRunningApplication) {
         if isAuthHost(app) {
             attachAXObserver(for: app)
-            inspectApplicationWindows(pid: app.processIdentifier, fallbackName: app.localizedName ?? "系统授权")
+            inspectApplicationWindows(
+                pid: app.processIdentifier,
+                fallbackName: app.localizedName ?? "系统授权",
+                category: .systemAdmin,
+                isExisting: false)
             return
         }
-        if (Self.isPrivacyRelatedApplication(app) || app.bundleIdentifier == Self.systemSettingsID)
+        if (Self.isObservedEmbeddedProcess(app) || Self.matchesPrivacyAuthHost(bundleIdentifier: app.bundleIdentifier))
             && Self.isVerifiedAppleProcess(pid: app.processIdentifier)
         {
             attachAXObserver(for: app)
-            checkForNewPrivacyDialog()
+            scheduleEmbeddedAuthScan()
+            return
+        }
+        if hasRunningEmbeddedAuthService() {
+            scheduleEmbeddedAuthScan()
         }
     }
 
     private func isAuthHost(_ app: NSRunningApplication) -> Bool {
         let names = [app.localizedName, app.executableURL?.lastPathComponent].compactMap { $0 }
         guard Self.matchesAuthHost(bundleIdentifier: app.bundleIdentifier, processNames: names) else {
+            return false
+        }
+        return Self.isVerifiedAppleProcess(pid: app.processIdentifier)
+    }
+
+    private func isEmbeddedAuthService(_ app: NSRunningApplication) -> Bool {
+        let names = [app.localizedName, app.executableURL?.lastPathComponent].compactMap { $0 }
+        guard Self.matchesEmbeddedAuthService(bundleIdentifier: app.bundleIdentifier, processNames: names) else {
             return false
         }
         return Self.isVerifiedAppleProcess(pid: app.processIdentifier)
@@ -609,6 +902,7 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
             kAXFocusedWindowChangedNotification,
             kAXMainWindowChangedNotification,
             kAXSheetCreatedNotification,
+            kAXFocusedUIElementChangedNotification,
         ]
         var addedAny = false
         for name in notifications {
@@ -630,26 +924,37 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
     private func handleAXNotification(name: String, element: AXUIElement, pid: pid_t) {
         guard monitoring else { return }
         let app = NSRunningApplication(processIdentifier: pid)
-        if app?.bundleIdentifier == Self.privacyExtensionID || app?.bundleIdentifier == Self.systemSettingsID {
+        if Self.matchesPrivacyAuthHost(bundleIdentifier: app?.bundleIdentifier) {
             guard Self.isVerifiedAppleProcess(pid: pid) else { return }
             if UnattendedAuthAX.copyStringAttribute(element, kAXRoleAttribute) == kAXSheetRole {
                 let inspected = UnattendedAuthAX.inspectWindow(element)
                 if inspected.passwordField != nil || inspected.usePasswordButton != nil {
                     report(
-                        window: element, pid: pid, fallbackName: "隐私与安全", inspected: inspected,
-                        manualReason: Self.privacyDialogManualReason)
+                        window: element, pid: pid, fallbackName: "隐私与安全", category: .privacySettings,
+                        isExisting: false, inspected: inspected)
                 }
             } else {
-                _ = inspectPrivacySettingsDialogs(manualReason: Self.privacyDialogManualReason)
+                _ = inspectEmbeddedAuthDialogs(isExisting: false)
             }
+            return
+        }
+        if let app, !app.isTerminated, isEmbeddedAuthService(app) {
+            _ = inspectEmbeddedAuthDialogs(isExisting: false)
             return
         }
         guard let app, !app.isTerminated, isAuthHost(app) else { return }
         let fallback = app.localizedName ?? "系统授权"
-        report(window: element, pid: pid, fallbackName: fallback, inspected: UnattendedAuthAX.inspectWindow(element))
+        report(
+            window: element, pid: pid, fallbackName: fallback, category: .systemAdmin,
+            isExisting: false, inspected: UnattendedAuthAX.inspectWindow(element))
     }
 
-    private func inspectApplicationWindows(pid: pid_t, fallbackName: String, manualReason: String? = nil) {
+    private func inspectApplicationWindows(
+        pid: pid_t,
+        fallbackName: String,
+        category: UnattendedAuthDialogCategory,
+        isExisting: Bool
+    ) {
         let appElement = AXUIElementCreateApplication(pid)
         var value: CFTypeRef?
         _ = AXUIElementCopyAttributeValue(appElement, kAXWindowsAttribute as CFString, &value)
@@ -661,8 +966,8 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
         }
         for window in windows {
             report(
-                window: window, pid: pid, fallbackName: fallbackName,
-                inspected: UnattendedAuthAX.inspectWindow(window), manualReason: manualReason)
+                window: window, pid: pid, fallbackName: fallbackName, category: category,
+                isExisting: isExisting, inspected: UnattendedAuthAX.inspectWindow(window))
         }
     }
 
@@ -678,7 +983,10 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
         window: AXUIElement,
         pid: pid_t,
         fallbackName: String,
+        category: UnattendedAuthDialogCategory,
+        isExisting: Bool,
         inspected: UnattendedAuthInspectedDialog,
+        fallbackPasswordField: AXUIElement? = nil,
         manualReason: String? = nil
     ) {
         if let existing = handledWindows[pid] {
@@ -689,30 +997,49 @@ public final class SystemUnattendedAuthDriver: UnattendedAuthSystemDriver {
         if trackedDialogs.values.contains(where: { $0.pid == pid && CFEqual($0.window, window) }) { return }
         let hasPassword = inspected.passwordField != nil
         let isTouchIDOnly = !hasPassword && inspected.usePasswordButton != nil
-        if manualReason != nil && !hasPassword && !isTouchIDOnly { return }
+        if (category == .privacySettings || category == .credentialAndAppAuth || manualReason != nil)
+            && !hasPassword && !isTouchIDOnly
+        {
+            return
+        }
         guard hasPassword || isTouchIDOnly || !inspected.texts.isEmpty else { return }
         guard hasPassword || isTouchIDOnly || inspected.approveButton != nil else { return }
 
         let joinedText = inspected.texts.joined(separator: " ")
-        let summary = UnattendedAuthSanitizer.sanitizeText(
-            joinedText.isEmpty ? "\(fallbackName) 管理员授权请求" : joinedText)
+        let defaultPrompt =
+            switch category {
+            case .systemAdmin: "\(fallbackName) 管理员授权请求"
+            case .privacySettings: "隐私与安全 管理员授权请求"
+            case .credentialAndAppAuth: "\(fallbackName) 密码与通行密钥验证请求"
+            }
+        let summary = UnattendedAuthSanitizer.sanitizeText(joinedText.isEmpty ? defaultPrompt : joinedText)
         let source = UnattendedAuthSanitizer.extractRequester(from: summary, fallback: fallbackName)
+
+        let now = clock()
+        recentFingerprints = recentFingerprints.filter { now.timeIntervalSince($0.value) < 6 }
+        let fingerprint = "\(category.rawValue)::\(summary)"
+        if recentFingerprints[fingerprint] != nil { return }
+        recentFingerprints[fingerprint] = now
 
         let dialogID = UUID().uuidString
         if manualReason != nil {
             markWindowHandled(window, pid: pid)
         } else {
-            let now = clock()
-            recentFingerprints = recentFingerprints.filter { now.timeIntervalSince($0.value) < 6 }
-            let fingerprint = "\(pid)::\(summary)"
-            if recentFingerprints[fingerprint] != nil { return }
-            recentFingerprints[fingerprint] = now
-            trackedDialogs[dialogID] = TrackedDialog(id: dialogID, pid: pid, window: window, detectedAt: now)
+            trackedDialogs[dialogID] = TrackedDialog(
+                id: dialogID,
+                pid: pid,
+                window: window,
+                category: category,
+                fallbackPasswordField: fallbackPasswordField,
+                detectedAt: now
+            )
         }
         let detected = DetectedAuthDialog(
             id: dialogID,
             source: source,
             summary: summary,
+            category: category,
+            isExisting: isExisting,
             isTouchIDOnly: isTouchIDOnly,
             hasPasswordField: hasPassword,
             manualConfirmationReason: manualReason

@@ -32,12 +32,28 @@ struct PluginPreferencesTests {
         value.fanProfiles = [0: FanProfile(mode: .fixed, rpm: 2800), 1: FanCurvePreset.balanced.profile]
         value.shutdownPolicy.excludedBundleIDs = ["test.notes"]
         value.shutdownPolicy.forceCloseApps = false
+        value.unattendedAuth = UnattendedAuthPreferences(
+            approvePrivacySettings: false,
+            approveCredentialAndAppAuth: true,
+            approveExistingDialogs: false
+        )
         value.pluginOrder = [.fan, .time, .translate]
         try store.save(value, replacing: old)
         #expect(try store.load() == value)
         #expect(throws: (any Error).self) { try store.save(old, replacing: old) }
         #expect(try store.load() == value)
         #expect(value.version == 1)
+    }
+
+    @Test("无人值守授权选项缺省字段默认全部自动批准")
+    func unattendedAuthPreferencesDefaults() throws {
+        let legacyJSON = #"{"version":1,"policies":{},"unattendedAuth":{}}"#
+        let decoded = try JSONDecoder().decode(Preferences.self, from: Data(legacyJSON.utf8))
+        #expect(decoded.unattendedAuth == UnattendedAuthPreferences())
+        #expect(decoded.unattendedAuth.approvePrivacySettings)
+        #expect(decoded.unattendedAuth.approveCredentialAndAppAuth)
+        #expect(decoded.unattendedAuth.approveExistingDialogs)
+        #expect(decoded.unattendedAuth.optionsSummaryText == "全部")
     }
     @Test("可选模块的开关独立保存，旧宿主仍能识别原来的禁用列表")
     func optionalPlugins() throws {
