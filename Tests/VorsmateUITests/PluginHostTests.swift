@@ -12,7 +12,8 @@ import VorsmateCore
 @Suite("插件宿主")
 @MainActor
 struct PluginHostTests {
-    @Test("任意组合保留顺序且关闭立即释放资源", arguments: Array(0..<(1 << PluginID.allCases.count)))
+    // 逐一提交各组合，避免成千上万个主线程测试同时排队，阻塞其他插件的异步回调。
+    @Test("任意组合保留顺序且关闭立即释放资源", .serialized, arguments: 0..<(1 << PluginID.allCases.count))
     func combinations(mask: Int) throws {
         let probes = PluginID.allCases.map { PluginProbe(id: $0) }
         var saved: Set<PluginID> = []
