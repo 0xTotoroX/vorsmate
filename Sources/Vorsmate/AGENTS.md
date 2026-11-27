@@ -20,7 +20,10 @@
 - TranslationModel.swift：截图工作流状态机，编排全局截图热键注册、矢量标注、按需 OCR／双引擎翻译回填、图片保存与桌面贴图生命周期。
 - TranslationPanelView.swift：总览内「截图」摘要行、就地展开「开始截图」入口及统一内联卡片中的快捷键 / 双引擎预设 / 密钥 / 语种设置。
 - SystemTranslationBridge.swift：macOS 15+ Apple `Translation` 框架 `.translationTask` 离线批量翻译桥接与离线预览替身。
-- ScreenshotOverlayWindow.swift：全屏窗口吸附框选蒙层（矢量标注预览与三分线辅助）、Liquid Glass A2 纯图标工具条及支持滚轮缩放与透明度的桌面贴图窗口。
+- ScreenshotOverlayWindow.swift：全屏框选与浮动贴图协调器（OverlayKeyWindow、ScreenshotOverlayController）。
+- ScreenshotCaptureCanvas.swift：全屏窗口吸附框选画布、三分线与实时矢量标注绘制（CaptureCanvasView）。
+- ScreenshotOverlayToolbar.swift：Liquid Glass A2 纯图标工具条、矢量图标绘制与玻璃修饰器（SceneOverlayToolbarView）。
+- ScreenshotPinnedSticker.swift：支持多图独立滚轮缩放、透明度调节与悬停操作条的桌面贴图窗口（PinnedStickerWindow / PinnedStickerContent）。
 - TypelessRecoveryPanel.swift：菜单栏内的诊断详情、保存后确认及有时限的正常退出流程；预览用内存替身。
 - PluginHost.swift：内置与可选插件生命周期协议、注册表、幂等启停、刷新 / 显隐分发与开关持久化失败保护；时间资源随视图启停。
 - QuickShutdownView.swift：菜单栏关机详情、应用勾选和搜索、退出选项、摘要 / 详情取消入口、清理与提交反馈（倒计时展示于菜单栏，保留彩色日落动画 SunsetMark）。
