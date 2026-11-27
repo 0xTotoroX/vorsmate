@@ -45,7 +45,7 @@ Built with SwiftUI and AppKit, with native Liquid Glass on macOS 26+. No account
 
 Requires **macOS 14 or later**. The universal app includes Apple Silicon and Intel architectures.
 
-1. Download `Vorsmate-0.3.2.dmg` from [GitHub Releases](https://github.com/0xTotoroX/vorsmate/releases/tag/v0.3.2).
+1. Download `Vorsmate-0.4.0.dmg` from [GitHub Releases](https://github.com/0xTotoroX/vorsmate/releases/tag/v0.4.0).
 2. Open the disk image and drag **Vorsmate** into **Applications**.
 3. Launch it from Applications and click the soaring gull icon in the menu bar.
 

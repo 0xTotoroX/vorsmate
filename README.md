@@ -45,7 +45,7 @@
 
 需要 **macOS 14 或更新版本**。安装包包含 Apple Silicon 与 Intel 两种架构；应用界面目前为简体中文。
 
-1. 在 [GitHub Releases](https://github.com/0xTotoroX/vorsmate/releases/tag/v0.3.2) 下载 `Vorsmate-0.3.2.dmg`。
+1. 在 [GitHub Releases](https://github.com/0xTotoroX/vorsmate/releases/tag/v0.4.0) 下载 `Vorsmate-0.4.0.dmg`。
 2. 打开磁盘镜像，将 **Vorsmate** 拖入 **Applications**。
 3. 从“应用程序”中启动，点击菜单栏的展翼图标。
 
