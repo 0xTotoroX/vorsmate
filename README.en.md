@@ -1,81 +1,62 @@
-<img src="Resources/AppIcon.png" width="72" alt="Vorsmate cobalt gull">
-
-# Vorsmate
-
-Input sources, audio devices, fan control, time conversion, Quick Shutdown, and Unattended Authorization—plus optional Screenshot Translation and Xiaomi Remote—in one compact Mac menu bar panel.
-
-[简体中文](README.md) · English · [Download](https://github.com/0xTotoroX/vorsmate/releases) · [Issues](https://github.com/0xTotoroX/vorsmate/issues)
-
-[![CI](https://github.com/0xTotoroX/vorsmate/actions/workflows/ci.yml/badge.svg)](https://github.com/0xTotoroX/vorsmate/actions/workflows/ci.yml)
-[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-
-<img src="docs/images/overview.png" width="370" alt="Vorsmate overview showing local and Pacific time, input source, audio devices, and fan status"> <img src="docs/images/device-priority.png" width="370" alt="One device list for selecting an item and dragging rows to reorder automatic selection priorities">
-
-Actual app screenshots using sample data. Click to switch; drag to reorder in the same list. The app interface is currently in Simplified Chinese.
-
-<details>
-<summary>Fan controls</summary>
-
-<img src="docs/images/fan-control.png" width="370" alt="Expanded fan controls with four parallel choices: Automatic, Balanced, Enhanced, and Custom">
-
-</details>
-
-<details>
-<summary>App updates</summary>
-
-<img src="docs/images/update-check.png" width="370" alt="Preview of the native Vorsmate update window showing the installed version">
-
-</details>
+<div align="center">
+  <img src="Resources/AppIcon.png" alt="Vorsmate" width="96" />
+  <h1>Vorsmate</h1>
+  <p>A native Mac menu bar panel for input sources, audio devices, fan control, time comparison, and system utilities.</p>
+  <p>
+    <a href="README.md">简体中文</a> ·
+    <strong>English</strong> ·
+    <a href="https://github.com/0xTotoroX/vorsmate/releases/latest">Download</a> ·
+    <a href="https://github.com/0xTotoroX/vorsmate/issues">Issues</a>
+  </p>
+  <p>
+    <a href="https://github.com/0xTotoroX/vorsmate/actions/workflows/ci.yml"><img src="https://github.com/0xTotoroX/vorsmate/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License" /></a>
+  </p>
+</div>
 
 ## Features
 
-- **Input sources** — Switch quickly, lock a preferred input source, or drag to set priorities for automatic selection.
-- **Audio devices** — Reorder and lock microphone and playback devices independently. Fall back when a device disconnects and restore it when it returns. Supported wireless receivers become eligible only when a transmitter connects.
-- **Fan control** — Four direct choices: Automatic, Balanced, Enhanced, and Custom. Balanced and Enhanced smooth temperature changes and slow down gradually; Custom sets a fixed speed. Background readings refresh without interrupting the controls.
-- **Quick Shutdown** — Clean up apps before shutting down or restarting, with a cancellable five-second countdown and per-app exclusions.
-- **Unattended Authorization** — Verify and store the admin password in the local Keychain to automatically approve matching Apple-signed system prompts during a timed or open session, while leaving pre-existing and Privacy & Security prompts for manual confirmation.
-- **Screenshot & Translation (Optional)** — Capture window-snapping regions via hotkey, annotate with vector tools, copy offline OCR text, translate in place via macOS Translation or a custom endpoint, and pin scalable translucent desktop stickers.
-- **Modules** — Browse across Devices, Tools, and System tabs, and enable, disable, or reorder modules within each category under `更多 → 功能模块…`; disabling stops their background work.
-- **App updates** — Check a fixed signed feed and verify both the feed and installer. Clear timeout errors offer a retry while keeping your settings and fan helper authorization.
-- **Time comparison** — View local and US Pacific time side by side. Convert dates and times with daylight saving handled for both locations.
+Modules are organized into Devices, Tools, and System tabs. The panel shows current state by default and opens inline controls or a detail page on click. You can toggle or reorder any module under `功能模块…` in the top-right menu; disabling a module stops its background work. Built natively with SwiftUI and AppKit, Vorsmate supports system Liquid Glass on macOS 26+ without accounts or cloud services.
 
-Built with SwiftUI and AppKit, with native Liquid Glass on macOS 26+. No account, audio recording, keystroke capture, or cloud service required.
+### Built-in modules
 
-## Download and install
+| Category | Module | What it does |
+| --- | --- | --- |
+| Devices | Input sources | Switch or lock system input sources quickly, or drag rows to set automatic selection priorities. |
+| Devices | Audio devices | Manage microphone and playback device priorities and locks independently, with automatic fallback on disconnect and restore on reconnect; supported wireless receivers qualify only when a transmitter connects. |
+| Devices | Fan control | Switch across Automatic, Balanced, Enhanced, and Custom profiles with smoothed temperature curves, fixed speeds, and automatic restore on startup and wake. |
+| Tools | Time comparison | View local and US Pacific time side by side, edit dates or drag the slider to compare times, and handle daylight saving changes automatically. |
+| System | Quick Shutdown | Quit selected apps before shutting down or restarting, with a cancellable five-second countdown, search, exclusion list, and force quit toggle. |
+| System | Unattended Authorization | Verify and store your admin password in the local Keychain to approve matching Apple-signed system prompts during a timed or open session, leaving pre-existing and Privacy & Security prompts for manual confirmation. |
 
-Requires **macOS 14 or later**. The universal app includes Apple Silicon and Intel architectures.
+### Optional modules
+
+Disabled by default; enable them from `功能模块…` in the top-right menu.
+
+| Module | What it does |
+| --- | --- |
+| Screenshot & Translation | Trigger window-snapping screen capture by hotkey, annotate with rectangles, arrows, or freehand ink, copy offline OCR text, translate in place via macOS Translation or a custom OpenAI-compatible endpoint, and pin scalable translucent stickers. |
+| Xiaomi Remote | Place the built `VorsmateRemote.app` beside `Vorsmate.app` to map RC003 buttons to per-app shortcuts, gestures, and hold-to-repeat, with voice input via MiRemoteV 2ch. |
+
+## Installation
+
+### Requirements
+
+macOS 14 or later on Apple Silicon or Intel (Universal binary). The app interface is currently in Simplified Chinese.
+
+### Download installer
 
 1. Download `Vorsmate-0.4.0.dmg` from [GitHub Releases](https://github.com/0xTotoroX/vorsmate/releases/tag/v0.4.0).
-2. Open the disk image and drag **Vorsmate** into **Applications**.
-3. Launch it from Applications and click the soaring gull icon in the menu bar.
+2. Open the disk image and drag `Vorsmate.app` into `Applications`.
+3. Launch Vorsmate from Applications and click the gull icon in the menu bar.
 
-**Upgrading from v0.3.2 or earlier:** These versions use the old installer naming rule. Install the next release manually from GitHub Releases; that release includes the new rule for subsequent in-app updates. Existing settings and fan helper authorization are retained.
+### Updates and upgrades
 
-## Usage
+Vorsmate checks a fixed signed update feed one minute after startup and every 12 hours, or manually from the top-right menu. Both the feed and disk image require valid signatures, and in-app updates preserve your settings and fan helper authorization.
 
-Click a feature row to expand its controls. The panel otherwise shows only the current state.
+If upgrading from `v0.3.2` or earlier, install `v0.4.0` or later manually once from GitHub Releases due to the installer filename change. In-app updates work normally after that.
 
-Input sources and audio channels each offer **Off**, **Automatic**, and **Locked** modes. In the same expanded list, click an item to select and lock it, or drag a row immediately to reorder priorities—no long press required. Other rows smoothly make room. Items higher in the list take priority; the order is saved when you drop. Management is off on first launch; enable it where needed. Audio apps with their own device selection should use the system default. Input source locking does not control an input method’s internal language mode.
-
-Rows lift slightly while dragging and settle with a soft spring. Drop outside the list or press Esc to cancel, keeping the original order and lock target. Keyboard and accessibility actions are also available.
-
-For supported wireless microphones, availability follows the transmitter connection. A receiver alone does not take over the input; connecting a transmitter restores priority selection, and disconnecting all transmitters triggers fallback. Muting, input level, and pauses in speech do not trigger switching. Locks are preserved while a backup is used until the transmitter reconnects. See [supported devices and limitations](docs/wireless-microphones.md).
-
-After a temporary switching failure, Vorsmate waits and rechecks automatically. Your lock or priority rules resume once the state recovers; a warning appears only if the problem persists.
-
-Fans offer four parallel choices: Automatic, Balanced, Enhanced, and Custom. Automatic uses system control. Balanced and Enhanced respond to sustained heat, slow gradually as temperatures drop, and return control to macOS; Enhanced starts earlier and runs faster. Custom maintains a chosen speed. The last three choices are saved and restored on startup and wake when the helper is authorized and no competing fan tool is running. Sleep, app exit, and module disable return control to macOS while retaining saved profiles; choosing Automatic clears them. Hidden, idle monitoring pauses the main-process polling timer.
-
-The left clock follows the Mac’s current time zone; the right shows US Pacific local time (PST / PDT). Click either clock to edit a date or use the slider to compare times. “Now” or closing the panel returns to the current time without changing the system time zone.
-
-Open Quick Shutdown in the menu bar to choose which apps to quit in advance. With more than six apps, search and select the matching results together. Shut Down and Restart start a five-second countdown that continues running if you close the panel or navigate away; click Cancel, right-click the menu bar countdown, press Escape while the panel is visible, or disable the Quick Shutdown module to cancel it. Force Quit is enabled by default and can discard unsaved work. Turn it off in Options to stop if an app is still running. macOS handles unselected or newly opened apps at shutdown or restart. The enabled helper releases the fans before submitting the request. Without the helper, Vorsmate uses System Events and may need automation permission. Preview uses simulated apps.
-
-The panel closes when the pointer leaves; background management continues. The top-right menu opens `功能模块…` to toggle and reorder all built-in and optional modules, alongside Launch at Login, Check for Updates, About, and Quit.
-
-The optional Xiaomi remote and Screenshot modules are off by default. Place the built `VorsmateRemote.app` beside `Vorsmate.app` and enable the remote under `功能模块…` to configure per-app shortcuts and hold-to-repeat. Voice input requires an existing MiRemoteV 2ch virtual audio device. [Remote setup and key migration (Chinese)](docs/remote.md)
-
-Updates are checked one minute after startup and every 12 hours, or manually through the top-right menu. You confirm downloading and restarting. Checks time out after 20 seconds and stalled downloads cancel and offer a retry after 60 seconds; once Sparkle enters preparation, the window keeps non-reentrant waiting feedback without interrupting the background installer. Both the feed and installer require valid signatures. See [update behavior and publishing](docs/updates.md).
-
-## Build from source
+### Build from source
 
 Requires Xcode 26+ and the Swift 6 / macOS SDK.
 
@@ -86,17 +67,32 @@ swift test
 bash scripts/dev.sh
 ```
 
-The default build targets the host architecture and uses an ad-hoc signature. Input source and audio management work; fans are monitored without control. To enable fan control in your own build, use an Apple signing certificate. General distribution also requires Developer ID signing and Apple notarization.
+The default ad-hoc build supports input sources, audio devices, and fan monitoring. To enable fan speed control or build a universal disk image, pass an Apple signing identity:
 
 ```sh
 VORSMATE_SIGN_IDENTITY='certificate name or fingerprint' bash scripts/build.sh --universal
 bash scripts/package.sh
 ```
 
-The release build goes to `dist/`. For daily use, quit any previous copy once. Each `bash scripts/dev.sh` then rebuilds and relaunches the development app with your existing preferences. To package an approved version tag separately, run `bash scripts/prepare-release.sh vX.Y.Z`. See the [development guide](CONTRIBUTING.md#本地开发).
+Release outputs go to `dist/`. See [CONTRIBUTING.md](CONTRIBUTING.md#本地开发) for development workflows and signing details.
 
-Issues and pull requests are welcome. Read the [contribution guide](CONTRIBUTING.md) and report security issues through the [security policy](SECURITY.md).
+## Usage
 
-## License
+- Switching and reordering: Input sources and audio devices support Off, Automatic, and Locked modes. Expand a row to lock an item with a click or drag a row directly to reorder priorities; drop outside or press `Esc` to cancel. Audio apps with their own output or input picker should be set to the system default.
+- Panel lifecycle and menu: Moving the pointer away closes the panel while background rules stay active. Launch at Login, `功能模块…`, Check for Updates, About, and Quit live in the top-right menu.
+- Permissions and privacy: Fan speed control requires authorizing the bundled helper from the panel. Unattended Authorization requires Accessibility permission, and the admin password stays in the non-syncing local Keychain; Vorsmate never records audio or keystrokes.
 
-[MIT License](LICENSE). Included third-party source and licenses are listed in [Third-party notices](THIRD_PARTY_NOTICES.md).
+## Documentation
+
+- [Wireless microphones](docs/wireless-microphones.md)
+- [Fan control rules](docs/fan-control.md)
+- [Unattended Authorization](docs/unattended-auth.md)
+- [Xiaomi Remote setup (Chinese)](docs/remote.md)
+- [Update mechanism and publishing](docs/updates.md)
+- [Menu bar design notes (Chinese)](DESIGN.md)
+
+## Contributing and license
+
+Issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines and report security issues through [SECURITY.md](SECURITY.md).
+
+Licensed under the [MIT License](LICENSE). Third-party notices are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

@@ -298,7 +298,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
             let length = badge != nil ? NSStatusItem.variableLength : NSStatusItem.squareLength
             let title = badge ?? ""
             let imagePosition: NSControl.ImagePosition = badge != nil ? .imageLeading : .imageOnly
-            let itemName = model.preview ? "Vorsmate 预览" : (model.development ? "Vorsmate 开发版" : "Vorsmate")
+            let itemName = model.preview ? "Vorsmate 预览" : "Vorsmate"
             if item.length != length { item.length = length }
             if let defaultStatusFont, button.font != defaultStatusFont { button.font = defaultStatusFont }
             if button.title != title { button.title = title }

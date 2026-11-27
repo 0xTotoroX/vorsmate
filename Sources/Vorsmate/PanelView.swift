@@ -173,60 +173,68 @@ struct PanelView: View {
         let groups = Self.cardGroups(for: categoryPlugins)
 
         return VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                Image(nsImage: BrandIcon.template).resizable().scaledToFit()
-                    .frame(width: 18, height: 18).accessibilityHidden(true)
-                Text("Vorsmate").font(.title3.weight(.semibold))
-                Spacer()
-                if model.preview {
-                    Text("预览").font(.caption).foregroundStyle(.secondary)
-                } else if model.development {
-                    Text("开发版").font(.caption).foregroundStyle(.secondary)
-                }
-                Menu {
-                    Button("功能模块…") {
-                        expandedSection = nil
-                        showingPluginManager = true
-                    }
-                    .accessibilityIdentifier("plugins.order")
+            ZStack {
+                Image(nsImage: BrandIcon.panelMark)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 28, height: 28)
+                    .accessibilityLabel("Vorsmate")
 
-                    if model.canManageLogin || (!model.preview && !model.development) || model.preview {
-                        Divider()
-                    }
-                    if model.canManageLogin {
-                        Toggle("登录时启动", isOn: Binding(get: { model.loginEnabled }, set: { model.setLogin($0) }))
-                    }
-                    if !model.preview && !model.development {
-                        UpdateMenuItem(model: model.updates)
-                    }
+                HStack(spacing: 8) {
+                    Spacer()
                     if model.preview {
-                        Button("Typeless 诊断与恢复") {
+                        Text("预览").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Menu {
+                        Button("功能模块…") {
                             expandedSection = nil
-                            model.typelessRecovery.refresh()
-                            showingTypelessRecovery = true
-                        }.accessibilityIdentifier("typeless.open")
-                    }
+                            showingPluginManager = true
+                        }
+                        .accessibilityIdentifier("plugins.order")
 
-                    Divider()
-                    Button("关于 Vorsmate") {
-                        NSApp.orderFrontStandardAboutPanel(options: [
-                            .applicationName: "Vorsmate",
-                            .applicationVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
-                                as? String ?? "开发版",
-                        ])
+                        if model.canManageLogin || (!model.preview && !model.development) || model.preview {
+                            Divider()
+                        }
+                        if model.canManageLogin {
+                            Toggle("登录时启动", isOn: Binding(get: { model.loginEnabled }, set: { model.setLogin($0) }))
+                        }
+                        if !model.preview && !model.development {
+                            UpdateMenuItem(model: model.updates)
+                        }
+                        if model.preview {
+                            Button("Typeless 诊断与恢复") {
+                                expandedSection = nil
+                                model.typelessRecovery.refresh()
+                                showingTypelessRecovery = true
+                            }.accessibilityIdentifier("typeless.open")
+                        }
+
+                        Divider()
+                        Button("关于 Vorsmate") {
+                            NSApp.orderFrontStandardAboutPanel(options: [
+                                .applicationName: "Vorsmate",
+                                .applicationVersion: Bundle.main.object(
+                                    forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
+                            ])
+                        }
+                        Button("退出 Vorsmate") { NSApp.terminate(nil) }.keyboardShortcut("q")
+                        if model.maintenance {
+                            Button("停用风扇助手") { model.fan.uninstallHelper() }.disabled(model.fan.busy)
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                            .font(.system(size: 16, weight: .regular))
+                            .foregroundStyle(.secondary)
                     }
-                    Button("退出 Vorsmate") { NSApp.terminate(nil) }.keyboardShortcut("q")
-                    if model.maintenance {
-                        Button("停用风扇助手") { model.fan.uninstallHelper() }.disabled(model.fan.busy)
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle").font(.title3)
+                    .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                    .accessibilityLabel("更多")
+                    .accessibilityIdentifier("settings")
                 }
-                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-                .accessibilityLabel("更多")
-                .accessibilityIdentifier("settings")
             }
-            .padding(.horizontal, 20).padding(.top, 17).padding(.bottom, 12)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 18)
+            .padding(.top, 14)
+            .padding(.bottom, 10)
 
             if visibleCategories.count > 1 {
                 categoryBar(selected: category)
@@ -303,37 +311,48 @@ struct PanelView: View {
                     selectedCategoryRaw = category.rawValue
                     expandedSection = nil
                 } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: category.symbol)
-                            .font(.system(size: 11, weight: .medium))
-                        Text(category.title)
-                            .font(.system(size: 12, weight: .medium))
-                    }
-                    .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
-                    .background(
-                        isSelected ? Color.accentColor.opacity(0.14) : Color.clear,
-                        in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    )
-                    .overlay(alignment: .topTrailing) {
-                        if indicator != .none {
-                            Circle()
-                                .fill(indicator == .error ? Color.red : Color.accentColor)
-                                .frame(width: 5, height: 5)
-                                .padding(.top, 5)
-                                .padding(.trailing, 8)
+                    Image(systemName: category.symbol)
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 30)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(isSelected ? Color.accentColor.opacity(0.11) : Color.clear)
+                        )
+                        .overlay {
+                            if isSelected {
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .strokeBorder(Color.accentColor.opacity(0.45), lineWidth: 1.5)
+                            }
                         }
-                    }
-                    .contentShape(Rectangle())
+                        .overlay(alignment: .topTrailing) {
+                            if indicator != .none {
+                                Circle()
+                                    .fill(indicator == .error ? Color.red : Color.accentColor)
+                                    .frame(width: 5, height: 5)
+                                    .padding(.top, 5)
+                                    .padding(.trailing, 8)
+                            }
+                        }
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .help(category.title)
+                .accessibilityLabel(category.title)
                 .accessibilityIdentifier("panel.category.\(category.rawValue)")
                 .accessibilityAddTraits(isSelected ? .isSelected : [])
             }
         }
         .padding(3)
-        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+        .background(
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .fill(Color.primary.opacity(0.035))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+        }
         .padding(.horizontal, 16)
         .padding(.bottom, 10)
     }

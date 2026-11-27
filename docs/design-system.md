@@ -30,11 +30,11 @@ Vorsmate 的界面分为**菜单栏控制面板**与**全屏/桌面浮层**两�
 
 ## 3. 模块组织与可扩展导航
 
-- **顶部分类切换栏**：超过一个分类有启用模块时，在面板标题下展示轻量三分类轨道 `设备 · 工具 · 系统`（`PluginCategory`）：
-  - **设备（`.devices`）**：时间对照、输入法、麦克风、播放设备、风扇
-  - **工具（`.tools`）**：截图、小米遥控器
-  - **系统（`.system`）**：一键关机、无人值守授权
-  - 轨道底色 `Color.primary.opacity(0.05)`（圆角 `11pt`），选中项填充 `Color.accentColor.opacity(0.14)`（圆角 `8pt`）并使用 `Color.accentColor` 前景色；非当前分类存在活动状态或错误时，标签右上角显示 `5×5pt` 蓝/红微点提醒。
+- **顶部分类切换栏**：超过一个分类有启用模块时，在面板顶部图标下方展示纯图标三分类轨道（`PluginCategory`），悬停与辅助功能保留「设备 / 工具 / 系统」名称：
+  - **设备（`.devices`，`slider.horizontal.3`）**：时间对照、输入法、麦克风、播放设备、风扇
+  - **工具（`.tools`，`viewfinder`）**：截图、小米遥控器
+  - **系统（`.system`，`gearshape`）**：一键关机、无人值守授权
+  - 轨道底色 `Color.primary.opacity(0.035)` 配 `Color.primary.opacity(0.08)` 描边（圆角 `11pt`），选中项填充 `Color.accentColor.opacity(0.11)` 配 `Color.accentColor.opacity(0.45)` `1.5pt` 描边（圆角 `8pt`），并使用 `Color.accentColor` 图标色；非当前分类存在活动状态或错误时，标签右上角显示 `5×5pt` 蓝/红微点提醒。
 - **持久化模块排序与开关（`PluginOrderManagerView`）**：从「更多 → 功能模块…」进入，按分类展示全部可用模块，支持同分类内 `↑` / `↓` 上移下移与启用开关，保存至 `Preferences.pluginOrder`（支持恢复默认）；正常与开发版中「Typeless 诊断与恢复」统一收口在「遥控器」详情页底部，仅 `--preview` 保留「更多」菜单直达入口。
 - **二元导航约定**：
   - **原地展开（`⌄ / ⌃`）**：时间对照、输入法、麦克风、播放设备、风扇、截图；同时只展开一项，切换分类自动收起。
@@ -61,7 +61,7 @@ Vorsmate 的界面分为**菜单栏控制面板**与**全屏/桌面浮层**两�
 
 ### 6.1 字体层级
 
-- **面板主标题**：`.title3.weight(.semibold)`（`Vorsmate`）
+- **面板顶栏**：顶部居中显示 `28×28pt` 单色展翼图标（`BrandIcon.panelMark`）与右侧 `16pt` 更多菜单图标（不显示应用名与开发版标签）
 - **详情页标题**：`.title2.weight(.semibold)`
 - **摘要行标题**：`14pt` `.semibold`
 - **摘要行状态**：`12pt` 次要色
