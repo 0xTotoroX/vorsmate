@@ -1,4 +1,4 @@
-<img src="Resources/AppIcon.png" width="72" alt="Vorsmate">
+<img src="Resources/AppIcon.png" width="72" alt="Vorsmate cobalt gull">
 
 # Vorsmate
 
@@ -23,7 +23,7 @@ Actual app screenshots using sample data. Click to switch; drag to reorder in th
 <details>
 <summary>App updates</summary>
 
-<img src="docs/images/update-check.png" width="370" alt="Native Vorsmate v0.3.2 update window showing the installed version after a completed check">
+<img src="docs/images/update-check.png" width="370" alt="Preview of the native Vorsmate update window showing the installed version">
 
 </details>
 

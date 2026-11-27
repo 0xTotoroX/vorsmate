@@ -1,11 +1,10 @@
-// [INPUT]: AppKit / CoreGraphics / SwiftUI、Resources/AppIcon-Source.png；可选输出目录（默认 Resources）。
+// [INPUT]: AppKit / CoreGraphics / CoreImage、Resources/AppIcon-Source.png；可选输出目录（默认 Resources）。
 // [OUTPUT]: 保留标准透明边距的 AppIcon.png / iconset / AppIcon.icns，以及同轮廓单色矢量 StatusIcon.pdf。
-// [POS]: 应用图标保留展翼形体的三维起伏与光影，菜单栏与面板标题共用同一轮廓的单色剪影。
+// [POS]: 应用图标采用纯白底与钴蓝海鸥，菜单栏与面板标题共用同一轮廓的单色剪影。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import AppKit
+import CoreImage
 import Foundation
-import ImageIO
-import SwiftUI
 
 let resources = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
     .appending(path: "Resources", directoryHint: .isDirectory)
@@ -13,121 +12,109 @@ let output = CommandLine.arguments.dropFirst().first.map { URL(filePath: $0, dir
 let iconset = output.appending(path: "AppIcon.iconset", directoryHint: .isDirectory)
 try FileManager.default.createDirectory(at: iconset, withIntermediateDirectories: true)
 
-guard let source = CGImageSourceCreateWithURL(resources.appending(path: "AppIcon-Source.png") as CFURL, nil),
-    let artwork = CGImageSourceCreateImageAtIndex(source, 0, nil), artwork.width == artwork.height
-else { fatalError("无法读取方形图标源文件 AppIcon-Source.png") }
+let master = resources.appending(path: "AppIcon-Source.png")
+let originalPNG = try Data(contentsOf: master)
+guard let artwork = CIImage(data: originalPNG), artwork.extent.size == CGSize(width: 1024, height: 1024)
+else { fatalError("图标母版必须为 1024 × 1024 像素") }
 
-@MainActor
-func render(size: Int) -> Data {
-    let canvas = CGFloat(size)
-    let box = canvas * (824.0 / 1024.0)
-    let view = Image(decorative: artwork, scale: 1)
-        .resizable()
-        .interpolation(.high)
-        .frame(width: canvas, height: canvas)
-        .mask(
-            RoundedRectangle(cornerRadius: box * 0.2237, style: .continuous)
-                .frame(width: box, height: box)
-        )
-        .frame(width: canvas, height: canvas)
-    let renderer = ImageRenderer(content: view)
-    renderer.scale = 1
-    let image = NSBitmapImageRep(cgImage: renderer.cgImage!)
-    return image.representation(using: .png, properties: [:])!
+let imageContext = CIContext(options: [.workingColorSpace: NSNull()])
+let sRGB = CGColorSpace(name: CGColorSpace.sRGB)!
+
+func writeIcon(size: Int, to url: URL) throws {
+    if size == 1024 {
+        try originalPNG.write(to: url)
+        return
+    }
+    let image = artwork.applyingFilter(
+        "CILanczosScaleTransform",
+        parameters: [kCIInputScaleKey: CGFloat(size) / artwork.extent.width, kCIInputAspectRatioKey: 1.0])
+    try imageContext.writePNGRepresentation(of: image, to: url, format: .RGBA8, colorSpace: sRGB)
 }
 
 func statusMark() -> CGPath {
-    // 单条连续闭合对称曲线（G1 共线切向）：从中央上鞍部经翼弓舒展至右翼尖，再沿胸腹弧平滑回到左翼与起点，无中缝或折角。
+    // PDF 坐标向上。闭合路径同时包含两翼和中央笑弧，缩小时仍是一个连续的剪影。
     let path = CGMutablePath()
-    path.move(to: CGPoint(x: 0, y: 10.80))
+    path.move(to: CGPoint(x: 128, y: -139.2))
     path.addCurve(
-        to: CGPoint(x: 17.53, y: 23.70),
-        control1: CGPoint(x: 7.38, y: 10.80),
-        control2: CGPoint(x: 13.28, y: 18.68))
+        to: CGPoint(x: 167, y: -102.3),
+        control1: CGPoint(x: 139, y: -139.2),
+        control2: CGPoint(x: 151.4, y: -115.1))
     path.addCurve(
-        to: CGPoint(x: 51.39, y: 64.48),
-        control1: CGPoint(x: 28.98, y: 37.18),
-        control2: CGPoint(x: 39.05, y: 51.75))
+        to: CGPoint(x: 196.7, y: -93.9),
+        control1: CGPoint(x: 175.9, y: -95),
+        control2: CGPoint(x: 184.5, y: -91))
     path.addCurve(
-        to: CGPoint(x: 85.33, y: 87.53),
-        control1: CGPoint(x: 60.80, y: 74.17),
-        control2: CGPoint(x: 71.99, y: 83.93))
+        to: CGPoint(x: 244.7, y: -117.2),
+        control1: CGPoint(x: 214.7, y: -98.2),
+        control2: CGPoint(x: 231.4, y: -110.7))
     path.addCurve(
-        to: CGPoint(x: 98.95, y: 88.31),
-        control1: CGPoint(x: 89.76, y: 88.72),
-        control2: CGPoint(x: 94.41, y: 89.11))
+        to: CGPoint(x: 198, y: -109.6),
+        control1: CGPoint(x: 227.8, y: -115.7),
+        control2: CGPoint(x: 211.2, y: -109.6))
     path.addCurve(
-        to: CGPoint(x: 99.92, y: 88.09),
-        control1: CGPoint(x: 99.26, y: 88.25),
-        control2: CGPoint(x: 99.62, y: 88.22))
+        to: CGPoint(x: 162.4, y: -133.4),
+        control1: CGPoint(x: 184.2, y: -109.6),
+        control2: CGPoint(x: 177, y: -122.7))
     path.addCurve(
-        to: CGPoint(x: 99.94, y: 87.88),
-        control1: CGPoint(x: 100.02, y: 88.04),
-        control2: CGPoint(x: 100.03, y: 87.95))
+        to: CGPoint(x: 146, y: -141.2),
+        control1: CGPoint(x: 157.55, y: -136.96),
+        control2: CGPoint(x: 151, y: -138.5))
     path.addCurve(
-        to: CGPoint(x: 98.58, y: 87.40),
-        control1: CGPoint(x: 99.57, y: 87.62),
-        control2: CGPoint(x: 99.00, y: 87.54))
+        to: CGPoint(x: 146.6, y: -142.8),
+        control1: CGPoint(x: 144.5, y: -142.02),
+        control2: CGPoint(x: 145.1, y: -142.8))
     path.addCurve(
-        to: CGPoint(x: 87.50, y: 80.52),
-        control1: CGPoint(x: 94.38, y: 86.02),
-        control2: CGPoint(x: 90.72, y: 83.52))
+        to: CGPoint(x: 156.23, y: -141.14),
+        control1: CGPoint(x: 150.1, y: -142.8),
+        control2: CGPoint(x: 153.8, y: -142.01))
     path.addCurve(
-        to: CGPoint(x: 63.20, y: 45.04),
-        control1: CGPoint(x: 77.07, y: 70.77),
-        control2: CGPoint(x: 70.15, y: 57.29))
+        to: CGPoint(x: 156.54, y: -142.22),
+        control1: CGPoint(x: 157.51, y: -140.68),
+        control2: CGPoint(x: 157.53, y: -141.42))
     path.addCurve(
-        to: CGPoint(x: 33.79, y: 0.89),
-        control1: CGPoint(x: 54.54, y: 29.78),
-        control2: CGPoint(x: 46.18, y: 13.52))
+        to: CGPoint(x: 128, y: -152.9),
+        control1: CGPoint(x: 149.48, y: -147.92),
+        control2: CGPoint(x: 138.95, y: -152.9))
     path.addCurve(
-        to: CGPoint(x: 0, y: -13.80),
-        control1: CGPoint(x: 24.48, y: -8.59),
-        control2: CGPoint(x: 13.33, y: -13.80))
+        to: CGPoint(x: 99.46, y: -142.22),
+        control1: CGPoint(x: 117.05, y: -152.9),
+        control2: CGPoint(x: 106.52, y: -147.92))
     path.addCurve(
-        to: CGPoint(x: -33.79, y: 0.89),
-        control1: CGPoint(x: -13.33, y: -13.80),
-        control2: CGPoint(x: -24.48, y: -8.59))
+        to: CGPoint(x: 99.77, y: -141.14),
+        control1: CGPoint(x: 98.47, y: -141.42),
+        control2: CGPoint(x: 98.49, y: -140.68))
     path.addCurve(
-        to: CGPoint(x: -63.20, y: 45.04),
-        control1: CGPoint(x: -46.18, y: 13.52),
-        control2: CGPoint(x: -54.54, y: 29.78))
+        to: CGPoint(x: 109.4, y: -142.8),
+        control1: CGPoint(x: 102.2, y: -142.01),
+        control2: CGPoint(x: 105.9, y: -142.8))
     path.addCurve(
-        to: CGPoint(x: -87.50, y: 80.52),
-        control1: CGPoint(x: -70.15, y: 57.29),
-        control2: CGPoint(x: -77.07, y: 70.77))
+        to: CGPoint(x: 110, y: -141.2),
+        control1: CGPoint(x: 110.9, y: -142.8),
+        control2: CGPoint(x: 111.5, y: -142.02))
     path.addCurve(
-        to: CGPoint(x: -98.58, y: 87.40),
-        control1: CGPoint(x: -90.72, y: 83.52),
-        control2: CGPoint(x: -94.38, y: 86.02))
+        to: CGPoint(x: 93.6, y: -133.4),
+        control1: CGPoint(x: 105, y: -138.5),
+        control2: CGPoint(x: 98.45, y: -136.96))
     path.addCurve(
-        to: CGPoint(x: -99.94, y: 87.88),
-        control1: CGPoint(x: -99.00, y: 87.54),
-        control2: CGPoint(x: -99.57, y: 87.62))
+        to: CGPoint(x: 58, y: -109.6),
+        control1: CGPoint(x: 79, y: -122.7),
+        control2: CGPoint(x: 71.8, y: -109.6))
     path.addCurve(
-        to: CGPoint(x: -99.92, y: 88.09),
-        control1: CGPoint(x: -100.03, y: 87.95),
-        control2: CGPoint(x: -100.02, y: 88.04))
+        to: CGPoint(x: 11.3, y: -117.2),
+        control1: CGPoint(x: 44.8, y: -109.6),
+        control2: CGPoint(x: 28.2, y: -115.7))
     path.addCurve(
-        to: CGPoint(x: -98.95, y: 88.31),
-        control1: CGPoint(x: -99.62, y: 88.22),
-        control2: CGPoint(x: -99.26, y: 88.25))
+        to: CGPoint(x: 59.3, y: -93.9),
+        control1: CGPoint(x: 24.6, y: -110.7),
+        control2: CGPoint(x: 41.3, y: -98.2))
     path.addCurve(
-        to: CGPoint(x: -85.33, y: 87.53),
-        control1: CGPoint(x: -94.41, y: 89.11),
-        control2: CGPoint(x: -89.76, y: 88.72))
+        to: CGPoint(x: 89, y: -102.3),
+        control1: CGPoint(x: 71.5, y: -91),
+        control2: CGPoint(x: 80.1, y: -95))
     path.addCurve(
-        to: CGPoint(x: -51.39, y: 64.48),
-        control1: CGPoint(x: -71.99, y: 83.93),
-        control2: CGPoint(x: -60.80, y: 74.17))
-    path.addCurve(
-        to: CGPoint(x: -17.53, y: 23.70),
-        control1: CGPoint(x: -39.05, y: 51.75),
-        control2: CGPoint(x: -28.98, y: 37.18))
-    path.addCurve(
-        to: CGPoint(x: 0, y: 10.80),
-        control1: CGPoint(x: -13.28, y: 18.68),
-        control2: CGPoint(x: -7.38, y: 10.80))
+        to: CGPoint(x: 128, y: -139.2),
+        control1: CGPoint(x: 104.6, y: -115.1),
+        control2: CGPoint(x: 117, y: -139.2))
     path.closeSubpath()
     return path
 }
@@ -164,14 +151,12 @@ func writeICNS() throws {
     }
 }
 
-try MainActor.assumeIsolated {
-    for points in [16, 32, 128, 256, 512] {
-        for scale in [1, 2] {
-            let suffix = scale == 2 ? "@2x" : ""
-            try render(size: points * scale).write(to: iconset.appending(path: "icon_\(points)x\(points)\(suffix).png"))
-        }
+for points in [16, 32, 128, 256, 512] {
+    for scale in [1, 2] {
+        let suffix = scale == 2 ? "@2x" : ""
+        try writeIcon(size: points * scale, to: iconset.appending(path: "icon_\(points)x\(points)\(suffix).png"))
     }
-    try render(size: 1024).write(to: output.appending(path: "AppIcon.png"))
 }
+try originalPNG.write(to: output.appending(path: "AppIcon.png"))
 try writeICNS()
 try writeStatusIcon()

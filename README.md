@@ -1,4 +1,4 @@
-<img src="Resources/AppIcon.png" width="72" alt="Vorsmate">
+<img src="Resources/AppIcon.png" width="72" alt="Vorsmate 钴蓝海鸥">
 
 # Vorsmate
 
@@ -23,7 +23,7 @@
 <details>
 <summary>应用更新界面</summary>
 
-<img src="docs/images/update-check.png" width="370" alt="Vorsmate v0.3.2 原生更新窗口：检查完成后显示当前版本">
+<img src="docs/images/update-check.png" width="370" alt="Vorsmate 原生更新窗口预览，显示当前版本">
 
 </details>
 
