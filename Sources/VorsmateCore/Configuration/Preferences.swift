@@ -122,10 +122,13 @@ public struct Preferences: Codable, Equatable, Sendable {
         next.insert(item, at: target)
         return next
     }
-    public func reorderedPluginOrder(moving id: PluginID, within category: PluginCategory, by offset: Int) -> [PluginID]
-    {
+    public func reorderedPluginOrder(
+        moving id: PluginID, within category: PluginCategory, by offset: Int,
+        available: [PluginID] = PluginID.allCases
+    ) -> [PluginID] {
         var fullOrder = resolvedOrder(from: PluginID.allCases)
-        let slots = fullOrder.indices.filter { category.canReorder(fullOrder[$0]) }
+        let visible = Set(available)
+        let slots = fullOrder.indices.filter { category.canReorder(fullOrder[$0]) && visible.contains(fullOrder[$0]) }
         let members = slots.map { fullOrder[$0] }
         let reordered = Self.movedOrder(members, moving: id, by: offset)
         guard reordered != members else { return pluginOrder }

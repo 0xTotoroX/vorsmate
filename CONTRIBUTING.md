@@ -28,7 +28,7 @@ git config --local vorsmate.followFanHelper true
 ### 隔离验收与发版
 
 ```sh
-swift test
+swift test --explicit-target-dependency-import-check error
 bash scripts/dev.sh --build-only
 open -n artifacts/dev/build/Vorsmate.app --args --preview
 ```

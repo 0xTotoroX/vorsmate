@@ -30,7 +30,8 @@ let package = Package(
         .target(name: "VorsmateRemoteUI", dependencies: ["VorsmateCore"], exclude: ["AGENTS.md"]),
         .executableTarget(
             name: "VorsmateRemote", dependencies: ["VorsmateCore", "VorsmateRemoteUI"], exclude: ["AGENTS.md"]),
-        .executableTarget(name: "VorsmateFanHelper", dependencies: ["VorsmateFan"], exclude: ["AGENTS.md"]),
+        .executableTarget(
+            name: "VorsmateFanHelper", dependencies: ["VorsmateCore", "VorsmateFan"], exclude: ["AGENTS.md"]),
         .executableTarget(
             name: "Vorsmate",
             dependencies: [
@@ -43,7 +44,11 @@ let package = Package(
             name: "VorsmateCoreTests", dependencies: ["VorsmateCore", "VorsmateSystem", "VorsmateFan"],
             exclude: ["AGENTS.md"]),
         .testTarget(
-            name: "VorsmateUITests", dependencies: ["Vorsmate", "VorsmateCore", "VorsmateSystem"],
+            name: "VorsmateUITests",
+            dependencies: [
+                "Vorsmate", "VorsmateCore", "VorsmateSystem", "VorsmateFan",
+                .product(name: "Sparkle", package: "Sparkle"),
+            ],
             exclude: ["AGENTS.md"]),
     ]
 )

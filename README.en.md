@@ -27,7 +27,7 @@ Switch between Information, Tools, and System by clicking a tab, scrolling a mou
 | System | Fan control | Switch across Automatic, Balanced, Enhanced, and Custom profiles with smoothed temperature curves, fixed speeds, and automatic restore on startup and wake. |
 | Information | Time comparison | View local and US Pacific time side by side, edit dates or drag the slider to compare times, and handle daylight saving changes automatically. |
 | System | Quick Shutdown | Quit selected apps before shutting down or restarting, with a cancellable five-second countdown, search, exclusion list, and force quit toggle. |
-| System | Unattended Authorization | Verify and store your admin password in the local Keychain to approve matching Apple-signed system prompts during a timed or open session, leaving pre-existing and Privacy & Security prompts for manual confirmation. |
+| System | Unattended Authorization | Verify and store your admin password in the local Keychain to approve matching Apple-signed system prompts during a timed or open session, with automatic approval or manual confirmation configurable by prompt type. |
 
 ### Optional modules
 
@@ -37,7 +37,7 @@ Disabled by default; enable them from `功能模块…` in the top-right menu.
 | --- | --- |
 | Weather | Shows current conditions in a selected city. Expand to see today's temperature range and the observation time from Open-Meteo. |
 | Markets | Expand to see the Nasdaq-100, SOL in USD, and the USD/CNY reference rate with sources and quote times. Click again to collapse. |
-| Tasks | View Apple Reminders in the Project group. Use the plus beside a list to add a task, click its title to edit, or click its circle to complete it. Open Reminders Connector from Tasks to set it up. Obsidian and the browser can use the same connection. The standalone connector currently requires Apple Silicon and macOS 27.2 or later. |
+| Tasks | View Apple Reminders in the Project group. Use the plus beside a list to add a task, click its title to edit, or click its circle to complete it. Requires the separately installed Reminders Connector, which you can open from Tasks. Obsidian and the browser can use the same connection. The connector currently requires Apple Silicon and macOS 27.2 or later. |
 | Screenshot & Translation | Trigger window-snapping screen capture by hotkey, annotate with rectangles, arrows, or freehand ink, copy offline OCR text, translate in place via macOS Translation or a custom OpenAI-compatible endpoint, and pin scalable translucent stickers. |
 | Window Drag | Grant Vorsmate Accessibility access, then hold Option and drag anywhere inside a movable window with the left mouse button. Choose a different modifier under Tools → Window Drag. |
 | Xiaomi Remote | Place the built `VorsmateRemote.app` beside `Vorsmate.app` to map RC003 buttons to per-app shortcuts, gestures, and hold-to-repeat, with voice input via MiRemoteV 2ch. |

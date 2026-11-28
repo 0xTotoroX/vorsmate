@@ -11,7 +11,8 @@ import VorsmateSystem
 
 @MainActor
 final class AppModel: ObservableObject {
-    let preview: Bool
+    let previewOptions: PreviewOptions
+    var preview: Bool { previewOptions.enabled }
     let development: Bool
     let maintenance: Bool
     let canManageLogin: Bool
@@ -24,7 +25,7 @@ final class AppModel: ObservableObject {
     }
     lazy var shutdown = ShutdownController(
         driver: preview
-            ? PreviewShutdownDriver(longList: CommandLine.arguments.contains("--preview-long-list"))
+            ? PreviewShutdownDriver(longList: previewOptions.longList)
             : SystemShutdownDriver(systemAction: SystemShutdownDriver.appleScript),
         policy: preferences.shutdownPolicy,
         persist: { [weak self] policy in try self?.save { $0.shutdownPolicy = policy } },
@@ -39,12 +40,10 @@ final class AppModel: ObservableObject {
         })
     lazy var unattendedAuth: UnattendedAuthController = {
         if preview {
-            let prefill =
-                CommandLine.arguments.contains("--preview-unattended-active")
-                || CommandLine.arguments.contains("--preview-unattended-deadline")
             return UnattendedAuthController(
                 driver: PreviewUnattendedAuthDriver(trusted: true),
-                passwordStore: InMemoryUnattendedPasswordStore(initialPassword: prefill ? "preview-admin" : nil),
+                passwordStore: InMemoryUnattendedPasswordStore(
+                    initialPassword: previewOptions.unattendedActive ? "preview-admin" : nil),
                 passwordVerifier: FixedPasswordVerifier(),
                 historyStore: .inMemory
             )
@@ -68,7 +67,7 @@ final class AppModel: ObservableObject {
     }
     lazy var tasks = TasksModel(
         preview: preview,
-        offlinePreview: CommandLine.arguments.contains("--preview-tasks-offline")
+        offlinePreview: previewOptions.offlineTasks
     )
     let informationClient: WeatherMarketClient
     let weather = PanelFeed<WeatherReading>(interval: .seconds(900))
@@ -90,8 +89,8 @@ final class AppModel: ObservableObject {
     lazy var typelessRecovery: TypelessRecoveryModel = {
         if preview {
             return .preview(
-                remoteFault: CommandLine.arguments.contains("--preview-typeless-remote"),
-                timesOut: CommandLine.arguments.contains("--preview-typeless-timeout"))
+                remoteFault: previewOptions.typelessRemote,
+                timesOut: previewOptions.typelessTimeout)
         }
         return TypelessRecoveryModel(
             read: { [weak self] in
@@ -102,7 +101,8 @@ final class AppModel: ObservableObject {
             },
             save: TypelessSystem.save, target: TypelessSystem.restartTarget)
     }()
-    lazy var plugins = PluginHost(plugins: builtinPlugins(), disabled: preferences.disabledAtRuntime) {
+    private lazy var panelPlugins = registerPanelPlugins()
+    lazy var plugins = PluginHost(plugins: panelPlugins.map(\.plugin), disabled: preferences.disabledAtRuntime) {
         [weak self] disabled in
         try self?.save { $0.disabledAtRuntime = disabled }
     }
@@ -123,8 +123,9 @@ final class AppModel: ObservableObject {
         !preview && bundle.bundleURL.pathExtension == "app" && bundle.bundleIdentifier == FanServiceIdentity.app
     }
 
-    init(preview: Bool, development: Bool = false) {
-        self.preview = preview
+    init(previewOptions: PreviewOptions, development: Bool = false) {
+        self.previewOptions = previewOptions
+        let preview = previewOptions.enabled
         self.development = development
         informationClient = preview ? .preview : WeatherMarketClient()
         self.canUseFanHelper = !development || FanServiceIdentity.teamID() != nil
@@ -137,75 +138,36 @@ final class AppModel: ObservableObject {
                 configurationError = "无法读取配置：\(error.localizedDescription)"
                 canSave = false
             }
-        } else if CommandLine.arguments.contains("--preview-offline") {
-            preferences[.audioInput] = SelectionPolicy(
-                enabled: true,
-                priority: [Source(id: "preview-offline", name: "DJI 无线麦克风接收器 · 桌面录音备用设备")],
-                lockedID: "preview-offline"
-            )
-        }
-        if preview && CommandLine.arguments.contains("--preview-window-drag") { preferences.windowDragEnabled = true }
-        if preview && CommandLine.arguments.contains("--preview-popover") { preferences.remoteEnabled = true }
-        if preview && CommandLine.arguments.contains("--preview-information") {
-            preferences.weatherEnabled = true
-            preferences.marketsEnabled = true
-            preferences.weatherCity = WeatherCity(name: "示例市", latitude: 0, longitude: 0)
-        }
-        if preview
-            && (CommandLine.arguments.contains("--preview-translate")
-                || CommandLine.arguments.contains("--preview-translate-window"))
-        {
-            preferences.translateEnabled = true
-        }
-        if preview
-            && (CommandLine.arguments.contains("--preview-tasks")
-                || CommandLine.arguments.contains("--preview-tasks-detail")
-                || CommandLine.arguments.contains("--preview-tasks-offline"))
-        {
-            preferences.tasksEnabled = true
+        } else {
+            previewOptions.apply(to: &preferences)
         }
         for channel in Channel.allCases {
-            let driver: any SourceDriver = preview ? PreviewDriver(channel: channel) : Self.driver(for: channel)
+            let driver: any SourceDriver =
+                preview
+                ? PreviewDriver(channel: channel, longList: previewOptions.longList) : Self.driver(for: channel)
             if channel == .audioInput, let input = driver as? AudioDeviceDriver {
                 remote.voiceReadiness = { [weak input] in input?.setRemoteVoiceReady($0) }
             }
             let controller = ChannelController(
                 channel: channel, driver: driver, policy: preferences[channel],
                 persist: { [weak self] policy in
-                    guard let self else { return }
-                    guard self.canSave else { throw CocoaError(.fileReadCorruptFile) }
-                    var next = self.preferences
-                    next[channel] = policy
-                    if !self.preview { try self.store.save(next, replacing: self.preferences) }
-                    self.preferences = next
+                    try self?.save { $0[channel] = policy }
                 })
             controllers.append(controller)
         }
         if canSave { plugins.start() }
-        if preview {
-            let previewDeadline = CommandLine.arguments.contains("--preview-unattended-deadline")
-            let previewActive = CommandLine.arguments.contains("--preview-unattended-active")
-            if previewDeadline || previewActive {
-                unattendedAuth.loadPreviewSampleHistory(now: unattendedAuth.now)
-                _ = unattendedAuth.enable(deadlineChoice: previewDeadline ? .durationMinutes(25) : .none)
-            }
+        if previewOptions.unattendedActive {
+            unattendedAuth.loadPreviewSampleHistory(now: unattendedAuth.now)
+            _ = unattendedAuth.enable(deadlineChoice: previewOptions.unattendedDeadline ? .durationMinutes(25) : .none)
         }
         observeChildModels()
     }
 
     private func observeChildModels() {
         childCancellables.removeAll()
-        let publishers: [ObservableObjectPublisher] =
-            controllers.map(\.objectWillChange) + [
-                fan.objectWillChange,
-                shutdown.objectWillChange,
-                unattendedAuth.objectWillChange,
-                remote.objectWillChange,
-                translation.objectWillChange,
-                windowDrag.objectWillChange,
-                tasks.objectWillChange,
-                typelessRecovery.objectWillChange,
-                plugins.objectWillChange,
+        let publishers =
+            panelPlugins.compactMap(\.changes) + [
+                typelessRecovery.objectWillChange, plugins.objectWillChange,
             ]
         for publisher in publishers {
             publisher.sink { [weak self] _ in
@@ -229,54 +191,6 @@ final class AppModel: ObservableObject {
         if !preview { try store.save(next, replacing: preferences) }
         preferences = next
     }
-    private func builtinPlugins() -> [any VorsmatePlugin] {
-        var result: [any VorsmatePlugin] = [BuiltinPlugin(id: .time)]
-        for controller in controllers {
-            result.append(
-                BuiltinPlugin(
-                    id: PluginID(rawValue: controller.channel.rawValue)!, activate: { controller.start() },
-                    deactivate: { controller.stop() }, refresh: { controller.refresh() }))
-        }
-        let fan = fan
-        let shutdown = shutdown
-        let unattendedAuth = unattendedAuth
-        result.append(
-            BuiltinPlugin(
-                id: .fan, activate: { fan.activate() }, deactivate: { fan.stop() },
-                refresh: { fan.refresh() }, visibility: { fan.setPanelVisible($0) }))
-        result.append(
-            BuiltinPlugin(
-                id: .quickShutdown, activate: { shutdown.activate() },
-                deactivate: { shutdown.deactivate() }, refresh: { shutdown.refresh() },
-                visibility: { shutdown.panelDidChangeVisibility($0) }))
-        result.append(
-            BuiltinPlugin(
-                id: .unattendedAuth, activate: { unattendedAuth.activate() },
-                deactivate: { unattendedAuth.deactivate() }, refresh: { unattendedAuth.refresh() },
-                visibility: { unattendedAuth.panelDidChangeVisibility($0) }))
-        let windowDrag = windowDrag
-        result.append(
-            BuiltinPlugin(
-                id: .windowDrag, activate: { windowDrag.start() }, deactivate: { windowDrag.stop() },
-                refresh: { windowDrag.refresh() }))
-        result.append(remote)
-        result.append(translation)
-        result.append(tasks)
-        result.append(BuiltinPlugin(id: .weather, deactivate: { [weather] in weather.clear() }))
-        result.append(
-            BuiltinPlugin(
-                id: .markets,
-                deactivate: { [marketFeeds] in
-                    for feed in marketFeeds.values { feed.clear() }
-                }))
-        return result
-    }
-    enum CategoryIndicator {
-        case none
-        case active
-        case error
-    }
-
     var availablePlugins: [PluginID] { PluginID.allCases.filter { $0 != .remote || remote.available } }
     var enabledPlugins: [PluginID] { availablePlugins.filter { plugins.enabledIDs.contains($0) } }
     var orderedAvailablePlugins: [PluginID] { preferences.resolvedOrder(from: availablePlugins) }
@@ -298,7 +212,8 @@ final class AppModel: ObservableObject {
     }
 
     func movePlugin(_ id: PluginID, in category: PluginCategory, by offset: Int) {
-        let nextOrder = preferences.reorderedPluginOrder(moving: id, within: category, by: offset)
+        let nextOrder = preferences.reorderedPluginOrder(
+            moving: id, within: category, by: offset, available: availablePlugins)
         guard nextOrder != preferences.pluginOrder else { return }
         do {
             try save { $0.pluginOrder = nextOrder }
@@ -316,62 +231,15 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func categoryIndicator(for category: PluginCategory) -> CategoryIndicator {
-        let items = category.orderedPlugins(in: orderedEnabledPlugins)
-        var hasActive = false
-        for id in items {
-            switch id {
-            case .time, .weather, .markets:
-                break
-            case .inputSource, .audioInput, .audioOutput:
-                if let controller = controllers.first(where: { $0.channel == id.channel }),
-                    controller.error != nil
-                {
-                    return .error
-                }
-            case .fan:
-                if fan.error != nil || fan.snapshot.safetyPause != nil {
-                    return .error
-                }
-            case .quickShutdown:
-                if shutdown.error != nil {
-                    return .error
-                }
-                if shutdown.canCancel || shutdown.executing {
-                    hasActive = true
-                }
-            case .unattendedAuth:
-                if unattendedAuth.errorMessage != nil
-                    || unattendedAuth.passwordInvalidated
-                    || (unattendedAuth.isEnabled && !unattendedAuth.accessibilityTrusted)
-                {
-                    return .error
-                }
-                if unattendedAuth.isEnabled {
-                    hasActive = true
-                }
-            case .translate:
-                if translation.hotKeyConflict != nil || translation.feedbackIsError {
-                    return .error
-                }
-                if translation.busy || translation.translating || translation.ocrRunning {
-                    hasActive = true
-                }
-            case .windowDrag:
-                if windowDrag.status.needsAttention { return .error }
-            case .remote:
-                break
-            case .tasks:
-                if tasks.actionError != nil {
-                    return .error
-                }
-                if tasks.loading || tasks.mutating {
-                    hasActive = true
-                }
-            }
-        }
-        return hasActive ? .active : .none
+    func categoryIndicator(for category: PluginCategory) -> PanelPluginIndicator {
+        let enabled = Set(enabledPlugins)
+        return
+            panelPlugins
+            .filter { $0.plugin.id.defaultCategory == category && enabled.contains($0.plugin.id) }
+            .map { $0.indicator() }
+            .max() ?? .none
     }
+
     static func driver(for channel: Channel) -> any SourceDriver {
         switch channel {
         case .inputSource: InputSourceDriver()
@@ -431,14 +299,14 @@ final class AppModel: ObservableObject {
 @MainActor
 private final class PreviewDriver: SourceDriver {
     private var snapshot: Snapshot
-    init(channel: Channel) {
+    init(channel: Channel, longList: Bool) {
         var names: [String]
         switch channel {
         case .inputSource: names = ["简体拼音", "ABC"]
         case .audioInput: names = ["USB 麦克风", "蓝牙耳机", "内置麦克风"]
         case .audioOutput: names = ["蓝牙耳机", "内置扬声器"]
         }
-        if CommandLine.arguments.contains("--preview-long-list") {
+        if longList {
             names += (1...6).map { "备用设备 \($0)" }
         }
         snapshot = Snapshot(

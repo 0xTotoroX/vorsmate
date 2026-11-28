@@ -32,32 +32,8 @@ struct PanelView: View {
         self.maximumHeight = maximumHeight
         self.protectInteraction = protectInteraction
         self.onHeightChange = onHeightChange
-        let initialSection: PluginID? =
-            if model.preview && CommandLine.arguments.contains("--preview-unattended-detail") {
-                .unattendedAuth
-            } else if model.preview && CommandLine.arguments.contains("--preview-window-drag") {
-                .windowDrag
-            } else if model.preview && CommandLine.arguments.contains("--preview-tasks-detail") {
-                .tasks
-            } else {
-                nil
-            }
-        _expandedSection = State(initialValue: initialSection)
-        let previewCategory: PluginCategory? =
-            if !model.preview {
-                nil
-            } else if let initialSection {
-                initialSection.defaultCategory
-            } else if CommandLine.arguments.contains("--preview-translate") {
-                .tools
-            } else if ["--preview-tasks", "--preview-information", "--preview-tasks-offline"].contains(where: {
-                CommandLine.arguments.contains($0)
-            }) {
-                .information
-            } else {
-                nil
-            }
-        _previewCategoryOverride = State(initialValue: previewCategory)
+        _expandedSection = State(initialValue: model.previewOptions.initialSection)
+        _previewCategoryOverride = State(initialValue: model.previewOptions.initialCategory)
     }
 
     private var visibleCategories: [PluginCategory] {
@@ -489,121 +465,6 @@ struct PanelView: View {
             groups.append(.list(buffer))
         }
         return groups
-    }
-}
-
-private struct PluginOrderManagerView: View {
-    @ObservedObject var model: AppModel
-    let back: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 10) {
-                Button(action: back) {
-                    Label("Vorsmate", systemImage: "chevron.left")
-                }
-                .buttonStyle(.plain)
-                .font(.callout)
-                .accessibilityIdentifier("plugins.back")
-
-                HStack(spacing: 8) {
-                    Text("功能模块")
-                        .font(.title2.weight(.semibold))
-                    Spacer(minLength: 8)
-                    if model.hasCustomPluginOrder {
-                        Button("恢复默认") {
-                            model.resetPluginOrder()
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .accessibilityIdentifier("plugins.resetOrder")
-                    }
-                }
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 14)
-            .padding(.bottom, 14)
-
-            VStack(alignment: .leading, spacing: 14) {
-                ForEach(PluginCategory.allCases) { category in
-                    let items = category.orderedPlugins(in: model.orderedAvailablePlugins)
-                    let movableCount = items.filter(category.canReorder).count
-                    if !items.isEmpty {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Label(category.title, systemImage: category.symbol)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal, 4)
-
-                            PanelSectionCard {
-                                VStack(spacing: 0) {
-                                    ForEach(Array(items.enumerated()), id: \.element) { index, id in
-                                        let enabled = model.enabledPlugins.contains(id)
-                                        let canMoveUp = category.canReorder(id) && index > 0
-                                        let canMoveDown = index < movableCount - 1
-                                        if index > 0 {
-                                            Divider().padding(.horizontal, 14)
-                                        }
-                                        HStack(spacing: 10) {
-                                            Image(systemName: id.symbol)
-                                                .font(.system(size: 14))
-                                                .foregroundStyle(enabled ? .primary : .tertiary)
-                                                .frame(width: 20)
-                                                .accessibilityHidden(true)
-                                            Text(id.title)
-                                                .font(.callout)
-                                                .foregroundStyle(enabled ? .primary : .secondary)
-                                            Spacer(minLength: 8)
-                                            HStack(spacing: 6) {
-                                                Button {
-                                                    model.movePlugin(id, in: category, by: -1)
-                                                } label: {
-                                                    Image(systemName: "arrow.up")
-                                                        .font(.system(size: 11, weight: .medium))
-                                                        .frame(width: 22, height: 22)
-                                                }
-                                                .buttonStyle(.plain)
-                                                .disabled(!canMoveUp)
-                                                .foregroundStyle(canMoveUp ? .secondary : .tertiary)
-                                                .accessibilityLabel("上移\(id.title)")
-                                                .accessibilityIdentifier("plugins.moveUp.\(id.rawValue)")
-
-                                                Button {
-                                                    model.movePlugin(id, in: category, by: 1)
-                                                } label: {
-                                                    Image(systemName: "arrow.down")
-                                                        .font(.system(size: 11, weight: .medium))
-                                                        .frame(width: 22, height: 22)
-                                                }
-                                                .buttonStyle(.plain)
-                                                .disabled(!canMoveDown)
-                                                .foregroundStyle(canMoveDown ? .secondary : .tertiary)
-                                                .accessibilityLabel("下移\(id.title)")
-                                                .accessibilityIdentifier("plugins.moveDown.\(id.rawValue)")
-                                            }
-                                            Toggle(
-                                                "启用\(id.title)",
-                                                isOn: Binding(
-                                                    get: { model.enabledPlugins.contains(id) },
-                                                    set: { model.setPlugin(id, enabled: $0) })
-                                            )
-                                            .labelsHidden()
-                                            .toggleStyle(.switch)
-                                            .controlSize(.small)
-                                            .accessibilityIdentifier("plugins.toggle.\(id.rawValue)")
-                                        }
-                                        .padding(.horizontal, 14)
-                                        .padding(.vertical, 9)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 16)
-        }
     }
 }
 

@@ -160,4 +160,17 @@ struct PluginPreferencesTests {
         #expect(PluginCategory.system.orderedPlugins(in: after) == PluginCategory.system.orderedPlugins(in: before))
         #expect(category.orderedPlugins(in: after.filter { $0 != .tasks }) == [.time, .markets, .weather])
     }
+
+    @Test("调整可见工具时跳过暂不可用的遥控器")
+    func toolOrderWithoutRemote() {
+        let category = PluginCategory.tools
+        let available = [PluginID.translate, .windowDrag]
+        var prefs = Preferences()
+        prefs.pluginOrder = [.translate, .remote, .windowDrag]
+        let before = prefs.resolvedOrder(from: PluginID.allCases)
+        prefs.pluginOrder = prefs.reorderedPluginOrder(
+            moving: .translate, within: category, by: 1, available: available)
+        #expect(category.orderedPlugins(in: prefs.resolvedOrder(from: available)) == [.windowDrag, .translate])
+        #expect(prefs.pluginOrder.firstIndex(of: .remote) == before.firstIndex(of: .remote))
+    }
 }

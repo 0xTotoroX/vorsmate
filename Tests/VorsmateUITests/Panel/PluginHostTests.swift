@@ -69,7 +69,7 @@ struct PluginHostTests {
 
     @Test("窗口拖动默认关闭，内存预览可改键、停用并重新启用")
     func windowDragLifecycle() {
-        let model = AppModel(preview: true)
+        let model = AppModel(previewOptions: PreviewOptions(arguments: ["--preview"]))
         defer { model.stop() }
         #expect(!model.enabledPlugins.contains(.windowDrag))
         #expect(model.windowDrag.status == .inactive)
@@ -82,6 +82,22 @@ struct PluginHostTests {
         model.setPlugin(.windowDrag, enabled: true)
         #expect(model.windowDrag.modifier == .commandOption)
         #expect(model.windowDrag.status == .ready)
+    }
+
+    @Test("待办预览只在明确预览时启用，并打开信息页的待办详情")
+    func tasksPreviewRequiresExplicitPreviewMode() {
+        let detail = "--preview-tasks-detail"
+        let regular = PreviewOptions(arguments: [detail, "--preview-dark", "--preview-popover"])
+        var prefs = Preferences()
+        regular.apply(to: &prefs)
+        #expect(!regular.enabled && !regular.dark && !regular.popover)
+        #expect(regular.initialCategory == nil && regular.initialSection == nil)
+        #expect(!prefs.tasksEnabled)
+
+        let preview = PreviewOptions(arguments: ["--preview", detail])
+        preview.apply(to: &prefs)
+        #expect(preview.initialCategory == .information && preview.initialSection == .tasks)
+        #expect(prefs.tasksEnabled)
     }
 
     @Test("时间对照模块严格按 pluginOrder 排位分卡，不强行置顶")
@@ -98,7 +114,7 @@ struct PluginHostTests {
 
     @Test("子模型状态变更时 AppModel 转发 objectWillChange 以刷新跨分类指示点")
     func appModelForwardsChildObjectWillChangeForCategoryIndicators() async {
-        let model = AppModel(preview: true)
+        let model = AppModel(previewOptions: PreviewOptions(arguments: ["--preview"]))
         var changes = 0
         let cancellable = model.objectWillChange.sink { _ in
             changes += 1

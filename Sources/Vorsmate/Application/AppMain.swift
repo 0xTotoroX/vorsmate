@@ -27,14 +27,13 @@ enum VorsmateMain {
             return
         }
         let app = NSApplication.shared
-        if CommandLine.arguments.contains("--preview") {
-            if CommandLine.arguments.contains("--preview-dark") {
-                app.appearance = NSAppearance(named: .darkAqua)
-            } else if CommandLine.arguments.contains("--preview-light") {
-                app.appearance = NSAppearance(named: .aqua)
-            }
+        let previewOptions = PreviewOptions(arguments: CommandLine.arguments)
+        if previewOptions.dark {
+            app.appearance = NSAppearance(named: .darkAqua)
+        } else if previewOptions.light {
+            app.appearance = NSAppearance(named: .aqua)
         }
-        let delegate = AppDelegate()
+        let delegate = AppDelegate(previewOptions: previewOptions)
         app.delegate = delegate
         app.setActivationPolicy(.accessory)
         withExtendedLifetime(delegate) { app.run() }
@@ -102,6 +101,7 @@ private enum DevelopmentBuild {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSWindowDelegate {
+    private let previewOptions: PreviewOptions
     private var item: NSStatusItem?
     private let popover = NSPopover()
     private var model: AppModel?
@@ -115,8 +115,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         self?.automationDidChange()
     }
 
+    init(previewOptions: PreviewOptions) {
+        self.previewOptions = previewOptions
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
-        let preview = CommandLine.arguments.contains("--preview")
+        let preview = previewOptions.enabled
         if !preview, let bundle = Bundle.main.bundleIdentifier,
             NSRunningApplication.runningApplications(withBundleIdentifier: bundle).count > 1
         {
@@ -124,7 +128,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
             return
         }
         installStandardMenus()
-        let model = AppModel(preview: preview, development: DevelopmentBuild.enabled)
+        let model = AppModel(previewOptions: previewOptions, development: DevelopmentBuild.enabled)
         model.panelVisible = preview
         model.translation.onPrepareScreenshot = { [weak self] in
             self?.popover.performClose(nil)
@@ -139,7 +143,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
             },
             onHeightChange: { [weak self] height in self?.resizePanel(to: height) })
         let host = NSHostingController(rootView: view)
-        if preview && !CommandLine.arguments.contains("--preview-popover") {
+        if preview && !previewOptions.popover {
             let window = NSWindow(contentViewController: host)
             window.title = "Vorsmate 预览"
             window.delegate = self
@@ -151,7 +155,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
             window.makeFirstResponder(nil)
             previewWindow = window
             NSApp.activate(ignoringOtherApps: true)
-            if CommandLine.arguments.contains("--preview-translate-window") {
+            if previewOptions.translationWindow {
                 model.translation.openPreviewSampleSticker()
             }
             return
