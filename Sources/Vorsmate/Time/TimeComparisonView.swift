@@ -1,6 +1,6 @@
 // [INPUT]: 面板可见状态、单项展开绑定、交互保护回调、系统时钟／时区变化与 TimeComparison。
-// [OUTPUT]: 紧凑双时钟，按需展开单层内联卡片内的日期编辑器、对比时区切换与当天滑杆，关闭面板恢复现在。
-// [POS]: 总览顶部的时间对齐工具；默认无滑杆、无嵌套玻璃卡片。
+// [OUTPUT]: 两地时间摘要，原地展开双时钟、日期编辑、对比时区切换与当天滑杆，关闭面板恢复现在。
+// [POS]: 信息页复用标准摘要和单层内联卡片，按模块顺序展示。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import SwiftUI
 import VorsmateCore
@@ -58,6 +58,34 @@ struct TimeComparisonView: View {
     private func content(at now: Date) -> some View {
         let date = selectedDate ?? now
         let value = TimeComparison(at: date, localTimeZone: localTimeZone, comparisonZone: comparisonZone)
+        let zones = "当地 / \(comparisonZone.title)"
+        let status = selectedDate == nil ? zones : "\(zones) · 换算"
+        let accessibilityPrefix = selectedDate == nil ? "" : "换算，"
+        return VStack(spacing: 0) {
+            Button {
+                isExpanded.toggle()
+            } label: {
+                PanelSummaryRow(
+                    title: PluginID.time.title, symbol: PluginID.time.symbol, status: status,
+                    value: isExpanded ? "" : "\(value.local.time) / \(value.pacific.time)",
+                    navigation: .disclosure(expanded: isExpanded))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(PluginID.time.title)
+            .accessibilityValue(
+                "\(accessibilityPrefix)当地 \(value.local.time)，\(comparisonZone.title) \(value.pacific.time)，\(value.dayLabel)，\(isExpanded ? "已展开" : "已收起")"
+            )
+            .accessibilityIdentifier("time.expand")
+
+            if isExpanded {
+                comparisonDetail(value, at: date)
+                    .padding(.horizontal, horizontalPadding)
+                    .padding(.bottom, 12)
+            }
+        }
+    }
+
+    private func comparisonDetail(_ value: TimeComparison, at date: Date) -> some View {
         let day = LocalDayTimeline(
             at: date, region: editingRegion, localTimeZone: localTimeZone, comparisonZone: comparisonZone)
         return VStack(spacing: 8) {
@@ -83,47 +111,34 @@ struct TimeComparisonView: View {
             .font(.system(size: 12))
             .foregroundStyle(.secondary)
 
-            if isExpanded {
-                PanelInlineCard {
-                    VStack(spacing: 10) {
-                        dateEditor(region: editingRegion, date: date)
-                        HStack(spacing: 10) {
-                            Image(systemName: "clock")
-                                .foregroundStyle(.secondary)
-                                .accessibilityHidden(true)
-                            Slider(
-                                value: Binding(
-                                    get: {
-                                        day.minute(at: date)
-                                    },
-                                    set: { minute in
-                                        selectedDate = day.instant(at: minute)
-                                    }), in: 0...day.lastMinute
-                            )
-                            .accessibilityLabel("对齐\(editingRegion == .local ? "当地" : comparisonZone.title)当天时间")
-                            .accessibilityValue(
-                                "当地 \(value.local.time)，\(comparisonZone.title) \(value.pacific.time)，\(value.dayLabel)"
-                            )
-                            .accessibilityIdentifier("time.slider")
-                        }
+            PanelInlineCard {
+                VStack(spacing: 10) {
+                    dateEditor(region: editingRegion, date: date)
+                    HStack(spacing: 10) {
+                        Image(systemName: "clock")
+                            .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
+                        Slider(
+                            value: Binding(
+                                get: { day.minute(at: date) },
+                                set: { selectedDate = day.instant(at: $0) }
+                            ), in: 0...day.lastMinute
+                        )
+                        .accessibilityLabel("对齐\(editingRegion == .local ? "当地" : comparisonZone.title)当天时间")
+                        .accessibilityValue(
+                            "当地 \(value.local.time)，\(comparisonZone.title) \(value.pacific.time)，\(value.dayLabel)"
+                        )
+                        .accessibilityIdentifier("time.slider")
                     }
                 }
             }
         }
-        .padding(.horizontal, horizontalPadding)
-        .padding(.top, 2)
-        .padding(.bottom, 12)
     }
 
     private func clock(_ title: String, reading: ClockReading, region: ClockRegion) -> some View {
-        let active = isExpanded && editingRegion == region
+        let active = editingRegion == region
         return Button {
-            if isExpanded, editingRegion == region {
-                isExpanded = false
-            } else {
-                editingRegion = region
-                isExpanded = true
-            }
+            editingRegion = region
         } label: {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title).font(.system(size: 12)).foregroundStyle(.secondary)

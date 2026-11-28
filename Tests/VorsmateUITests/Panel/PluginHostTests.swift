@@ -100,16 +100,18 @@ struct PluginHostTests {
         #expect(prefs.tasksEnabled)
     }
 
-    @Test("时间对照模块严格按 pluginOrder 排位分卡，不强行置顶")
-    func timeComparisonCardOrderFollowsPluginOrder() {
-        let timeFirst = PanelView.cardGroups(for: [.time, .inputSource, .fan])
-        #expect(timeFirst == [.time, .list([.inputSource, .fan])])
+    @Test("时间对照与其他信息模块一起排序，待办保持最后")
+    func informationOrderAfterMovingTimeComparison() {
+        let model = AppModel(
+            previewOptions: PreviewOptions(arguments: ["--preview", "--preview-information", "--preview-tasks"]))
+        defer { model.stop() }
 
-        let timeMiddle = PanelView.cardGroups(for: [.inputSource, .time, .audioInput, .fan])
-        #expect(timeMiddle == [.list([.inputSource]), .time, .list([.audioInput, .fan])])
-
-        let timeLast = PanelView.cardGroups(for: [.inputSource, .fan, .time])
-        #expect(timeLast == [.list([.inputSource, .fan]), .time])
+        let information = PluginCategory.information
+        #expect(information.orderedPlugins(in: model.orderedEnabledPlugins) == [.time, .weather, .markets, .tasks])
+        model.movePlugin(.time, in: information, by: 1)
+        #expect(information.orderedPlugins(in: model.orderedEnabledPlugins) == [.weather, .time, .markets, .tasks])
+        model.movePlugin(.tasks, in: information, by: -1)
+        #expect(information.orderedPlugins(in: model.orderedEnabledPlugins) == [.weather, .time, .markets, .tasks])
     }
 
     @Test("子模型状态变更时 AppModel 转发 objectWillChange 以刷新跨分类指示点")

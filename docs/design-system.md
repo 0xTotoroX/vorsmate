@@ -17,7 +17,7 @@ Vorsmate 的界面分为**菜单栏控制面板**与**全屏/桌面浮层**两�
 - **真·液态玻璃解锁要求**：macOS 26+ 必须通过链接当前本机 SDK 版本（如 `-platform_version macos 14.0 <SDK_VERSION>`）构建，才能解锁原生 `NSPopover` 与 `.glassEffect(...)` 的系统级液态玻璃；禁止使用旧版 SDK 回退（否则系统会退化为普通磨砂材质）。macOS 14/15 回退至 `.regularMaterial`，系统开启「减少透明度」时使用不透明系统背景色。
 - **两层卡片上限（严禁三层嵌套）**：
   1. **背景层**：系统弹层自带液态玻璃底面，不再叠加普通模糊背景。
-  2. **第一层前景容器 — `PanelSectionCard`**：总览页内按功能逻辑成组（例如时间对照独立成卡，其余模块归入分组卡）。圆角 `14pt`（`.continuous`），正常透明度下填充 `Color(nsColor: .controlBackgroundColor).opacity(0.55)`（减少透明度时为不透明 `controlBackgroundColor`），配 `1pt` `Color.primary.opacity(0.07)` 描边，在玻璃底面上建立清晰的物理景深。
+  2. **第一层前景容器 — `PanelSectionCard`**：总览页内按分类成组。圆角 `14pt`（`.continuous`），正常透明度下填充 `Color(nsColor: .controlBackgroundColor).opacity(0.55)`（减少透明度时为不透明 `controlBackgroundColor`），配 `1pt` `Color.primary.opacity(0.07)` 描边，在玻璃底面上建立清晰的物理景深。
   3. **第二层内嵌容器 — `PanelInlineCard`**：仅用于原地展开区域内部（`padding: 12` 或 `0`），圆角 `12pt`（`.continuous`），填充 `Color.primary.opacity(0.035)` 与 `1pt` `Color.primary.opacity(0.06)` 描边。禁止在 `PanelInlineCard` 内再套圆角卡片。
 - **无轨道隐式滚动（Zero-Chrome Scrolling）**：`386pt` 菜单栏面板内所有滚动区（`PanelView`、`SourceList`、`QuickShutdownView`、`UnattendedAuthView`）一律隐藏可见滚动条轨道与滑块——SwiftUI 视图显式使用 `.scrollIndicators(.never)`，AppKit `SourceList` 使用锁定 `.overlay` 样式与 `0pt` 宽度的 `SilentScrollView` + `ZeroScroller`——彻底避免外接鼠标或系统开启「始终显示滚动条」时出现灰色槽位与双滚动条，同时完整保留触控板、鼠标滚轮、键盘上下与拖拽边缘自动滚动。
 - **内嵌设备列表展开规则（`ChannelView`）**：`8` 项及以内完整展开、不截断也不嵌套滚动；超过 `8` 项时固定显示 `7.5` 行（`330pt`），以半行裁剪提示用户可继续滚动。

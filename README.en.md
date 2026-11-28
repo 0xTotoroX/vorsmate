@@ -25,7 +25,7 @@ Switch between Information, Tools, and System by clicking a tab, scrolling a mou
 | System | Input sources | Switch or lock system input sources quickly, or drag rows to set automatic selection priorities. |
 | System | Audio devices | Manage microphone and playback device priorities and locks independently, with automatic fallback on disconnect and restore on reconnect; supported wireless receivers qualify only when a transmitter connects. |
 | System | Fan control | Switch across Automatic, Balanced, Enhanced, and Custom profiles with smoothed temperature curves, fixed speeds, and automatic restore on startup and wake. |
-| Information | Time comparison | View local and US Pacific time side by side, edit dates or drag the slider to compare times, and handle daylight saving changes automatically. |
+| Information | Time comparison | See both time zones in one row. Expand to edit dates or compare times with a slider that accounts for daylight saving. |
 | System | Quick Shutdown | Quit selected apps before shutting down or restarting, with a cancellable five-second countdown, search, exclusion list, and force quit toggle. |
 | System | Unattended Authorization | Verify and store your admin password in the local Keychain to approve matching Apple-signed system prompts during a timed or open session, with automatic approval or manual confirmation configurable by prompt type. |
 

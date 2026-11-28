@@ -192,7 +192,6 @@ struct PanelView: View {
     private var content: some View {
         let category = activeCategory
         let categoryPlugins = category.orderedPlugins(in: model.orderedEnabledPlugins)
-        let groups = Self.cardGroups(for: categoryPlugins)
 
         return VStack(spacing: 0) {
             ZStack {
@@ -277,7 +276,7 @@ struct PanelView: View {
                     .padding(.bottom, 12)
             }
 
-            if model.orderedEnabledPlugins.isEmpty || categoryPlugins.isEmpty {
+            if categoryPlugins.isEmpty {
                 PanelSectionCard {
                     VStack(spacing: 10) {
                         Text("当前暂无已启用模块")
@@ -296,24 +295,12 @@ struct PanelView: View {
                 }
                 .padding(.horizontal, 16)
             } else {
-                VStack(spacing: 10) {
-                    ForEach(groups) { group in
-                        switch group {
-                        case .time:
-                            PanelSectionCard {
-                                pluginView(.time)
-                                    .id(PluginID.time)
-                            }
-                        case .list(let items):
-                            PanelSectionCard {
-                                VStack(spacing: 0) {
-                                    ForEach(Array(items.enumerated()), id: \.element) { index, id in
-                                        if index > 0 { Divider().padding(.horizontal, 14) }
-                                        pluginView(id)
-                                            .id(id)
-                                    }
-                                }
-                            }
+                PanelSectionCard {
+                    VStack(spacing: 0) {
+                        ForEach(Array(categoryPlugins.enumerated()), id: \.element) { index, id in
+                            if index > 0 { Divider().padding(.horizontal, 14) }
+                            pluginView(id)
+                                .id(id)
                         }
                     }
                 }
@@ -435,37 +422,6 @@ struct PanelView: View {
         Binding(get: { expandedSection == section }, set: { expandedSection = $0 ? section : nil })
     }
 
-    enum PluginCardGroup: Equatable, Identifiable {
-        case time
-        case list([PluginID])
-
-        var id: String {
-            switch self {
-            case .time: "time"
-            case .list(let ids): ids.map(\.rawValue).joined(separator: ",")
-            }
-        }
-    }
-
-    static func cardGroups(for plugins: [PluginID]) -> [PluginCardGroup] {
-        var groups: [PluginCardGroup] = []
-        var buffer: [PluginID] = []
-        for id in plugins {
-            if id == .time {
-                if !buffer.isEmpty {
-                    groups.append(.list(buffer))
-                    buffer.removeAll()
-                }
-                groups.append(.time)
-            } else {
-                buffer.append(id)
-            }
-        }
-        if !buffer.isEmpty {
-            groups.append(.list(buffer))
-        }
-        return groups
-    }
 }
 
 private struct PanelHeightKey: PreferenceKey {
