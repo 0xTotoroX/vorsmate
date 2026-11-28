@@ -52,7 +52,7 @@ macOS 14 or later on Apple Silicon or Intel (Universal binary). The app interfac
 
 ### Download installer
 
-1. Download `Vorsmate-0.5.0.dmg` from [GitHub Releases](https://github.com/0xTotoroX/vorsmate/releases/tag/v0.5.0).
+1. Download `Vorsmate-0.6.0.dmg` from [GitHub Releases](https://github.com/0xTotoroX/vorsmate/releases/tag/v0.6.0).
 2. Open the disk image and drag `Vorsmate.app` into `Applications`.
 3. Launch Vorsmate from Applications and click the gull icon in the menu bar.
 

@@ -52,7 +52,7 @@ macOS 14 及以上，支持 Apple Silicon 与 Intel（Universal 通用安装包�
 
 ### 下载安装包
 
-1. 从 [GitHub Releases](https://github.com/0xTotoroX/vorsmate/releases/tag/v0.5.0) 下载 `Vorsmate-0.5.0.dmg`。
+1. 从 [GitHub Releases](https://github.com/0xTotoroX/vorsmate/releases/tag/v0.6.0) 下载 `Vorsmate-0.6.0.dmg`。
 2. 打开磁盘镜像，将 `Vorsmate.app` 拖入 `Applications`。
 3. 从“应用程序”启动，点击菜单栏图标打开面板。
 
