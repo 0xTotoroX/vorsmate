@@ -4,16 +4,16 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
   <channel>
     <title>Vorsmate</title>
     <item>
-      <title>Vorsmate 0.4.0</title>
-      <link>https://github.com/0xTotoroX/vorsmate/releases/tag/v0.4.0</link>
-      <sparkle:version>8</sparkle:version>
-      <sparkle:shortVersionString>0.4.0</sparkle:shortVersionString>
+      <title>Vorsmate 0.5.0</title>
+      <link>https://github.com/0xTotoroX/vorsmate/releases/tag/v0.5.0</link>
+      <sparkle:version>9</sparkle:version>
+      <sparkle:shortVersionString>0.5.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <pubDate>Fri, 27 Nov 2026 08:01:23 +0000</pubDate>
-      <enclosure sparkle:edSignature="t4xFr01ImvaadaJSMeCDsA7rFsTd+do4zgm9zTMrcB5tU5rYIxFCl8ZDMz43M9F7Ea/WgUN0ZM3F5BVxByVZDg==" length="7269199" url="https://github.com/0xTotoroX/vorsmate/releases/download/v0.4.0/Vorsmate-0.4.0.dmg" type="application/octet-stream"></enclosure>
+      <pubDate>Sat, 28 Nov 2026 02:57:24 +0000</pubDate>
+      <enclosure sparkle:edSignature="CKRW9z4zxC1Olt/VYBXbO3DSUN56fcO3NY+RD5thyrOCy9vaVLBElsMrZi7f3T7xj3+Jh1lwQUghd7Z6D7o1DA==" length="8424995" url="https://github.com/0xTotoroX/vorsmate/releases/download/v0.5.0/Vorsmate-0.5.0.dmg" type="application/octet-stream"></enclosure>
     </item>
   </channel>
 </rss><!-- sparkle-signatures:
-edSignature: O8kHRQdo2ltgbllfvsnTWDT5EYf6V6LyLTq1D+w9SeAmBAkIOlIupro87kC+F0M+yUX6NMrQfxaJaXXzv8LSDA==
+edSignature: ngzC67TaaVTyQor6otEs7LXjC/KTTx/s1X4SAOmNRiOFIqgQmy0Ucf43xFVVPGaT9naDOP8Im80AkfKUAN/CDg==
 length: 1093
 -->
