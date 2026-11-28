@@ -199,7 +199,7 @@ struct PanelView: View {
                 Image(nsImage: BrandIcon.panelMark)
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 28, height: 28)
+                    .frame(width: BrandIcon.panelMarkSize, height: BrandIcon.panelMarkSize)
                     .accessibilityLabel("Vorsmate")
 
                 HStack(spacing: 8) {
@@ -255,8 +255,8 @@ struct PanelView: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 18)
-            .padding(.top, 14)
-            .padding(.bottom, 10)
+            .padding(.top, 7)
+            .padding(.bottom, 3)
 
             if visibleCategories.count > 1 {
                 categoryBar(selected: category)

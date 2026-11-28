@@ -6,7 +6,7 @@
 - Panel/PanelAutomation.swift：向同一路径的运行实例发送开始 / 结束命令，管理自动化保持和两分钟超时。
 - Application/DevelopmentFanHelper.swift：固定签名开发包的助手移交、系统登记与应答进程路径核对。
 - Panel/PanelDismissal.swift：鼠标离开约半秒收起，原生菜单范围 / 拖动 / 键盘 / 自动化保护；仅面板可见时观察，不影响后台管理。
-- Panel/BrandIcon.swift：加载包内的单色海鸥矢量图，菜单栏使用 18 点、面板顶部居中使用 28 点模板图像；开发裸程序无资源时回退到字母符号。
+- Panel/BrandIcon.swift：加载包内的单色海鸥矢量图，菜单栏使用 18 点、面板顶部居中使用 42 点模板图像；开发裸程序无资源时回退到字母符号。
 - Application/AppModel.swift：应用组合、配置更新与冲突保护、面板显隐和退出停止。关机前释放已授权助手，失败时恢复风扇档位。开发版沿用设备与偏好，支持固定包路径的登录项管理。
 - Application/PreviewOptions.swift：统一解析内存预览的主题、模拟内容和初始页面，普通启动不应用预览开关。
 - Panel/PanelView.swift：总览页的三分类导航、动态分组、原地展开与详情切换；内容超过屏幕适配上限后滚动。
