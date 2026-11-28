@@ -5,7 +5,7 @@
 import Foundation
 
 public enum PluginCategory: String, CaseIterable, Codable, Sendable, Identifiable {
-    case devices
+    case information
     case tools
     case system
 
@@ -13,7 +13,7 @@ public enum PluginCategory: String, CaseIterable, Codable, Sendable, Identifiabl
 
     public var title: String {
         switch self {
-        case .devices: "设备"
+        case .information: "信息"
         case .tools: "工具"
         case .system: "系统"
         }
@@ -21,10 +21,24 @@ public enum PluginCategory: String, CaseIterable, Codable, Sendable, Identifiabl
 
     public var symbol: String {
         switch self {
-        case .devices: "slider.horizontal.3"
-        case .tools: "viewfinder"
+        case .information: "info.circle"
+        case .tools: "wrench.and.screwdriver"
         case .system: "gearshape"
         }
+    }
+
+    public init?(savedValue: String) {
+        self.init(rawValue: savedValue == "devices" ? Self.system.rawValue : savedValue)
+    }
+
+    public func orderedPlugins(in order: [PluginID]) -> [PluginID] {
+        let members = order.filter { $0.defaultCategory == self }
+        guard self == .information, members.contains(.tasks) else { return members }
+        return members.filter { $0 != .tasks } + [.tasks]
+    }
+
+    public func canReorder(_ id: PluginID) -> Bool {
+        id.defaultCategory == self && id != .tasks
     }
 }
 
@@ -68,11 +82,11 @@ public enum PluginID: String, Codable, CaseIterable, Sendable, Identifiable {
     }
     public var defaultCategory: PluginCategory {
         switch self {
-        case .time, .inputSource, .audioInput, .audioOutput, .fan:
-            .devices
-        case .translate, .remote, .tasks, .weather, .markets, .windowDrag:
+        case .time, .tasks, .weather, .markets:
+            .information
+        case .translate, .remote, .windowDrag:
             .tools
-        case .quickShutdown, .unattendedAuth:
+        case .inputSource, .audioInput, .audioOutput, .fan, .quickShutdown, .unattendedAuth:
             .system
         }
     }

@@ -298,17 +298,8 @@ final class AppModel: ObservableObject {
     }
 
     func movePlugin(_ id: PluginID, in category: PluginCategory, by offset: Int) {
-        let fullOrder = preferences.resolvedOrder(from: PluginID.allCases)
-        let categoryIndices = fullOrder.indices.filter { fullOrder[$0].defaultCategory == category }
-        let categoryItems = categoryIndices.map { fullOrder[$0] }
-        let reordered = Preferences.movedOrder(categoryItems, moving: id, by: offset)
-        guard reordered != categoryItems else { return }
-
-        var updated = fullOrder
-        for (slotIndex, item) in zip(categoryIndices, reordered) {
-            updated[slotIndex] = item
-        }
-        let nextOrder = updated == PluginID.allCases ? [] : updated
+        let nextOrder = preferences.reorderedPluginOrder(moving: id, within: category, by: offset)
+        guard nextOrder != preferences.pluginOrder else { return }
         do {
             try save { $0.pluginOrder = nextOrder }
         } catch {
@@ -326,7 +317,7 @@ final class AppModel: ObservableObject {
     }
 
     func categoryIndicator(for category: PluginCategory) -> CategoryIndicator {
-        let items = orderedEnabledPlugins.filter { $0.defaultCategory == category }
+        let items = category.orderedPlugins(in: orderedEnabledPlugins)
         var hasActive = false
         for id in items {
             switch id {

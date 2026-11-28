@@ -122,6 +122,19 @@ public struct Preferences: Codable, Equatable, Sendable {
         next.insert(item, at: target)
         return next
     }
+    public func reorderedPluginOrder(moving id: PluginID, within category: PluginCategory, by offset: Int) -> [PluginID]
+    {
+        var fullOrder = resolvedOrder(from: PluginID.allCases)
+        let slots = fullOrder.indices.filter { category.canReorder(fullOrder[$0]) }
+        let members = slots.map { fullOrder[$0] }
+        let reordered = Self.movedOrder(members, moving: id, by: offset)
+        guard reordered != members else { return pluginOrder }
+
+        for (slot, item) in zip(slots, reordered) {
+            fullOrder[slot] = item
+        }
+        return fullOrder == PluginID.allCases ? [] : fullOrder
+    }
     public subscript(channel: Channel) -> SelectionPolicy {
         get { policies[channel.rawValue] ?? SelectionPolicy() }
         set { policies[channel.rawValue] = newValue }

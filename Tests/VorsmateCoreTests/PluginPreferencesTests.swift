@@ -107,27 +107,24 @@ struct PluginPreferencesTests {
     }
     @Test("插件分类元数据与自定义排序规则")
     func categoriesAndPluginOrder() throws {
-        #expect(PluginCategory.allCases == [.devices, .tools, .system])
-        #expect(PluginCategory.devices.title == "设备")
-        #expect(PluginCategory.devices.symbol == "slider.horizontal.3")
+        #expect(PluginCategory.allCases == [.information, .tools, .system])
+        #expect(PluginCategory.information.title == "信息")
+        #expect(PluginCategory.information.symbol == "info.circle")
+        #expect(PluginCategory(savedValue: "devices") == .system)
+        #expect(PluginCategory(savedValue: "tools") == .tools)
+        #expect(PluginCategory(savedValue: "unknown") == nil)
         #expect(PluginCategory.tools.title == "工具")
-        #expect(PluginCategory.tools.symbol == "viewfinder")
+        #expect(PluginCategory.tools.symbol == "wrench.and.screwdriver")
         #expect(PluginCategory.system.title == "系统")
         #expect(PluginCategory.system.symbol == "gearshape")
 
-        #expect(PluginID.time.defaultCategory == .devices)
-        #expect(PluginID.inputSource.defaultCategory == .devices)
-        #expect(PluginID.audioInput.defaultCategory == .devices)
-        #expect(PluginID.audioOutput.defaultCategory == .devices)
-        #expect(PluginID.fan.defaultCategory == .devices)
-        #expect(PluginID.translate.defaultCategory == .tools)
-        #expect(PluginID.remote.defaultCategory == .tools)
-        #expect(PluginID.tasks.defaultCategory == .tools)
-        #expect(PluginID.windowDrag.defaultCategory == .tools)
-        #expect(PluginID.weather.defaultCategory == .tools)
-        #expect(PluginID.markets.defaultCategory == .tools)
-        #expect(PluginID.quickShutdown.defaultCategory == .system)
-        #expect(PluginID.unattendedAuth.defaultCategory == .system)
+        #expect(
+            PluginCategory.information.orderedPlugins(in: PluginID.allCases) == [.time, .weather, .markets, .tasks])
+        #expect(PluginCategory.tools.orderedPlugins(in: PluginID.allCases) == [.remote, .translate, .windowDrag])
+        #expect(
+            PluginCategory.system.orderedPlugins(in: PluginID.allCases) == [
+                .inputSource, .audioInput, .audioOutput, .fan, .quickShutdown, .unattendedAuth,
+            ])
 
         var prefs = Preferences()
         #expect(prefs.pluginOrder.isEmpty)
@@ -146,5 +143,21 @@ struct PluginPreferencesTests {
         #expect(clampedEnd == [.time, .fan, .translate])
         let unchangedMissing = Preferences.movedOrder([.time, .fan], moving: .remote, by: 1)
         #expect(unchangedMissing == [.time, .fan])
+    }
+
+    @Test("旧排序与同类调序都将待办固定在信息页末尾")
+    func informationOrder() {
+        let category = PluginCategory.information
+        var prefs = Preferences()
+        prefs.pluginOrder = [.tasks, .markets, .fan, .time, .weather]
+        let before = prefs.resolvedOrder(from: PluginID.allCases)
+        #expect(category.orderedPlugins(in: before) == [.markets, .time, .weather, .tasks])
+        #expect(prefs.reorderedPluginOrder(moving: .tasks, within: category, by: -1) == prefs.pluginOrder)
+        #expect(prefs.reorderedPluginOrder(moving: .weather, within: category, by: 1) == prefs.pluginOrder)
+        prefs.pluginOrder = prefs.reorderedPluginOrder(moving: .time, within: category, by: -1)
+        let after = prefs.resolvedOrder(from: PluginID.allCases)
+        #expect(category.orderedPlugins(in: after) == [.time, .markets, .weather, .tasks])
+        #expect(PluginCategory.system.orderedPlugins(in: after) == PluginCategory.system.orderedPlugins(in: before))
+        #expect(category.orderedPlugins(in: after.filter { $0 != .tasks }) == [.time, .markets, .weather])
     }
 }

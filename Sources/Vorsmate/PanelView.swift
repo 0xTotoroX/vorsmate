@@ -1,6 +1,6 @@
 // [INPUT]: AppModel、BrandIcon、PluginCategory、各功能分区与主线程内的 SwiftUI 设置提交。
 // [OUTPUT]: 顶部分类切换栏、浅底分组卡片、单项展开、模块顺序管理与原生面板。
-// [POS]: 日常管理的唯一主界面；按设备／工具／系统三分类组织模块，保持单层卡片清晰层次。
+// [POS]: 日常管理主界面，按信息／工具／系统组织模块并协调详情导航。
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 import ServiceManagement
 import SwiftUI
@@ -12,7 +12,7 @@ struct PanelView: View {
     let maximumHeight: CGFloat
     var protectInteraction: (Bool) -> Void
     var onHeightChange: (CGFloat) -> Void
-    @AppStorage("vorsmate.panel.selectedCategory") private var selectedCategoryRaw = PluginCategory.devices.rawValue
+    @AppStorage("vorsmate.panel.selectedCategory") private var selectedCategoryRaw = PluginCategory.information.rawValue
     @State private var previewCategoryOverride: PluginCategory?
     @State private var expandedSection: PluginID?
     @State private var remotePage = RemotePanelPage.home
@@ -43,15 +43,21 @@ struct PanelView: View {
                 nil
             }
         _expandedSection = State(initialValue: initialSection)
-        let previewTools =
-            model.preview
-            && (CommandLine.arguments.contains("--preview-window-drag")
-                || CommandLine.arguments.contains("--preview-translate")
-                || CommandLine.arguments.contains("--preview-tasks")
-                || CommandLine.arguments.contains("--preview-information")
-                || CommandLine.arguments.contains("--preview-tasks-detail")
-                || CommandLine.arguments.contains("--preview-tasks-offline"))
-        _previewCategoryOverride = State(initialValue: previewTools ? .tools : nil)
+        let previewCategory: PluginCategory? =
+            if !model.preview {
+                nil
+            } else if let initialSection {
+                initialSection.defaultCategory
+            } else if CommandLine.arguments.contains("--preview-translate") {
+                .tools
+            } else if ["--preview-tasks", "--preview-information", "--preview-tasks-offline"].contains(where: {
+                CommandLine.arguments.contains($0)
+            }) {
+                .information
+            } else {
+                nil
+            }
+        _previewCategoryOverride = State(initialValue: previewCategory)
     }
 
     private var visibleCategories: [PluginCategory] {
@@ -64,10 +70,10 @@ struct PanelView: View {
         if let previewCategoryOverride, visibleCategories.contains(previewCategoryOverride) {
             return previewCategoryOverride
         }
-        if let saved = PluginCategory(rawValue: selectedCategoryRaw), visibleCategories.contains(saved) {
+        if let saved = PluginCategory(savedValue: selectedCategoryRaw), visibleCategories.contains(saved) {
             return saved
         }
-        return visibleCategories.first ?? .devices
+        return visibleCategories.first ?? .information
     }
 
     var body: some View {
@@ -209,7 +215,7 @@ struct PanelView: View {
 
     private var content: some View {
         let category = activeCategory
-        let categoryPlugins = model.orderedEnabledPlugins.filter { $0.defaultCategory == category }
+        let categoryPlugins = category.orderedPlugins(in: model.orderedEnabledPlugins)
         let groups = Self.cardGroups(for: categoryPlugins)
 
         return VStack(spacing: 0) {
@@ -520,7 +526,8 @@ private struct PluginOrderManagerView: View {
 
             VStack(alignment: .leading, spacing: 14) {
                 ForEach(PluginCategory.allCases) { category in
-                    let items = model.orderedAvailablePlugins.filter { $0.defaultCategory == category }
+                    let items = category.orderedPlugins(in: model.orderedAvailablePlugins)
+                    let movableCount = items.filter(category.canReorder).count
                     if !items.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
                             Label(category.title, systemImage: category.symbol)
@@ -532,6 +539,8 @@ private struct PluginOrderManagerView: View {
                                 VStack(spacing: 0) {
                                     ForEach(Array(items.enumerated()), id: \.element) { index, id in
                                         let enabled = model.enabledPlugins.contains(id)
+                                        let canMoveUp = category.canReorder(id) && index > 0
+                                        let canMoveDown = index < movableCount - 1
                                         if index > 0 {
                                             Divider().padding(.horizontal, 14)
                                         }
@@ -554,8 +563,8 @@ private struct PluginOrderManagerView: View {
                                                         .frame(width: 22, height: 22)
                                                 }
                                                 .buttonStyle(.plain)
-                                                .disabled(index == 0)
-                                                .foregroundStyle(index == 0 ? .tertiary : .secondary)
+                                                .disabled(!canMoveUp)
+                                                .foregroundStyle(canMoveUp ? .secondary : .tertiary)
                                                 .accessibilityLabel("上移\(id.title)")
                                                 .accessibilityIdentifier("plugins.moveUp.\(id.rawValue)")
 
@@ -567,8 +576,8 @@ private struct PluginOrderManagerView: View {
                                                         .frame(width: 22, height: 22)
                                                 }
                                                 .buttonStyle(.plain)
-                                                .disabled(index == items.count - 1)
-                                                .foregroundStyle(index == items.count - 1 ? .tertiary : .secondary)
+                                                .disabled(!canMoveDown)
+                                                .foregroundStyle(canMoveDown ? .secondary : .tertiary)
                                                 .accessibilityLabel("下移\(id.title)")
                                                 .accessibilityIdentifier("plugins.moveDown.\(id.rawValue)")
                                             }

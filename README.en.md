@@ -16,16 +16,16 @@
 
 ## Features
 
-Switch between Devices, Tools, and System by clicking a tab, scrolling a mouse wheel horizontally, or swiping sideways with two fingers on a trackpad. Toggle and reorder modules under `功能模块…` in the top-right menu. Built with SwiftUI and AppKit, Vorsmate supports system Liquid Glass on macOS 26+. Optional weather and market modules fetch their own data and require no account.
+Switch between Information, Tools, and System by clicking a tab, scrolling a mouse wheel horizontally, or swiping sideways with two fingers on a trackpad. Toggle and reorder modules under `功能模块…` in the top-right menu. Tasks stays at the bottom of Information. Built with SwiftUI and AppKit, Vorsmate supports system Liquid Glass on macOS 26+. Optional weather and market modules fetch their own data and require no account.
 
 ### Built-in modules
 
 | Category | Module | What it does |
 | --- | --- | --- |
-| Devices | Input sources | Switch or lock system input sources quickly, or drag rows to set automatic selection priorities. |
-| Devices | Audio devices | Manage microphone and playback device priorities and locks independently, with automatic fallback on disconnect and restore on reconnect; supported wireless receivers qualify only when a transmitter connects. |
-| Devices | Fan control | Switch across Automatic, Balanced, Enhanced, and Custom profiles with smoothed temperature curves, fixed speeds, and automatic restore on startup and wake. |
-| Tools | Time comparison | View local and US Pacific time side by side, edit dates or drag the slider to compare times, and handle daylight saving changes automatically. |
+| System | Input sources | Switch or lock system input sources quickly, or drag rows to set automatic selection priorities. |
+| System | Audio devices | Manage microphone and playback device priorities and locks independently, with automatic fallback on disconnect and restore on reconnect; supported wireless receivers qualify only when a transmitter connects. |
+| System | Fan control | Switch across Automatic, Balanced, Enhanced, and Custom profiles with smoothed temperature curves, fixed speeds, and automatic restore on startup and wake. |
+| Information | Time comparison | View local and US Pacific time side by side, edit dates or drag the slider to compare times, and handle daylight saving changes automatically. |
 | System | Quick Shutdown | Quit selected apps before shutting down or restarting, with a cancellable five-second countdown, search, exclusion list, and force quit toggle. |
 | System | Unattended Authorization | Verify and store your admin password in the local Keychain to approve matching Apple-signed system prompts during a timed or open session, leaving pre-existing and Privacy & Security prompts for manual confirmation. |
 

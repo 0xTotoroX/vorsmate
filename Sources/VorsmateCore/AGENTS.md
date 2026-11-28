@@ -9,7 +9,7 @@
 - RemoteApplicationMaps.swift：前台应用的逐手势覆盖、默认继承、按住模式与配置编辑。
 - RemoteEditor.swift：宿主与插件的按键编辑消息、实体键反馈、配置校验与单手势更新。
 - RemoteModifiers.swift / RemoteVoice.swift：左右修饰键解析、16 kHz 能力识别、独立 IMA ADPCM 解码、语音包超时与既有音频 UID。
-- PluginID.swift：内置与可选模块顺序、标题、图标与通道映射（含无人值守授权、截图、待办）。
+- PluginID.swift：模块标识、图标、信息／工具／系统归属和展示顺序规则。待办固定为信息页末项，旧设备页选择映射到系统。
 - WindowDragModifier.swift：窗口拖动的持久化修饰键、显示名和 Quartz 通用修饰位匹配。
 - TasksPolicy.swift 发现共享连接器并兼容旧配对位置，解析 ReminderTree 和 Project 分组。菜单栏标题省略对话链接，模型保留原始字段。
 - ShutdownPolicy.swift：关机 / 重启动作、强制退出 / 窗口恢复偏好、按 Bundle ID 聚合的应用条目与菜单栏倒计时格式化。
