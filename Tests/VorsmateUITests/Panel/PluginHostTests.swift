@@ -100,6 +100,18 @@ struct PluginHostTests {
         #expect(prefs.tasksEnabled)
     }
 
+    @Test("每个模块都有面板登记；模拟工具只通过明确的预览选项启用")
+    func panelRegistrationCoverage() {
+        let model = AppModel(previewOptions: PreviewOptions(arguments: ["--preview"]))
+        defer { model.stop() }
+        #expect(PluginID.allCases.allSatisfy { model.panelPlugin($0)?.plugin.id == $0 })
+        #expect(!model.enabledPlugins.contains(.coverArchive) && !model.enabledPlugins.contains(.openList))
+        let fixture = AppModel(
+            previewOptions: PreviewOptions(arguments: ["--preview", "--preview-tool-integrations"]))
+        defer { fixture.stop() }
+        #expect(PluginCategory.tools.orderedPlugins(in: fixture.orderedEnabledPlugins) == [.coverArchive, .openList])
+    }
+
     @Test("时间对照与其他信息模块一起排序，待办保持最后")
     func informationOrderAfterMovingTimeComparison() {
         let model = AppModel(

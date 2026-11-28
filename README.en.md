@@ -41,6 +41,8 @@ Disabled by default; enable them from `功能模块…` in the top-right menu.
 | Screenshot & Translation | Trigger window-snapping screen capture by hotkey, annotate with rectangles, arrows, or freehand ink, copy offline OCR text, translate in place via macOS Translation or a custom OpenAI-compatible endpoint, and pin scalable translucent stickers. |
 | Window Drag | Grant Vorsmate Accessibility access, then hold Option and drag anywhere inside a movable window with the left mouse button. Choose a different modifier under Tools → Window Drag. |
 | Xiaomi Remote | Place the built `VorsmateRemote.app` beside `Vorsmate.app` to map RC003 buttons to per-app shortcuts, gestures, and hold-to-repeat, with voice input via MiRemoteV 2ch. |
+| Save Cover | Save the original artwork of the playing or selected Apple Music track to Eagle with metadata and duplicate detection. Open Eagle and allow Vorsmate to access Music. |
+| OpenList | Mount or stop OpenList drives, or open their local web interface from Tools. Requires a [local connector](docs/tool-integrations.md). |
 
 ## Installation
 

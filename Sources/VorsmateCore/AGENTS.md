@@ -9,7 +9,7 @@
 - Remote/RemoteApplicationMaps.swift：前台应用的逐手势覆盖、默认继承、按住模式与配置编辑。
 - Remote/RemoteEditor.swift：宿主与插件的按键编辑消息、实体键反馈、配置校验与单手势更新。
 - Remote/RemoteModifiers.swift / Remote/RemoteVoice.swift：左右修饰键解析、16 kHz 能力识别、独立 IMA ADPCM 解码、语音包超时与既有音频 UID。
-- Configuration/PluginID.swift：模块标识、图标、信息／工具／系统归属和展示顺序规则。待办固定为信息页末项，旧设备页选择映射到系统。
+- Configuration/PluginID.swift：模块标识、名称、图标、信息／工具／系统归属和展示顺序规则。待办固定为信息页末项，旧设备页选择映射到系统。
 - WindowDrag/WindowDragModifier.swift：窗口拖动的持久化修饰键、显示名和 Quartz 通用修饰位匹配。
 - Tasks/RemindersConnectorRuntime.swift：发现共享连接器、兼容旧配对位置并解析本机地址。
 - Tasks/ReminderTree.swift：兼容新旧 Reminders tree 数据，保留原标题与原始字段。

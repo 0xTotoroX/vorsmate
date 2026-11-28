@@ -44,51 +44,32 @@ public enum PluginCategory: String, CaseIterable, Codable, Sendable, Identifiabl
 
 public enum PluginID: String, Codable, CaseIterable, Sendable, Identifiable {
     case time, inputSource, audioInput, audioOutput, fan, quickShutdown, unattendedAuth, remote, translate, tasks
-    case weather, markets, windowDrag
+    case weather, markets, windowDrag, coverArchive, openList
+
     public var id: Self { self }
-    public var title: String {
-        switch self {
-        case .time: "时间对照"
-        case .inputSource: "输入法"
-        case .audioInput: "麦克风"
-        case .audioOutput: "播放设备"
-        case .fan: "风扇"
-        case .quickShutdown: "一键关机"
-        case .unattendedAuth: "无人值守授权"
-        case .remote: "遥控器"
-        case .translate: "截图"
-        case .windowDrag: "窗口拖动"
-        case .tasks: "待办"
-        case .weather: "天气"
-        case .markets: "行情"
-        }
-    }
-    public var symbol: String {
-        switch self {
-        case .time: "clock"
-        case .inputSource: "keyboard"
-        case .audioInput: "mic"
-        case .audioOutput: "speaker.wave.2"
-        case .fan: "fan"
-        case .quickShutdown: "sunset"
-        case .unattendedAuth: "lock.shield"
-        case .remote: "appletvremote.gen4"
-        case .translate: "viewfinder"
-        case .windowDrag: "arrow.up.and.down.and.arrow.left.and.right"
-        case .tasks: "checklist"
-        case .weather: "cloud.sun"
-        case .markets: "chart.line.uptrend.xyaxis"
-        }
-    }
-    public var defaultCategory: PluginCategory {
-        switch self {
-        case .time, .tasks, .weather, .markets:
-            .information
-        case .translate, .remote, .windowDrag:
-            .tools
-        case .inputSource, .audioInput, .audioOutput, .fan, .quickShutdown, .unattendedAuth:
-            .system
-        }
-    }
+
+    public var title: String { presentation.title }
+    public var symbol: String { presentation.symbol }
+    public var defaultCategory: PluginCategory { presentation.category }
     public var channel: Channel? { Channel(rawValue: rawValue) }
+
+    private var presentation: (title: String, symbol: String, category: PluginCategory) {
+        switch self {
+        case .time: ("时间对照", "clock", .information)
+        case .inputSource: ("输入法", "keyboard", .system)
+        case .audioInput: ("麦克风", "mic", .system)
+        case .audioOutput: ("播放设备", "speaker.wave.2", .system)
+        case .fan: ("风扇", "fan", .system)
+        case .quickShutdown: ("一键关机", "sunset", .system)
+        case .unattendedAuth: ("无人值守授权", "lock.shield", .system)
+        case .remote: ("遥控器", "appletvremote.gen4", .tools)
+        case .translate: ("截图", "viewfinder", .tools)
+        case .windowDrag: ("窗口拖动", "arrow.up.and.down.and.arrow.left.and.right", .tools)
+        case .tasks: ("待办", "checklist", .information)
+        case .weather: ("天气", "cloud.sun", .information)
+        case .markets: ("行情", "chart.line.uptrend.xyaxis", .information)
+        case .coverArchive: ("收藏封面", "music.note.list", .tools)
+        case .openList: ("网盘", "externaldrive.connected.to.line.below", .tools)
+        }
+    }
 }

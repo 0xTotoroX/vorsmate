@@ -373,49 +373,20 @@ struct PanelView: View {
         .padding(.bottom, 10)
     }
 
-    @ViewBuilder private func pluginView(_ id: PluginID) -> some View {
-        switch id {
-        case .time:
-            TimeComparisonView(
-                isExpanded: expansion(for: id),
-                panelVisible: model.panelVisible,
-                protectInteraction: protectInteraction)
-        case .inputSource, .audioInput, .audioOutput:
-            if let controller = model.controllers.first(where: { $0.channel == id.channel }) {
-                ChannelView(controller: controller, expanded: expansion(for: id))
-                    .disabled(model.configurationError != nil)
-            }
-        case .remote:
-            RemoteRow(plugin: model.remote) {
-                expandedSection = nil
-                remotePage = .overview
-            }
-        case .fan:
-            FanView(model: model.fan, expanded: expansion(for: id), enablesHelperInstallation: !model.development)
-        case .quickShutdown: ShutdownSummary(controller: model.shutdown) { expandedSection = .quickShutdown }
-        case .unattendedAuth:
-            UnattendedAuthSummary(controller: model.unattendedAuth) { expandedSection = .unattendedAuth }
-        case .translate:
-            TranslationSectionView(
-                model: model.translation,
-                expanded: expansion(for: id),
-                protectInteraction: protectInteraction)
-        case .windowDrag:
-            WindowDragSectionView(
-                monitor: model.windowDrag, expanded: expansion(for: id),
-                setModifier: { model.setWindowDragModifier($0) })
-        case .tasks:
-            TasksSummaryRow(model: model.tasks) { expandedSection = .tasks }
-        case .weather:
-            WeatherSection(
-                feed: model.weather, city: model.weatherCity, client: model.informationClient,
-                visible: model.panelVisible, expanded: expansion(for: id),
-                selectCity: model.selectWeatherCity, protectInteraction: protectInteraction)
-        case .markets:
-            MarketsSection(
-                feeds: model.marketFeeds, client: model.informationClient,
-                visible: model.panelVisible, expanded: expansion(for: id))
-        }
+    private func pluginView(_ id: PluginID) -> AnyView? {
+        model.panelPlugin(id)?.row(
+            PanelPluginRegistration.RowContext(
+                expanded: expansion(for: id), panelVisible: model.panelVisible,
+                configurationAvailable: model.configurationError == nil,
+                protectInteraction: protectInteraction,
+                openDetail: {
+                    if id == .remote {
+                        expandedSection = nil
+                        remotePage = .overview
+                    } else {
+                        expandedSection = id
+                    }
+                }))
     }
 
     private func expansion(for section: PluginID) -> Binding<Bool> {

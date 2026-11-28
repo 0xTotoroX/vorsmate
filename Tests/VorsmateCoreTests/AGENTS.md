@@ -17,6 +17,8 @@
 - Configuration/PluginPreferencesTests.swift：旧版配置默认回退、新字段原子保存往返 / 冲突、可选插件的独立开关及模块顺序（含无人值守授权、截图、待办）。
 - WindowDrag/WindowDragTests.swift：用合成事件和内存窗口验证普通输入透传、点击与轻微抖动、标题栏预读与遮挡复核、初始抓取点和提前松手、跨坐标拖动、暂忙恢复，以及松键和停用取消重试。
 - Tasks/TasksPolicyTests.swift：runtime.json 解析 / 离线回退、Reminders tree 投影、codex:// 校验与 Mock Hub HTTP 客户端测试。
+- CoverArchive/MusicCoverArchiveTests.swift：Eagle 预检、分页去重、互斥与原字节导入回归。
+- OpenList/OpenListClientTests.swift：本机命令参数、挂载状态解析、安全拒绝及网页地址校验。
 - Screenshot/TranslationPolicyTests.swift：快捷键校验、语种解析、DeepSeek 预设与 OpenAI 地址校验、旧配置兼容解码、OCR 区块合并、选区几何与标注合成渲染、预览保存及 Mock 批量翻译测试。
 - Power/ShutdownTests.swift：Mock 验证倒计时与 15 种取消组合、清理与回读期间取消、批量排除、固定应用范围、退出顺序、终端强制退出回读 / 超时和等待回执防重。
 - Authorization/UnattendedAuthTests.swift：内存替身与可注入时钟验证重启默认关闭、可选截止与状态文案、锁屏保持与到期 / 失效核对、受阻不伪装批准、密码变更 / 删除、活动记录脱敏往返与停用清理。

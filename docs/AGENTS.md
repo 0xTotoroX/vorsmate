@@ -14,5 +14,6 @@
 - images/update-check.png：原生更新窗口显示「已是最新版本」的预览，使用演示状态。
 
 - updates.md：固定签名更新源、截止时间 / 错误 / 重试、按版本标签独立打包、双重签名发布及配置 / 风扇助手授权保留边界。
+- tool-integrations.md：收藏封面与 OpenList 本机连接器的使用和配置。
 
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md

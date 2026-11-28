@@ -22,6 +22,10 @@
 - WindowDrag/WindowDragGesture.swift：按下时预读目标，聚焦窗口在系统报告拖动时预按已复核的空白标题栏，并传递首个移动采样以固定抓取点。微动松手恢复原点击，确认拖动后按原偏移跟随；辅助功能回退合并移动、暂忙重试，松键或停用取消。
 - WindowDrag/WindowDragTarget.swift：WindowServer 窗口命中、核对同一窗口的空白标题栏落点与可移动性，兼容回退区分暂时通信失败和窗口不可移动。
 - Tasks/TasksHubClient.swift 每次访问时查找当前用户的提醒事项连接器，使用本机地址、原状态核对与可替换的网络传输。
+- CoverArchive/MusicCoverReader.swift：读取 Apple Music 当前或选中曲目的元数据与原始封面。
+- CoverArchive/MusicCoverArchive.swift：Eagle 回环收藏、分页去重、预检及互斥写入。
+- OpenList/OpenListClient.swift：已有本机连接器的固定操作、状态和回环网页登录地址校验。
+- LocalTools/LocalToolProcess.swift / LocalTools/LocalHTTPRedirectGuard.swift：可替换的本机进程与回环 HTTP 边界。
 - Screenshot/GlobalHotKeyCenter.swift：Carbon 全局截图热键线程安全注册与停用注销，附预览空实现。
 - Remote/TypelessRecovery.swift：系统进程、事件监听、修饰键与遥控接管回读；保存诊断快照并提供 Typeless 的正常退出和打开操作。
 

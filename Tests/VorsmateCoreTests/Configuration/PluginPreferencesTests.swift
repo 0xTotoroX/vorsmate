@@ -14,7 +14,10 @@ struct PluginPreferencesTests {
             let value = try JSONDecoder().decode(Preferences.self, from: Data(json.utf8))
             #expect(value == Preferences())
             #expect(!value.tasksEnabled)
-            #expect(value.disabledAtRuntime == [.remote, .translate, .tasks, .weather, .markets, .windowDrag])
+            #expect(
+                value.disabledAtRuntime == [
+                    .remote, .translate, .tasks, .weather, .markets, .windowDrag, .coverArchive, .openList,
+                ])
             #expect(value.weatherCity == nil)
         }
     }
@@ -35,6 +38,9 @@ struct PluginPreferencesTests {
         #expect(value.windowDragEnabled && !value.disabledPlugins.contains(.windowDrag))
         value.weatherEnabled = true
         value.marketsEnabled = true
+        value.disabledAtRuntime.remove(.coverArchive)
+        value.disabledAtRuntime.remove(.openList)
+        #expect(value.coverArchiveEnabled && value.openListEnabled)
         value.weatherCity = WeatherCity(name: "示例市", latitude: 46.5, longitude: 6.6)
         value.translation.engine = .openAICompatible
         value.translation.targetLanguage = .japanese
@@ -70,13 +76,17 @@ struct PluginPreferencesTests {
     func optionalPlugins() throws {
         var value = Preferences()
         value.disabledPlugins = [.fan]
-        #expect(value.disabledAtRuntime == [.fan, .remote, .translate, .tasks, .weather, .markets, .windowDrag])
+        #expect(
+            value.disabledAtRuntime == [
+                .fan, .remote, .translate, .tasks, .weather, .markets, .windowDrag, .coverArchive, .openList,
+            ])
         value.disabledAtRuntime.remove(.remote)
         let data = try JSONEncoder().encode(value)
         let restored = try JSONDecoder().decode(Preferences.self, from: data)
         #expect(restored.remoteEnabled)
         #expect(!restored.translateEnabled)
         #expect(!restored.tasksEnabled)
+        #expect(!restored.coverArchiveEnabled && !restored.openListEnabled)
         #expect(restored.disabledPlugins == [.fan])
         value.disabledAtRuntime.insert(.remote)
         value.disabledAtRuntime.remove(.translate)
@@ -94,7 +104,7 @@ struct PluginPreferencesTests {
     func order() {
         let expected: [PluginID] = [
             .time, .inputSource, .audioInput, .audioOutput, .fan, .quickShutdown, .unattendedAuth, .remote,
-            .translate, .tasks, .weather, .markets, .windowDrag,
+            .translate, .tasks, .weather, .markets, .windowDrag, .coverArchive, .openList,
         ]
         #expect(PluginID.allCases == expected)
         #expect(PluginID.audioInput.channel == .audioInput)
@@ -120,7 +130,10 @@ struct PluginPreferencesTests {
 
         #expect(
             PluginCategory.information.orderedPlugins(in: PluginID.allCases) == [.time, .weather, .markets, .tasks])
-        #expect(PluginCategory.tools.orderedPlugins(in: PluginID.allCases) == [.remote, .translate, .windowDrag])
+        #expect(
+            PluginCategory.tools.orderedPlugins(in: PluginID.allCases) == [
+                .remote, .translate, .windowDrag, .coverArchive, .openList,
+            ])
         #expect(
             PluginCategory.system.orderedPlugins(in: PluginID.allCases) == [
                 .inputSource, .audioInput, .audioOutput, .fan, .quickShutdown, .unattendedAuth,

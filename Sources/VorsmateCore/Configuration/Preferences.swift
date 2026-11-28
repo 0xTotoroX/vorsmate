@@ -41,6 +41,8 @@ public struct Preferences: Codable, Equatable, Sendable {
     public var tasksEnabled = false
     public var weatherEnabled = false
     public var marketsEnabled = false
+    public var coverArchiveEnabled = false
+    public var openListEnabled = false
     public var weatherCity: WeatherCity?
     public var disabledAtRuntime: Set<PluginID> {
         get {
@@ -51,6 +53,8 @@ public struct Preferences: Codable, Equatable, Sendable {
             if !weatherEnabled { disabled.insert(.weather) } else { disabled.remove(.weather) }
             if !marketsEnabled { disabled.insert(.markets) } else { disabled.remove(.markets) }
             if !windowDragEnabled { disabled.insert(.windowDrag) } else { disabled.remove(.windowDrag) }
+            if !coverArchiveEnabled { disabled.insert(.coverArchive) } else { disabled.remove(.coverArchive) }
+            if !openListEnabled { disabled.insert(.openList) } else { disabled.remove(.openList) }
             return disabled
         }
         set {
@@ -60,7 +64,11 @@ public struct Preferences: Codable, Equatable, Sendable {
             tasksEnabled = !newValue.contains(.tasks)
             weatherEnabled = !newValue.contains(.weather)
             marketsEnabled = !newValue.contains(.markets)
-            disabledPlugins = newValue.subtracting([.remote, .translate, .tasks, .weather, .markets, .windowDrag])
+            coverArchiveEnabled = !newValue.contains(.coverArchive)
+            openListEnabled = !newValue.contains(.openList)
+            disabledPlugins = newValue.subtracting([
+                .remote, .translate, .tasks, .weather, .markets, .windowDrag, .coverArchive, .openList,
+            ])
         }
     }
     public var fanProfiles: [Int: FanProfile] = [:]
@@ -74,6 +82,7 @@ public struct Preferences: Codable, Equatable, Sendable {
         case version, policies, disabledPlugins, remoteEnabled, translateEnabled, tasksEnabled, fanProfiles,
             shutdownPolicy, translation, unattendedAuth, pluginOrder
         case weatherEnabled, marketsEnabled, weatherCity
+        case coverArchiveEnabled, openListEnabled
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -87,6 +96,8 @@ public struct Preferences: Codable, Equatable, Sendable {
         tasksEnabled = try values.decodeIfPresent(Bool.self, forKey: .tasksEnabled) ?? false
         weatherEnabled = try values.decodeIfPresent(Bool.self, forKey: .weatherEnabled) ?? false
         marketsEnabled = try values.decodeIfPresent(Bool.self, forKey: .marketsEnabled) ?? false
+        coverArchiveEnabled = try values.decodeIfPresent(Bool.self, forKey: .coverArchiveEnabled) ?? false
+        openListEnabled = try values.decodeIfPresent(Bool.self, forKey: .openListEnabled) ?? false
         weatherCity = try values.decodeIfPresent(WeatherCity.self, forKey: .weatherCity)
         fanProfiles = try values.decodeIfPresent([Int: FanProfile].self, forKey: .fanProfiles) ?? [:]
         shutdownPolicy = try values.decodeIfPresent(ShutdownPolicy.self, forKey: .shutdownPolicy) ?? ShutdownPolicy()

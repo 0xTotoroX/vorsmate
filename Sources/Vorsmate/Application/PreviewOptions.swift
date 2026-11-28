@@ -26,6 +26,7 @@ struct PreviewOptions {
     private var windowDrag: Bool { flags.contains("--preview-window-drag") }
     private var information: Bool { flags.contains("--preview-information") }
     private var translation: Bool { flags.contains("--preview-translate") }
+    private var toolIntegrations: Bool { flags.contains("--preview-tool-integrations") }
     private var tasks: Bool { flags.contains("--preview-tasks") || tasksDetail || offlineTasks }
 
     var initialSection: PluginID? {
@@ -37,7 +38,7 @@ struct PreviewOptions {
 
     var initialCategory: PluginCategory? {
         if let initialSection { return initialSection.defaultCategory }
-        if translation { return .tools }
+        if translation || toolIntegrations { return .tools }
         if tasks || information { return .information }
         return nil
     }
@@ -59,5 +60,9 @@ struct PreviewOptions {
         }
         if translation || translationWindow { preferences.translateEnabled = true }
         if tasks { preferences.tasksEnabled = true }
+        if toolIntegrations {
+            preferences.coverArchiveEnabled = true
+            preferences.openListEnabled = true
+        }
     }
 }

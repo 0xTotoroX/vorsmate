@@ -101,8 +101,11 @@ final class AppModel: ObservableObject {
             },
             save: TypelessSystem.save, target: TypelessSystem.restartTarget)
     }()
-    private lazy var panelPlugins = registerPanelPlugins()
-    lazy var plugins = PluginHost(plugins: panelPlugins.map(\.plugin), disabled: preferences.disabledAtRuntime) {
+    lazy var coverArchive = CoverArchiveModel(preview: preview)
+    lazy var openList = preview ? OpenListModel.preview() : OpenListModel()
+    private lazy var panelPlugins = Dictionary(
+        uniqueKeysWithValues: registerPanelPlugins().map { ($0.plugin.id, $0) })
+    lazy var plugins = PluginHost(plugins: panelPlugins.values.map(\.plugin), disabled: preferences.disabledAtRuntime) {
         [weak self] disabled in
         try self?.save { $0.disabledAtRuntime = disabled }
     }
@@ -166,7 +169,7 @@ final class AppModel: ObservableObject {
     private func observeChildModels() {
         childCancellables.removeAll()
         let publishers =
-            panelPlugins.compactMap(\.changes) + [
+            panelPlugins.values.compactMap(\.changes) + [
                 typelessRecovery.objectWillChange, plugins.objectWillChange,
             ]
         for publisher in publishers {
@@ -191,7 +194,9 @@ final class AppModel: ObservableObject {
         if !preview { try store.save(next, replacing: preferences) }
         preferences = next
     }
-    var availablePlugins: [PluginID] { PluginID.allCases.filter { $0 != .remote || remote.available } }
+    func panelPlugin(_ id: PluginID) -> PanelPluginRegistration? { panelPlugins[id] }
+
+    var availablePlugins: [PluginID] { PluginID.allCases.filter { panelPlugins[$0]?.available() == true } }
     var enabledPlugins: [PluginID] { availablePlugins.filter { plugins.enabledIDs.contains($0) } }
     var orderedAvailablePlugins: [PluginID] { preferences.resolvedOrder(from: availablePlugins) }
     var orderedEnabledPlugins: [PluginID] { preferences.resolvedOrder(from: enabledPlugins) }
@@ -234,7 +239,7 @@ final class AppModel: ObservableObject {
     func categoryIndicator(for category: PluginCategory) -> PanelPluginIndicator {
         let enabled = Set(enabledPlugins)
         return
-            panelPlugins
+            panelPlugins.values
             .filter { $0.plugin.id.defaultCategory == category && enabled.contains($0.plugin.id) }
             .map { $0.indicator() }
             .max() ?? .none

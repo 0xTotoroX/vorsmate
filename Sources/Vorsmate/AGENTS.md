@@ -10,7 +10,7 @@
 - Application/AppModel.swift：应用组合、配置更新与冲突保护、面板显隐和退出停止。关机前释放已授权助手，失败时恢复风扇档位。开发版沿用设备与偏好，支持固定包路径的登录项管理。
 - Application/PreviewOptions.swift：统一解析内存预览的主题、模拟内容和初始页面，普通启动不应用预览开关。
 - Panel/PanelView.swift：总览页的三分类导航、动态分组、原地展开与详情切换；内容超过屏幕适配上限后滚动。
-- Panel/PanelPluginRegistry.swift：每个模块在同一条登记中提供启停、观察信号与分类指示，面板生命周期由 PluginHost 管理。
+- Panel/PanelPluginRegistry.swift：每个模块在同一条登记中提供启停、可用性、观察信号、分类指示与总览入口，面板生命周期由 PluginHost 管理。
 - Panel/PluginOrderManagerView.swift：更多菜单中的「功能模块…」页，跟随总览的分类和组内排序，待办固定在信息末项。
 - Devices/ChannelView.swift：三通道共用模式和单份选择 / 拖动列表装配，8 项及以内完整展开，超过 8 项以 7.5 行（330pt）露半行暗示滚动；不显示排序入口或移动图标，等待与错误反馈保留。
 - Devices/SourceList.swift：AppKit 无滚动条隐式滚动列表桥（`SilentScrollView` + `ZeroScroller` 锁定 `.overlay` 且零占位宽度），三点起拖、预览让位、松手一次保存；取消 / 外部配置变化回滚、关闭清理、边缘滚动、点击与键盘选择分离。
@@ -24,6 +24,8 @@
 - Screenshot/TranslationSceneSession.swift：面板和叠层共享的截图选区、标注、译文图层状态与合成图像缓存。
 - Screenshot/TranslationPanelView.swift：总览内「截图」摘要行、就地展开「开始截图」入口及统一内联卡片中的快捷键 / 双引擎预设 / 密钥 / 语种设置。
 - WindowDrag/WindowDragSectionView.swift：工具分类中的窗口拖动摘要行、修饰键菜单和辅助功能授权入口，复用面板原地展开。
+- CoverArchive/CoverArchiveSection.swift：收藏封面的模块登记、显式收藏入口和回执。
+- OpenList/OpenListSection.swift：网盘的模块登记、挂载状态、启停和网页入口，保留在途操作结果。
 - Tasks/TasksModel.swift 管理待办读取、按项目新增、带原标题核对的改名和勾选，按需打开随附或已安装的提醒事项连接器。停用时取消轮询与在途请求。
 - Tasks/TasksView.swift 在同宽菜单栏内显示项目清单、行内新增与改名、独立的勾选按钮，按系统外观呈现。
 - Screenshot/SystemTranslationBridge.swift：macOS 15+ Apple `Translation` 框架 `.translationTask` 离线批量翻译桥接与离线预览替身。
